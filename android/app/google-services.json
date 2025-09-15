@@ -1,0 +1,67 @@
+{
+  "project_info": {
+    "project_number": "317381738249",
+    "project_id": "elfouad-coffee-beans-b1fc2",
+    "storage_bucket": "elfouad-coffee-beans-b1fc2.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:317381738249:android:61c006b9688b58f8bd1dd8",
+        "android_client_info": {
+          "package_name": "com.android.application"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBdpWB7hpZWGBANxnhHNl9vDAKG6XRttpQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:317381738249:android:5cc1be224ca549b9bd1dd8",
+        "android_client_info": {
+          "package_name": "com.example.elfouad_admin"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBdpWB7hpZWGBANxnhHNl9vDAKG6XRttpQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:317381738249:android:505e9339286b629fbd1dd8",
+        "android_client_info": {
+          "package_name": "com.example.elfouad_coffee_beans"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBdpWB7hpZWGBANxnhHNl9vDAKG6XRttpQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
