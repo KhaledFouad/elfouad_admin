@@ -3,10 +3,10 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
 class TripleTrendChart extends StatelessWidget {
-  final List<DayVal> line1; // إجمالي (مبيعات/ربح)
+  final List<DayVal> line1; // إجمالي (مبيعات أو ربح)
   final List<DayVal> lineDrinks; // مبيعات المشروبات
   final List<DayVal> lineBeansGrams; // جرامات البن
-  final bool asProfit;
+  final bool asProfit; // يحدد عنوان السلسلة الأولى
   const TripleTrendChart({
     super.key,
     required this.line1,
@@ -17,121 +17,147 @@ class TripleTrendChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (line1.isEmpty && lineDrinks.isEmpty && lineBeansGrams.isEmpty) {
+    final all = [...line1, ...lineDrinks, ...lineBeansGrams];
+    if (all.isEmpty) {
       return const SizedBox(
         height: 220,
-        child: Center(child: Text('لا بيانات')),
+        child: Center(child: Text('لا توجد بيانات للمدى المختار')),
       );
     }
 
-    final allDays = <DateTime>{
-      ...line1.map((e) => e.day),
-      ...lineDrinks.map((e) => e.day),
-      ...lineBeansGrams.map((e) => e.day),
-    }.toList()..sort();
+    final xs = all.map((e) => e.day.millisecondsSinceEpoch.toDouble()).toList();
+    final minX = xs.reduce((a, b) => a < b ? a : b);
+    final maxX = xs.reduce((a, b) => a > b ? a : b);
 
-    List<FlSpot> spots(List<DayVal> l) {
-      final map = {
-        for (var i = 0; i < allDays.length; i++) allDays[i]: i.toDouble(),
-      };
-      return l.map((e) => FlSpot(map[e.day]!, e.v)).toList();
+    double maxY = 0;
+    for (final v in all) {
+      if (v.v > maxY) maxY = v.v;
     }
+    if (maxY <= 0) maxY = 1;
 
-    double maxY(List<DayVal> a, List<DayVal> b, List<DayVal> c) {
-      double m = 0;
-      for (final v in [...a, ...b, ...c]) {
-        if (v.v > m) m = v.v;
-      }
-      return m == 0 ? 1 : m * 1.15;
-    }
+    List<FlSpot> _toSpots(List<DayVal> l) =>
+        l
+            .map((e) => FlSpot(e.day.millisecondsSinceEpoch.toDouble(), e.v))
+            .toList()
+          ..sort((a, b) => a.x.compareTo(b.x));
 
-    LineChartBarData series(List<DayVal> l, Color c) => LineChartBarData(
-      spots: spots(l),
-      isCurved: true,
-      barWidth: 3,
-      color: c,
-      dotData: FlDotData(show: false),
-    );
+    final color1 = const Color(0xFF1E88E5); // أزرق للسلسلة الأولى
+    final color2 = const Color(0xFF43A047); // أخضر للمشروبات
+    final color3 = const Color(0xFFF4511E); // برتقالي للجرامات
 
-    return SizedBox(
-      height: 260,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        child: LineChart(
-          LineChartData(
-            minX: 0,
-            maxX: (allDays.length - 1).toDouble(),
-            minY: 0,
-            maxY: maxY(line1, lineDrinks, lineBeansGrams),
-            gridData: FlGridData(show: true, drawVerticalLine: false),
-            titlesData: FlTitlesData(
-              bottomTitles: AxisTitles(
-                sideTitles: SideTitles(
-                  showTitles: true,
-                  reservedSize: 22,
-                  interval: 1,
-                  getTitlesWidget: (v, m) {
-                    final i = v.toInt();
-                    if (i < 0 || i >= allDays.length) {
-                      return const SizedBox.shrink();
-                    }
-                    final d = allDays[i];
-                    return Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: Text(
-                        '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}',
-                        style: const TextStyle(fontSize: 10),
-                      ),
-                    );
-                  },
-                ),
-              ),
-              leftTitles: AxisTitles(
-                sideTitles: SideTitles(
-                  showTitles: true,
-                  reservedSize: 40,
-                  getTitlesWidget: (v, m) => Text(
-                    v.toStringAsFixed(0),
-                    style: const TextStyle(fontSize: 10),
-                  ),
-                ),
-              ),
-              rightTitles: const AxisTitles(
-                sideTitles: SideTitles(showTitles: false),
-              ),
-              topTitles: const AxisTitles(
-                sideTitles: SideTitles(showTitles: false),
-              ),
-            ),
-            lineTouchData: LineTouchData(
-              touchTooltipData: LineTouchTooltipData(
-                getTooltipColor: (spot) => Colors.brown,
-                getTooltipItems: (spots) {
-                  if (spots.isEmpty) return [];
-                  final i = spots.first.x.toInt().clamp(0, allDays.length - 1);
-                  final d = allDays[i];
-                  final dd =
-                      '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
-                  return [
-                    LineTooltipItem(
-                      '$dd — ${spots.first.y.toStringAsFixed(2)}',
-                      const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ];
-                },
-              ),
-            ),
-            lineBarsData: [
-              series(line1, const Color(0xFF00838F)), // إجمالي
-              series(lineDrinks, const Color(0xFF6A1B9A)), // مشروبات
-              series(lineBeansGrams, const Color(0xFF2E7D32)), // جرامات
+    return Column(
+      children: [
+        // Legend
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          child: Wrap(
+            spacing: 12,
+            runSpacing: 4,
+            alignment: WrapAlignment.center,
+            children: [
+              _legendDot(color1, asProfit ? 'الربح' : 'المبيعات'),
+              _legendDot(color2, 'مشروبات (مبيعات)'),
+              _legendDot(color3, 'بن (جرامات)'),
             ],
           ),
         ),
-      ),
+        SizedBox(
+          height: 260,
+          child: LineChart(
+            LineChartData(
+              minX: minX,
+              maxX: maxX,
+              minY: 0,
+              maxY: maxY * 1.2,
+              gridData: FlGridData(show: true),
+              borderData: FlBorderData(show: true),
+              titlesData: FlTitlesData(
+                rightTitles: const AxisTitles(
+                  sideTitles: SideTitles(showTitles: false),
+                ),
+                topTitles: const AxisTitles(
+                  sideTitles: SideTitles(showTitles: false),
+                ),
+                leftTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 44,
+                    getTitlesWidget: (v, meta) => Text(
+                      v.toStringAsFixed(0),
+                      style: const TextStyle(fontSize: 10),
+                    ),
+                  ),
+                ),
+                bottomTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 28,
+                    interval: (maxX - minX) / 4,
+                    getTitlesWidget: (v, meta) {
+                      final d = DateTime.fromMillisecondsSinceEpoch(v.toInt());
+                      final mm = d.month.toString().padLeft(2, '0');
+                      final dd = d.day.toString().padLeft(2, '0');
+                      return Text(
+                        '$dd/$mm',
+                        style: const TextStyle(fontSize: 10),
+                      );
+                    },
+                  ),
+                ),
+              ),
+              lineTouchData: LineTouchData(
+                touchTooltipData: LineTouchTooltipData(
+                  fitInsideHorizontally: true,
+                  fitInsideVertically: true,
+                  getTooltipItems: (touchedSpots) {
+                    return touchedSpots.map((s) {
+                      final d = DateTime.fromMillisecondsSinceEpoch(
+                        s.x.toInt(),
+                      );
+                      final mm = d.month.toString().padLeft(2, '0');
+                      final dd = d.day.toString().padLeft(2, '0');
+                      return LineTooltipItem(
+                        '$dd/$mm — ${s.y.toStringAsFixed(2)}',
+                        const TextStyle(color: Colors.white),
+                      );
+                    }).toList();
+                  },
+                ),
+              ),
+              lineBarsData: [
+                _line(_toSpots(line1), color1, 3),
+                _line(_toSpots(lineDrinks), color2, 2),
+                _line(_toSpots(lineBeansGrams), color3, 2),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _legendDot(Color c, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(color: c, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(label, style: const TextStyle(fontSize: 12)),
+      ],
+    );
+  }
+
+  LineChartBarData _line(List<FlSpot> spots, Color color, double stroke) {
+    return LineChartBarData(
+      isCurved: true,
+      color: color,
+      barWidth: stroke,
+      dotData: FlDotData(show: true),
+      spots: spots,
     );
   }
 }

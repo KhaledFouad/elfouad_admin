@@ -1,5 +1,6 @@
+import 'package:elfouad_admin/presentation/stats/state/stats_data_provider.dart'
+    show GroupRow;
 import 'package:flutter/material.dart';
-import '../state/stats_data_provider.dart';
 
 class BreakdownTable extends StatelessWidget {
   final List<GroupRow> rows;

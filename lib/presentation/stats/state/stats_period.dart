@@ -1,32 +1,67 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
-import '../../stats/utils/op_day.dart';
 
-enum StatsSpan { third1, third2, third3, month }
+/// تقسيم الإحصائيات
+enum StatsPeriod { firstThird, secondThird, thirdThird, fullMonth }
 
-final statsMonthProvider = StateProvider<DateTime>((ref) {
+/// الشهر المعروض (افتراضي: الشهر الحالي)
+final statsForMonthProvider = StateProvider<DateTime>((ref) {
   final now = DateTime.now();
-  return DateTime(now.year, now.month, 1);
+  return DateTime(now.year, now.month, 1); // أول يوم في الشهر (محلي)
 });
 
-final statsSpanProvider = StateProvider<StatsSpan>((ref) {
-  final idx = currentThirdIndex(DateTime.now());
-  return [StatsSpan.third1, StatsSpan.third2, StatsSpan.third3][idx];
+/// الثلث الافتراضي: الثلث الذي أنت فيه الآن
+final statsSelectedPeriodProvider = StateProvider<StatsPeriod>((ref) {
+  final d = DateTime.now().day;
+  if (d <= 10) return StatsPeriod.firstThird;
+  if (d <= 20) return StatsPeriod.secondThird;
+  return StatsPeriod.thirdThird;
 });
 
+/// يحسب مدى UTC لليوم التشغيلي 4 ص → 4 ص
+({DateTime startUtc, DateTime endUtc}) statsComputeRange(
+  DateTime month,
+  StatsPeriod p,
+) {
+  final y = month.year, m = month.month;
+  final dim = DateUtils.getDaysInMonth(y, m);
+
+  late final DateTimeRange local;
+  switch (p) {
+    case StatsPeriod.firstThird:
+      local = DateTimeRange(
+        start: DateTime(y, m, 1, 4),
+        end: DateTime(y, m, 11, 4), // حصري
+      );
+      break;
+    case StatsPeriod.secondThird:
+      local = DateTimeRange(
+        start: DateTime(y, m, 11, 4),
+        end: DateTime(y, m, 21, 4),
+      );
+      break;
+    case StatsPeriod.thirdThird:
+      local = DateTimeRange(
+        start: DateTime(y, m, 21, 4),
+        end: DateTime(y, m, dim, 4).add(const Duration(days: 1)),
+      );
+      break;
+    case StatsPeriod.fullMonth:
+      local = DateTimeRange(
+        start: DateTime(y, m, 1, 4),
+        end: DateTime(y, m, dim, 4).add(const Duration(days: 1)),
+      );
+      break;
+  }
+  return (startUtc: local.start.toUtc(), endUtc: local.end.toUtc());
+}
+
+/// مزوّد المدى النهائي المعتمد في كل الاستعلامات
 final statsRangeProvider = Provider<({DateTime startUtc, DateTime endUtc})>((
   ref,
 ) {
-  final month = ref.watch(statsMonthProvider);
-  final span = ref.watch(statsSpanProvider);
-  switch (span) {
-    case StatsSpan.month:
-      return monthRangeUtc(month);
-    case StatsSpan.third1:
-      return thirdRangeUtc(month, 0);
-    case StatsSpan.third2:
-      return thirdRangeUtc(month, 1);
-    case StatsSpan.third3:
-      return thirdRangeUtc(month, 2);
-  }
+  final month = ref.watch(statsForMonthProvider);
+  final p = ref.watch(statsSelectedPeriodProvider);
+  return statsComputeRange(month, p);
 });

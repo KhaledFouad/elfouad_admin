@@ -1,84 +1,71 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../state/stats_period.dart';
+import '../state/stats_data_provider.dart'; // علشان preview
 
-enum StatsPeriod { third1, third2, third3, month }
-
-class PeriodChips extends StatelessWidget {
-  final DateTime forMonth; // أي تاريخ داخل الشهر المطلوب
-  final StatsPeriod selected;
-  final ValueChanged<DateTimeRange> onRangeChange;
-  final ValueChanged<StatsPeriod>? onSelected;
-
+class PeriodChips extends ConsumerWidget {
   const PeriodChips({
     super.key,
     required this.forMonth,
     required this.selected,
-    required this.onRangeChange,
-    this.onSelected,
+    required this.onSelected,
+    required Null Function(dynamic _) onRangeChange,
   });
 
+  final DateTime forMonth;
+  final StatsPeriod selected;
+  final ValueChanged<StatsPeriod> onSelected;
+
   @override
-  Widget build(BuildContext context) {
-    final thirds = _thirdsOfMonth(forMonth);
-    final labels = const {
-      StatsPeriod.third1: 'الثلث الأول',
-      StatsPeriod.third2: 'الثلث الثاني',
-      StatsPeriod.third3: 'الثلث الثالث',
-      StatsPeriod.month: 'الشهر',
-    };
+  Widget build(BuildContext context, WidgetRef ref) {
+    // مجرد قراءة عشان نحسب preview للأثلاث
+    final preview = ref.watch(statsThirdsPreviewProvider);
 
-    // شِبس صغيرة وتحت الـAppBar
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 6,
-        alignment: WrapAlignment.center,
-        children: StatsPeriod.values.map((p) {
-          final selectedNow = p == selected;
-          return ChoiceChip(
-            labelPadding: const EdgeInsets.symmetric(horizontal: 8),
-            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            visualDensity: const VisualDensity(vertical: -2, horizontal: -2),
-            label: Text(labels[p]!),
-            selected: selectedNow,
-            onSelected: (_) {
-              onSelected?.call(p);
-              onRangeChange(thirds[p]!);
-            },
-          );
-        }).toList(),
-      ),
+    final items = <(StatsPeriod, String)>[
+      (StatsPeriod.firstThird, 'الثلث الأول'),
+      (StatsPeriod.secondThird, 'الثلث الثاني'),
+      (StatsPeriod.thirdThird, 'الثلث الثالث'),
+      (StatsPeriod.fullMonth, 'الشهر'),
+    ];
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: items.map((e) {
+        final p = e.$1;
+        final label = e.$2;
+
+        String trailing = '';
+        preview.whenData((v) {
+          final k = switch (p) {
+            StatsPeriod.firstThird => v.third1,
+            StatsPeriod.secondThird => v.third2,
+            StatsPeriod.thirdThird => v.third3,
+            StatsPeriod.fullMonth => v.month,
+          };
+          trailing = k.sales.toStringAsFixed(0); // ممكن تخليها cups/grams.. الخ
+        });
+
+        return ChoiceChip(
+          label: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(label),
+              if (trailing.isNotEmpty) ...[
+                const SizedBox(width: 6),
+                Text(
+                  trailing,
+                  style: const TextStyle(fontSize: 12, color: Colors.black54),
+                ),
+              ],
+            ],
+          ),
+          selected: selected == p,
+          onSelected: (_) => onSelected(p),
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        );
+      }).toList(),
     );
-  }
-
-  /// يقسم الشهر إلى 3 أثلاث: 1..10 ، 11..20 ، والباقي (10 أو 11 حسب طول الشهر)
-  Map<StatsPeriod, DateTimeRange> _thirdsOfMonth(DateTime anyDayInMonth) {
-    final y = anyDayInMonth.year;
-    final m = anyDayInMonth.month;
-    final daysInMonth = DateUtils.getDaysInMonth(y, m);
-
-    final startMonth = DateTime(y, m, 1, 4); // 4 الفجر كبداية تشغيل
-    final d10 = DateTime(y, m, 10, 4);
-    final d11 = DateTime(y, m, 11, 4);
-    final d20 = DateTime(y, m, 20, 4);
-    final d21 = DateTime(y, m, 21, 4);
-    final endMonth = DateTime(
-      y,
-      m,
-      daysInMonth,
-      4,
-    ).add(const Duration(days: 1));
-
-    final third1 = DateTimeRange(start: startMonth, end: d11);
-    final third2 = DateTimeRange(start: d11, end: d21);
-    final third3 = DateTimeRange(start: d21, end: endMonth);
-    final full = DateTimeRange(start: startMonth, end: endMonth);
-
-    return {
-      StatsPeriod.third1: third1,
-      StatsPeriod.third2: third2,
-      StatsPeriod.third3: third3,
-      StatsPeriod.month: full,
-    };
   }
 }

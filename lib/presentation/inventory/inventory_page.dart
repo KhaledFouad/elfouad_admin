@@ -1,118 +1,133 @@
+import 'package:elfouad_admin/core/widgets/branded_appbar.dart';
+import 'package:elfouad_admin/presentation/inventory/providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../domain/entities/product.dart';
-import 'providers.dart';
-import '../../core/widgets/branded_appbar.dart';
+import 'widgets/inventory_tile.dart';
 
 class InventoryPage extends ConsumerWidget {
   const InventoryPage({super.key});
+  static const route = '/inventory';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final s = ref.watch(productsStreamProvider);
+    final max = ref.watch(inventoryMaxStockProvider);
+    final list = ref.watch(inventoryListForTabProvider);
+    final tab = ref.watch(inventoryTabProvider);
+
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        appBar: const BrandedAppBar(title: 'المخزون'),
-        body: s.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, st) => Center(child: Text('خطأ تحميل المخزون: $e')),
-          data: (list) {
-            final singles = list.where((p) => p.type == 'single').toList();
-            final blends = list.where((p) => p.type == 'ready_blend').toList();
-            if (singles.isEmpty && blends.isEmpty) {
-              return const Center(child: Text('لا توجد منتجات قابلة للعرض'));
-            }
-            return ListView(
-              padding: const EdgeInsets.all(12),
-              children: [
-                if (singles.isNotEmpty)
-                  _group(context, 'أصناف منفردة', singles),
-                if (blends.isNotEmpty) _group(context, 'توليفات جاهزة', blends),
-              ],
-            );
-          },
-        ),
-      ),
-    );
-  }
-
-  Widget _group(BuildContext context, String title, List<Product> items) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        appBar: _bar(context),
+        body: ListView(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
           children: [
-            Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+            // Chips
+            Wrap(
+              spacing: 8,
+              children: [
+                _chip(ref, 'الكل', InventoryTab.all, tab),
+                // _chip(ref, 'المشروبات', InventoryTab.drinks, tab),
+                _chip(ref, 'الأصناف المنفردة', InventoryTab.singles, tab),
+                _chip(ref, 'التوليفات', InventoryTab.blends, tab),
+              ],
+            ),
             const SizedBox(height: 8),
-            ...items.map((p) => _stockTile(context, p)),
+
+            if (tab == InventoryTab.drinks)
+              Card(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: Text('المشروبات لا تُدار كمخزون جرامات هنا.'),
+                ),
+              )
+            else if (list.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(child: Text('لا توجد عناصر')),
+              )
+            else
+              Column(
+                children: list
+                    .map(
+                      (r) => InventoryTile(
+                        row: r,
+                        maxStockForBar: max,
+                        // onEdit: () => _openEdit(context, r),
+                        // onDelete: () => _confirmDelete(context, r),
+                      ),
+                    )
+                    .toList(),
+              ),
           ],
         ),
       ),
     );
   }
 
-  Widget _stockTile(BuildContext context, Product p) {
-    final grams = p.stockGrams;
-    final warn = grams <= 2500;
-    final barColor = warn ? Colors.redAccent : const Color(0xFF543824);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  (p.roast == null || p.roast!.isEmpty)
-                      ? p.name
-                      : '${p.name} — ${p.roast}',
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: warn
-                      ? Colors.red.withOpacity(0.08)
-                      : Colors.brown.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: warn ? Colors.redAccent : Colors.brown.shade100,
-                  ),
-                ),
-                child: Text(
-                  '${grams.toStringAsFixed(0)} جم',
-                  style: TextStyle(
-                    color: warn ? Colors.red : Colors.brown.shade800,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Container(
-            height: 12,
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: FractionallySizedBox(
-              alignment: Alignment.centerRight,
-              widthFactor: (grams / 10000).clamp(0.0, 1.0),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: barColor,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-            ),
-          ),
-        ],
+  Widget _chip(WidgetRef ref, String label, InventoryTab me, InventoryTab cur) {
+    final selected = me == cur;
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: (_) => ref.read(inventoryTabProvider.notifier).state = me,
+      labelStyle: TextStyle(
+        fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
       ),
     );
   }
+
+  PreferredSizeWidget _bar(BuildContext context) {
+    return PreferredSize(
+      preferredSize: const Size.fromHeight(72),
+      child: ClipRRect(
+        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
+        child: BrandedAppBar(title: 'المخزون'),
+      ),
+    );
+  }
+
+  // void _openEdit(BuildContext context, InventoryRow r) {
+  //   showModalBottomSheet(
+  //     context: context,
+  //     useSafeArea: true,
+  //     isScrollControlled: true,
+  //     shape: const RoundedRectangleBorder(
+  //       borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+  //     ),
+  //     builder: (_) => EditInventorySheet(row: r),
+  //   );
+  // }
+
+  // Future<void> _confirmDelete(BuildContext context, InventoryRow r) async {
+  //   final ok = await showDialog<bool>(
+  //     context: context,
+  //     builder: (_) => AlertDialog(
+  //       title: const Text('حذف العنصر'),
+  //       content: Text(
+  //         'هل تريد حذف "${r.name}${r.variant.isEmpty ? '' : ' — ${r.variant}'}"؟',
+  //       ),
+  //       actions: [
+  //         TextButton(
+  //           onPressed: () => Navigator.pop(context, false),
+  //           child: const Text('إلغاء'),
+  //         ),
+  //         FilledButton(
+  //           onPressed: () => Navigator.pop(context, true),
+  //           child: const Text('حذف'),
+  //         ),
+  //       ],
+  //     ),
+  //   );
+  //   if (ok == true) {
+  //     await deleteInventoryRow(r);
+  //     if (context.mounted) {
+  //       ScaffoldMessenger.of(
+  //         context,
+  //       ).showSnackBar(const SnackBar(content: Text('تم الحذف')));
+  //     }
+  //   }
+  // }
 }

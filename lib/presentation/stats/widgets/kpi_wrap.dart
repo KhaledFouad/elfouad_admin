@@ -15,14 +15,14 @@ class KpiWrap extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, c) {
-        // موبايل: كرتين في الصف. لو الشاشة أوسع هتزود تلقائي.
         final w = c.maxWidth;
         final perRow = w < 380 ? 1 : (w < 700 ? 2 : 3);
-        final itemWidth = (w - (12 * (perRow - 1))) / perRow;
+        final gap = 12.0;
+        final itemWidth = (w - (gap * (perRow - 1))) / perRow;
 
         return Wrap(
-          spacing: 12,
-          runSpacing: 12,
+          spacing: gap,
+          runSpacing: gap,
           children: items.map((k) {
             return ConstrainedBox(
               constraints: BoxConstraints(
@@ -47,15 +47,17 @@ class _KpiCard extends StatelessWidget {
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      color: Colors.brown.shade50,
+      color: const Color(0xFFF3E6D6), // بيج فاتح قريب من c49a6c كخلفية ناعمة
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         child: Row(
           children: [
             CircleAvatar(
               radius: 16,
-              backgroundColor: Colors.brown.shade100,
-              child: Icon(k.icon, size: 18, color: Colors.brown.shade700),
+              backgroundColor: const Color(
+                0xFFC49A6C,
+              ), // بيج أغمق شوية للأيقونة
+              child: Icon(k.icon, size: 18, color: const Color(0xFF543824)),
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -70,12 +72,18 @@ class _KpiCard extends StatelessWidget {
                   FittedBox(
                     fit: BoxFit.scaleDown,
                     alignment: AlignmentDirectional.centerStart,
-                    child: Text(
-                      k.value,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 20,
-                      ),
+                    child: Row(
+                      children: [
+                        const SizedBox(width: 6),
+                        Text(
+                          k.value,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 20,
+                            color: Color(0xFF543824), // بني غامق
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],

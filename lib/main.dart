@@ -1,9 +1,9 @@
+import 'package:elfouad_admin/presentation/home/app_shell.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'firebase_options.dart';
-import 'presentation/home/home_shell.dart';
+import 'services/firebase_options.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 const _primaryHex = 0xFF543824; // بني غامق
@@ -16,6 +16,7 @@ Future<void> _initFirebase() async {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await _initFirebase();
+
   runApp(const ProviderScope(child: MyApp()));
 }
 
@@ -30,10 +31,22 @@ ThemeData _lightTheme() {
     ).copyWith(primary: primary, secondary: secondary, surface: Colors.white),
     scaffoldBackgroundColor: Colors.white,
     textTheme: GoogleFonts.cairoTextTheme(),
+
+    // appBarTheme: const AppBarTheme(
+    //   centerTitle: true,
+    //   backgroundColor: Colors.white,
+    //   foregroundColor: Colors.white,
+    // ),
     appBarTheme: const AppBarTheme(
-      centerTitle: true,
-      backgroundColor: Colors.white,
+      backgroundColor: Colors.transparent,
+      surfaceTintColor: Colors.transparent, // يمنع التينت الأبيض
       foregroundColor: Colors.white,
+      iconTheme: IconThemeData(color: Colors.white),
+      titleTextStyle: TextStyle(
+        fontWeight: FontWeight.w800,
+        fontSize: 22,
+        color: Colors.white,
+      ),
     ),
   );
   return base.copyWith(
@@ -56,6 +69,7 @@ ThemeData _lightTheme() {
       ),
     ),
     chipTheme: base.chipTheme.copyWith(
+      // ignore: deprecated_member_use
       color: WidgetStateProperty.all(secondary.withOpacity(0.15)),
     ),
   );
@@ -75,7 +89,8 @@ class MyApp extends StatelessWidget {
         GlobalCupertinoLocalizations.delegate,
       ],
       theme: _lightTheme(),
-      home: const HomeShell(),
+      debugShowCheckedModeBanner: false,
+      home: const AppShell(),
     );
   }
 }

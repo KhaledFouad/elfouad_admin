@@ -1,4 +1,5 @@
 // ignore_for_file: unused_local_variable
+import 'package:awesome_drawer_bar/awesome_drawer_bar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:elfouad_admin/presentation/history/utils/date_range_controller.dart'
     show dateRangeProvider, DateRangeController;
@@ -105,12 +106,8 @@ class _SalesHistoryPageState extends ConsumerState<SalesHistoryPage> {
             child: AppBar(
               automaticallyImplyLeading: false,
               leading: IconButton(
-                icon: const Icon(
-                  Icons.arrow_back_ios_new_rounded,
-                  color: Colors.white,
-                ),
-                onPressed: () => Navigator.maybePop(context),
-                tooltip: 'رجوع',
+                icon: const Icon(Icons.menu, color: Colors.white),
+                onPressed: () => AwesomeDrawerBar.of(context)?.toggle(),
               ),
               title: const Text(
                 'سجلّ المبيعات',
@@ -129,13 +126,13 @@ class _SalesHistoryPageState extends ConsumerState<SalesHistoryPage> {
                   onPressed: _pickRange,
                   icon: const Icon(Icons.filter_alt, color: Colors.white),
                 ),
-                if (r != null)
-                  IconButton(
-                    tooltip: 'مسح الفلتر',
-                    onPressed: () =>
-                        ref.read(dateRangeProvider.notifier).clear(),
-                    icon: const Icon(Icons.clear),
-                  ),
+                // if (r != null)
+                //   IconButton(
+                //     tooltip: 'مسح الفلتر',
+                //     onPressed: () =>
+                //         ref.read(dateRangeProvider.notifier).clear(),
+                //     icon: const Icon(Icons.clear),
+                //   ),
               ],
               flexibleSpace: Container(
                 decoration: const BoxDecoration(
