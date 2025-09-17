@@ -1,48 +1,46 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:elfouad_admin/core/utils/time.dart';
+import 'package:elfouad_admin/data/data_source/firestore_sales_ds.dart';
+import 'package:elfouad_admin/data/repo/sales_repo_impl.dart';
+import 'package:elfouad_admin/domain/use_cases/build_breakdowns.dart';
+import 'package:elfouad_admin/domain/use_cases/get_sales_in_range.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
-import '../../../core/utils/time.dart';
-import '../../../domain/use_cases/get_sales_in_range.dart';
-import '../../../domain/use_cases/build_breakdowns.dart';
-import '../../../data/repo/sales_repo_impl.dart';
-import '../../../data/data_source/firestore_sales_ds.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
-// DI for UseCases (if used elsewhere)
-final getSalesInRangeProvider = Provider<GetSalesInRange>((ref) {
-  final ds = FirestoreSalesDs(FirebaseFirestore.instance);
-  final repo = SalesRepoImpl(ds);
-  return GetSalesInRange(repo);
-});
-
+final _dsProvider = Provider<FirestoreSalesDs>(
+  (ref) => FirestoreSalesDs(FirebaseFirestore.instance),
+);
+final _repoProvider = Provider<SalesRepoImpl>(
+  (ref) => SalesRepoImpl(ref.read(_dsProvider)),
+);
+final getSalesInRangeProvider = Provider<GetSalesInRange>(
+  (ref) => GetSalesInRange(ref.read(_repoProvider)),
+);
 final buildBreakdownsProvider = Provider<BuildBreakdowns>(
   (ref) => BuildBreakdowns(),
 );
 
-// Date range provider (UTC)
-final dateRangeProvider = StateProvider<DateTimeRangeUtc>((ref) {
-  final r = OpTime.todayOperationalRangeUtc();
+final monthRangeProvider = StateProvider<DateTimeRangeUtc>((ref) {
+  final r = OpTime.monthOperationalRangeUtc(DateTime.now());
   return DateTimeRangeUtc(r.$1, r.$2);
 });
 
-// Breakdowns provider for convenience
-final salesBreakdownsProvider = FutureProvider<Breakdowns>((ref) async {
-  final r = ref.watch(dateRangeProvider);
+final salesBreakdownsProviderMonth = FutureProvider<Breakdowns>((ref) async {
+  final r = ref.watch(monthRangeProvider);
   final getSales = ref.read(getSalesInRangeProvider);
   final builder = ref.read(buildBreakdownsProvider);
   final sales = await getSales(r.startUtc, r.endUtc);
   return builder(sales);
 });
 
-// DayPoint model for trends
 class DayPoint {
-  final DateTime day; // UTC 4AM key
+  final DateTime day;
   final double value;
   DayPoint(this.day, this.value);
 }
 
-// Sales trend (sum of totalPrice per operational day)
-final salesTrendProvider = FutureProvider<List<DayPoint>>((ref) async {
-  final r = ref.watch(dateRangeProvider);
+final salesTrendMonthProvider = FutureProvider<List<DayPoint>>((ref) async {
+  final r = ref.watch(monthRangeProvider);
   final getSales = ref.read(getSalesInRangeProvider);
   final list = await getSales(r.startUtc, r.endUtc);
   final map = <DateTime, double>{};
@@ -54,9 +52,8 @@ final salesTrendProvider = FutureProvider<List<DayPoint>>((ref) async {
   return days.map((d) => DayPoint(d, map[d] ?? 0)).toList();
 });
 
-// Profit trend (sum of (price - cost) per operational day)
-final profitTrendProvider = FutureProvider<List<DayPoint>>((ref) async {
-  final r = ref.watch(dateRangeProvider);
+final profitTrendMonthProvider = FutureProvider<List<DayPoint>>((ref) async {
+  final r = ref.watch(monthRangeProvider);
   final getSales = ref.read(getSalesInRangeProvider);
   final list = await getSales(r.startUtc, r.endUtc);
   final map = <DateTime, double>{};

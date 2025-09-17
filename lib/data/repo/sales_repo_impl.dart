@@ -5,9 +5,6 @@ import '../data_source/firestore_sales_ds.dart';
 class SalesRepoImpl implements SalesRepo {
   final FirestoreSalesDs ds;
   SalesRepoImpl(this.ds);
-
   @override
-  Future<List<Sale>> getSalesInRange(DateTime startUtc, DateTime endUtc) {
-    return ds.fetchRaw(startUtc, endUtc);
-  }
+  Future<List<Sale>> getSalesInRange(DateTime s, DateTime e) => ds.fetchRaw(s, e);
 }

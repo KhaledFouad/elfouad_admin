@@ -17,14 +17,20 @@ class DrinksBreakdownTable extends StatelessWidget {
           DataColumn(label: Text('ربح')),
           DataColumn(label: Text('متوسط سعر')),
         ],
-        rows: list.map((e) => DataRow(cells: [
-          DataCell(Text('${e.type}')),
-          DataCell(Text('${e.cups}')),
-          DataCell(Text('${(e.sales as num).toStringAsFixed(2)}')),
-          DataCell(Text('${(e.cost as num).toStringAsFixed(2)}')),
-          DataCell(Text('${(e.profit as num).toStringAsFixed(2)}')),
-          DataCell(Text('${(e.avgPrice as num).toStringAsFixed(2)}')),
-        ])).toList(),
+        rows: list
+            .map(
+              (e) => DataRow(
+                cells: [
+                  DataCell(Text('${e.type}')),
+                  DataCell(Text('${e.cups}')),
+                  DataCell(Text((e.sales as num).toStringAsFixed(2))),
+                  DataCell(Text((e.cost as num).toStringAsFixed(2))),
+                  DataCell(Text((e.profit as num).toStringAsFixed(2))),
+                  DataCell(Text((e.avgPrice as num).toStringAsFixed(2))),
+                ],
+              ),
+            )
+            .toList(),
       ),
     );
   }

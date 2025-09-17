@@ -8,25 +8,30 @@ class SaleMapper {
     DateTime createdAt;
     if (ts is Timestamp) {
       createdAt = ts.toDate().toUtc();
-    } else if (ts is String) {
+    } else if (ts is String)
       createdAt = DateTime.parse(ts).toUtc();
-    } else {
+    else
       createdAt = DateTime.now().toUtc();
-    }
+    double toDoubleValue(dynamic v) =>
+        (v is num) ? v.toDouble() : double.tryParse('${v ?? 0}') ?? 0.0;
     return Sale(
       createdAt: createdAt,
-      type: (d['type'] ?? 'drink') as String,
-      name: (d['name'] ?? '') as String,
-      variant: d['variant'] as String?,
-      totalPrice: (d['total_price'] ?? 0).toDouble(),
-      totalCost: (d['total_cost'] ?? 0).toDouble(),
-      isComplimentary: (d['is_complimentary'] ?? false) as bool,
-      quantity: (d['quantity'] == null) ? null : (d['quantity'] as num).toDouble(),
-      drinkType: d['drink_type'] as String?,
-      grams: (d['grams'] == null) ? null : (d['grams'] as num).toDouble(),
-      totalGramsForCustom: (d['total_grams_for_custom'] == null) ? null : (d['total_grams_for_custom'] as num).toDouble(),
-      blendFamily: d['blend_family'] as String?,
-      singleOrigin: d['single_origin'] as String?,
+      type: (d['type'] ?? 'drink').toString(),
+      name: (d['name'] ?? '').toString(),
+      drinkName: (d['drink_name'] ?? '').toString(),
+      variant: d['variant']?.toString(),
+      totalPrice: toDoubleValue(d['total_price']),
+      totalCost: toDoubleValue(d['total_cost']),
+      isComplimentary: (d['is_complimentary'] ?? false) == true,
+      isSpiced: (d['is_spiced'] ?? false) == true,
+      quantity: d['quantity'] == null ? null : toDoubleValue(d['quantity']),
+      drinkType: d['drink_type']?.toString(),
+      grams: d['grams'] == null ? null : toDoubleValue(d['grams']),
+      totalGramsForCustom: d['total_grams_for_custom'] != null
+          ? toDoubleValue(d['total_grams_for_custom'])
+          : (d['total_grams'] == null ? null : toDoubleValue(d['total_grams'])),
+      blendFamily: d['blend_family']?.toString(),
+      singleOrigin: d['single_origin']?.toString(),
     );
   }
 }

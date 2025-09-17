@@ -17,14 +17,20 @@ class BeansBreakdownTable extends StatelessWidget {
           DataColumn(label: Text('ربح')),
           DataColumn(label: Text('متوسط/كجم')),
         ],
-        rows: list.map((e) => DataRow(cells: [
-          DataCell(Text('${e.family}')),
-          DataCell(Text('${(e.grams as num).toStringAsFixed(0)}')),
-          DataCell(Text('${(e.sales as num).toStringAsFixed(2)}')),
-          DataCell(Text('${(e.cost as num).toStringAsFixed(2)}')),
-          DataCell(Text('${(e.profit as num).toStringAsFixed(2)}')),
-          DataCell(Text('${(e.avgPerKg as num).toStringAsFixed(2)}')),
-        ])).toList(),
+        rows: list
+            .map(
+              (e) => DataRow(
+                cells: [
+                  DataCell(Text('${e.family}')),
+                  DataCell(Text((e.grams as num).toStringAsFixed(0))),
+                  DataCell(Text((e.sales as num).toStringAsFixed(2))),
+                  DataCell(Text((e.cost as num).toStringAsFixed(2))),
+                  DataCell(Text((e.profit as num).toStringAsFixed(2))),
+                  DataCell(Text((e.avgPerKg as num).toStringAsFixed(2))),
+                ],
+              ),
+            )
+            .toList(),
       ),
     );
   }

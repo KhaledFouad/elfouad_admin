@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:salomon_bottom_bar/salomon_bottom_bar.dart';
-import '../admin/dashboard/admin_dashboard_page.dart';
+import '../history/sales_history_page.dart';
+import '../stats/stats_page.dart';
+import '../inventory/inventory_page.dart';
+import '../manage/products_manage_page.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
@@ -11,12 +14,11 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
   final _pages = const [
-    AdminDashboardPage(), // مؤقتًا كصفحة أولى
-    AdminDashboardPage(), // Placeholder لصفحات أخرى
-    AdminDashboardPage(),
-    AdminDashboardPage(),
+    SalesHistoryPage(),
+    StatsPage(),
+    InventoryPage(),
+    ProductsManagePage(),
   ];
-
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -43,16 +45,16 @@ class _HomeShellState extends State<HomeShell> {
                 title: Text("السجل"),
               ),
               SalomonBottomBarItem(
+                icon: Icon(Icons.bar_chart_rounded),
+                title: Text("الإحصائيات"),
+              ),
+              SalomonBottomBarItem(
                 icon: Icon(Icons.inventory_2_outlined),
                 title: Text("المخزون"),
               ),
               SalomonBottomBarItem(
                 icon: Icon(Icons.edit_note),
-                title: Text("إضافة/تعديل"),
-              ),
-              SalomonBottomBarItem(
-                icon: Icon(Icons.bar_chart_rounded),
-                title: Text("الإحصائيات"),
+                title: Text("المنتجات"),
               ),
             ],
           ),
