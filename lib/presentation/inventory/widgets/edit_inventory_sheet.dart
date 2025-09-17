@@ -1,5 +1,5 @@
-import 'package:elfouad_admin/presentation/inventory/providers.dart';
 import 'package:flutter/material.dart';
+import 'package:elfouad_admin/presentation/inventory/providers.dart';
 
 class EditInventorySheet extends StatefulWidget {
   final InventoryRow row;
@@ -10,26 +10,25 @@ class EditInventorySheet extends StatefulWidget {
 }
 
 class _EditInventorySheetState extends State<EditInventorySheet> {
-  late final TextEditingController _name;
-  late final TextEditingController _variant;
-  late final TextEditingController _stock;
-  late final TextEditingController _sellPerKg;
-  late final TextEditingController _minLevel;
+  final _name = TextEditingController();
+  final _variant = TextEditingController();
+  final _stock = TextEditingController();
+  final _sellPerKg = TextEditingController();
+  final _costPerKg = TextEditingController();
+  final _minLevel = TextEditingController();
 
   bool _busy = false;
 
   @override
   void initState() {
     super.initState();
-    _name = TextEditingController(text: widget.row.name);
-    _variant = TextEditingController(text: widget.row.variant);
-    _stock = TextEditingController(text: widget.row.stockG.toStringAsFixed(0));
-    _sellPerKg = TextEditingController(
-      text: widget.row.sellPerKg.toStringAsFixed(2),
-    );
-    _minLevel = TextEditingController(
-      text: widget.row.minLevelG.toStringAsFixed(0),
-    );
+    final r = widget.row;
+    _name.text = r.name;
+    _variant.text = r.variant;
+    _stock.text = r.stockG.toStringAsFixed(0);
+    _sellPerKg.text = r.sellPerKg.toStringAsFixed(2);
+    _costPerKg.text = r.costPerKg.toStringAsFixed(2); // قابل للتعديل
+    _minLevel.text = r.minLevelG.toStringAsFixed(0);
   }
 
   @override
@@ -38,11 +37,118 @@ class _EditInventorySheetState extends State<EditInventorySheet> {
     _variant.dispose();
     _stock.dispose();
     _sellPerKg.dispose();
+    _costPerKg.dispose();
     _minLevel.dispose();
     super.dispose();
   }
 
-  double _d(String s) => double.tryParse(s.replaceAll(',', '.').trim()) ?? 0.0;
+  @override
+  Widget build(BuildContext context) {
+    final title =
+        '${_name.text}${_variant.text.isEmpty ? '' : ' — ${_variant.text}'}';
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        top: 12,
+        bottom: 16 + MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              height: 4,
+              width: 42,
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: Colors.black26,
+                borderRadius: BorderRadius.circular(100),
+              ),
+            ),
+            Text(
+              title,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 10),
+
+            _tf(_name, 'الاسم', TextInputType.text),
+            const SizedBox(height: 8),
+            _tf(_variant, 'درجة التحميص (اختياري)', TextInputType.text),
+            const SizedBox(height: 8),
+            _tf(
+              _stock,
+              'المخزون (جرامات)',
+              const TextInputType.numberWithOptions(decimal: false),
+            ),
+            const SizedBox(height: 8),
+            _tf(
+              _sellPerKg,
+              'سعر/كجم',
+              const TextInputType.numberWithOptions(decimal: true),
+            ),
+            const SizedBox(height: 8),
+            _tf(
+              _costPerKg,
+              'التكلفة/كجم',
+              const TextInputType.numberWithOptions(decimal: true),
+            ), // ✅
+            const SizedBox(height: 8),
+            _tf(
+              _minLevel,
+              'حد أدنى تحذيري (جم)',
+              const TextInputType.numberWithOptions(decimal: false),
+            ),
+
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _busy ? null : () => Navigator.pop(context),
+                    child: const Text('إلغاء'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: _busy ? null : _save,
+                    icon: _busy
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.save),
+                    label: const Text('حفظ'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _tf(TextEditingController c, String label, TextInputType kt) {
+    return TextFormField(
+      controller: c,
+      textAlign: TextAlign.center,
+      keyboardType: kt,
+      textInputAction: TextInputAction.next,
+      decoration: InputDecoration(
+        border: const OutlineInputBorder(),
+        isDense: true,
+        labelText: label,
+      ),
+    );
+  }
+
+  double _n(dynamic v) {
+    if (v is num) return v.toDouble();
+    return double.tryParse((v ?? '').toString().replaceAll(',', '.')) ?? 0.0;
+  }
 
   Future<void> _save() async {
     setState(() => _busy = true);
@@ -51,15 +157,12 @@ class _EditInventorySheetState extends State<EditInventorySheet> {
         widget.row,
         name: _name.text.trim(),
         variant: _variant.text.trim(),
-        stockG: _d(_stock.text),
-        sellPerKg: _d(_sellPerKg.text),
-        minLevelG: _d(_minLevel.text),
+        stockG: _n(_stock.text),
+        sellPerKg: _n(_sellPerKg.text),
+        costPerKg: _n(_costPerKg.text), // ✅ هتتخزن
+        minLevelG: _n(_minLevel.text),
       );
-      if (!mounted) return;
-      Navigator.pop(context);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('تم حفظ التعديلات')));
+      if (mounted) Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -68,104 +171,5 @@ class _EditInventorySheetState extends State<EditInventorySheet> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final title = widget.row.variant.isEmpty
-        ? widget.row.name
-        : '${widget.row.name} — ${widget.row.variant}';
-
-    final maxH = MediaQuery.of(context).size.height * 0.9;
-    return SafeArea(
-      child: LayoutBuilder(
-        builder: (context, c) => ConstrainedBox(
-          constraints: BoxConstraints(maxHeight: maxH),
-          child: SingleChildScrollView(
-            padding: EdgeInsets.only(
-              left: 16,
-              right: 16,
-              top: 12,
-              bottom: 16 + MediaQuery.of(context).viewInsets.bottom,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  height: 4,
-                  width: 42,
-                  margin: const EdgeInsets.only(bottom: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.black26,
-                    borderRadius: BorderRadius.circular(100),
-                  ),
-                ),
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 18,
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                _tf(_name, 'الاسم'),
-                const SizedBox(height: 10),
-                _tf(_variant, 'درجة التحميص (اختياري)'),
-                const SizedBox(height: 10),
-                _tf(_stock, 'المخزون (جرامات)', number: true),
-                const SizedBox(height: 10),
-                _tf(_sellPerKg, 'سعر البيع/كجم', number: true),
-                const SizedBox(height: 10),
-                _tf(_minLevel, 'حد أدنى تحذيري (جم)', number: true),
-
-                const SizedBox(height: 14),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: _busy ? null : () => Navigator.pop(context),
-                        child: const Text('إلغاء'),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: FilledButton.icon(
-                        onPressed: _busy ? null : _save,
-                        icon: _busy
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.save),
-                        label: const Text('حفظ'),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _tf(TextEditingController c, String label, {bool number = false}) {
-    return TextField(
-      controller: c,
-      textAlign: TextAlign.center,
-      keyboardType: number
-          ? const TextInputType.numberWithOptions(decimal: true)
-          : TextInputType.text,
-      decoration: InputDecoration(
-        isDense: true,
-        border: const OutlineInputBorder(),
-        labelText: label,
-      ),
-    );
   }
 }
