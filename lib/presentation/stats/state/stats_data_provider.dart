@@ -130,7 +130,7 @@ final statsThirdsPreviewProvider =
       final month = ref.watch(statsForMonthProvider);
       final rawMonth = await ref.watch(salesRawForMonthProvider(month).future);
 
-      Kpis _kpisForRange(DateTime start, DateTime end) {
+      Kpis kpisForRange(DateTime start, DateTime end) {
         double sales = 0, cost = 0, grams = 0;
         int cups = 0;
         for (final m in rawMonth) {
@@ -178,10 +178,10 @@ final statsThirdsPreviewProvider =
       final rm = statsComputeRange(month, StatsPeriod.fullMonth);
 
       return (
-        third1: _kpisForRange(r1.startUtc, r1.endUtc),
-        third2: _kpisForRange(r2.startUtc, r2.endUtc),
-        third3: _kpisForRange(r3.startUtc, r3.endUtc),
-        month: _kpisForRange(rm.startUtc, rm.endUtc),
+        third1: kpisForRange(r1.startUtc, r1.endUtc),
+        third2: kpisForRange(r2.startUtc, r2.endUtc),
+        third3: kpisForRange(r3.startUtc, r3.endUtc),
+        month: kpisForRange(rm.startUtc, rm.endUtc),
       );
     });
 
@@ -276,7 +276,7 @@ final beansByNameProvider = FutureProvider<List<GroupRow>>((ref) async {
   final data = await ref.watch(statsSalesProvider.future);
   final map = <String, GroupRow>{};
 
-  List<Map<String, dynamic>> _asListMap(dynamic v) {
+  List<Map<String, dynamic>> asListMap(dynamic v) {
     if (v is List) {
       return v
           .map(
@@ -287,7 +287,7 @@ final beansByNameProvider = FutureProvider<List<GroupRow>>((ref) async {
     return const [];
   }
 
-  Map<String, dynamic> _normRow(Map<String, dynamic> c) {
+  Map<String, dynamic> normRow(Map<String, dynamic> c) {
     String name = (c['name'] ?? c['item_name'] ?? c['product_name'] ?? '')
         .toString();
     String variant = (c['variant'] ?? c['roast'] ?? '').toString();
@@ -309,7 +309,7 @@ final beansByNameProvider = FutureProvider<List<GroupRow>>((ref) async {
     };
   }
 
-  void _addToMap({
+  void addToMap({
     required String key,
     double grams = 0,
     double sales = 0,
@@ -337,15 +337,15 @@ final beansByNameProvider = FutureProvider<List<GroupRow>>((ref) async {
           (m['total_price'] as num?)?.toDouble() ?? _d(m['total_price']);
       final cost = (m['total_cost'] as num?)?.toDouble() ?? _d(m['total_cost']);
 
-      _addToMap(key: key, grams: grams, sales: price, cost: cost);
+      addToMap(key: key, grams: grams, sales: price, cost: cost);
       continue;
     }
 
     // توليفة العميل: نفكّك المكوّنات
     if (type == 'custom_blend') {
-      final comps = _asListMap(m['components']);
-      final items = _asListMap(m['items']);
-      final lines = _asListMap(m['lines']);
+      final comps = asListMap(m['components']);
+      final items = asListMap(m['items']);
+      final lines = asListMap(m['lines']);
       final rowsRaw = comps.isNotEmpty
           ? comps
           : (items.isNotEmpty ? items : lines);
@@ -359,11 +359,11 @@ final beansByNameProvider = FutureProvider<List<GroupRow>>((ref) async {
             (m['beans_amount'] as num?)?.toDouble() ??
             0.0;
         final cost = (m['total_cost'] as num?)?.toDouble() ?? 0.0;
-        _addToMap(key: 'مخصص', grams: gramsAll, sales: price, cost: cost);
+        addToMap(key: 'مخصص', grams: gramsAll, sales: price, cost: cost);
         continue;
       }
 
-      final rows = rowsRaw.map(_normRow).toList();
+      final rows = rowsRaw.map(normRow).toList();
       final totalGrams = rows.fold<double>(
         0,
         (s, r) => s + (r['grams'] as double),
@@ -395,7 +395,7 @@ final beansByNameProvider = FutureProvider<List<GroupRow>>((ref) async {
         }
         // لو مفيش cost على مستوى المكوّن هنسيبه 0 (غالبًا total_cost متوزّع أصلاً على السطور)
 
-        _addToMap(key: key, grams: grams, sales: linePrice, cost: lineCost);
+        addToMap(key: key, grams: grams, sales: linePrice, cost: lineCost);
       }
 
       continue;
@@ -460,17 +460,17 @@ final statsTrendsProvider = FutureProvider<TrendsBundle>((ref) async {
     }
   }
 
-  List<DayVal> _toList(Map<DateTime, double> mp) {
+  List<DayVal> toList(Map<DateTime, double> mp) {
     final ks = mp.keys.toList()..sort();
     return ks.map((d) => DayVal(d, mp[d] ?? 0)).toList();
   }
 
   return TrendsBundle(
-    totalSales: _toList(salesM),
-    totalProfit: _toList(profitM),
-    drinksSales: _toList(drinksSalesM),
-    drinksProfit: _toList(drinksProfitM),
-    beansSales: _toList(beansSalesM),
-    beansProfit: _toList(beansProfitM),
+    totalSales: toList(salesM),
+    totalProfit: toList(profitM),
+    drinksSales: toList(drinksSalesM),
+    drinksProfit: toList(drinksProfitM),
+    beansSales: toList(beansSalesM),
+    beansProfit: toList(beansProfitM),
   );
 });

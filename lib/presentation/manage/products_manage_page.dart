@@ -23,7 +23,7 @@ class ManagePage extends ConsumerWidget {
     final singles = ref.watch(singlesStreamProvider);
     final blends = ref.watch(blendsStreamProvider);
 
-    Widget _drinks() => drinks.when(
+    Widget drinks0() => drinks.when(
       loading: _loading,
       error: _err('المشروبات'),
       data: (rows) => Column(
@@ -85,7 +85,7 @@ class ManagePage extends ConsumerWidget {
       ),
     );
 
-    Widget _invList(List<InventoryRow> rows) => Column(
+    Widget invList(List<InventoryRow> rows) => Column(
       children: rows
           .map(
             (r) => Card(
@@ -144,37 +144,34 @@ class ManagePage extends ConsumerWidget {
           .toList(),
     );
 
-    Widget _singles() => singles.when(
+    Widget singles0() => singles.when(
       loading: _loading,
       error: _err('الأصناف المنفردة'),
-      data: _invList,
+      data: invList,
     );
 
-    Widget _blends() => blends.when(
-      loading: _loading,
-      error: _err('التوليفات'),
-      data: _invList,
-    );
+    Widget blends0() =>
+        blends.when(loading: _loading, error: _err('التوليفات'), data: invList);
 
-    Widget _content() {
+    Widget content() {
       switch (tab) {
         case ManageTab.drinks:
-          return _drinks();
+          return drinks0();
         case ManageTab.singles:
-          return _singles();
+          return singles0();
         case ManageTab.blends:
-          return _blends();
+          return blends0();
         case ManageTab.all:
           return Column(
             children: [
               _Section('التوليفات'),
-              _blends(),
+              blends0(),
               const SizedBox(height: 8),
               _Section('الأصناف المنفردة'),
-              _singles(),
+              singles0(),
               const SizedBox(height: 8),
               _Section('المشروبات'),
-              _drinks(),
+              drinks0(),
             ],
           );
       }
@@ -197,7 +194,7 @@ class ManagePage extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 8),
-            _content(),
+            content(),
           ],
         ),
         floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,

@@ -35,7 +35,7 @@ class TripleTrendChart extends StatelessWidget {
     }
     if (maxY <= 0) maxY = 1;
 
-    List<FlSpot> _toSpots(List<DayVal> l) =>
+    List<FlSpot> toSpots(List<DayVal> l) =>
         l
             .map((e) => FlSpot(e.day.millisecondsSinceEpoch.toDouble(), e.v))
             .toList()
@@ -125,9 +125,9 @@ class TripleTrendChart extends StatelessWidget {
                 ),
               ),
               lineBarsData: [
-                _line(_toSpots(line1), color1, 3),
-                _line(_toSpots(lineDrinks), color2, 2),
-                _line(_toSpots(lineBeansGrams), color3, 2),
+                _line(toSpots(line1), color1, 3),
+                _line(toSpots(lineDrinks), color2, 2),
+                _line(toSpots(lineBeansGrams), color3, 2),
               ],
             ),
           ),

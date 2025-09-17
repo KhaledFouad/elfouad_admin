@@ -12,9 +12,7 @@ class FirestoreProducts3Ds {
     final ctrl = StreamController<List<Product>>.broadcast();
     List<Product> singles = [], blends = [], drinks = [];
     void emit() {
-      final list = <Product>[...singles]
-        ..addAll(blends)
-        ..addAll(drinks);
+      final list = <Product>[...singles, ...blends]..addAll(drinks);
       list.sort((a, b) => a.name.compareTo(b.name));
       ctrl.add(list);
     }

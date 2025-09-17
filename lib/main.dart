@@ -16,7 +16,6 @@ Future<void> _initFirebase() async {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await _initFirebase();
-
   runApp(const ProviderScope(child: MyApp()));
 }
 
