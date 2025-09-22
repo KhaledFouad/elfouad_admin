@@ -128,6 +128,10 @@ class _ItemCard extends StatelessWidget {
 
     return InkWell(
       onTap: () {
+        final root = context;
+
+        FocusScope.of(root).unfocus(); // ⬅️ اقفل أي كيبورد مفتوح
+
         showModalBottomSheet(
           context: context,
           useSafeArea: true,
@@ -136,7 +140,10 @@ class _ItemCard extends StatelessWidget {
             borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
           ),
           builder: (_) => GrindConfirmSheet(row: row),
-        );
+        ).whenComplete(() {
+          // ⬅️ برضه لما الشيت يتقفل، اقفل أي focus عشان الكيبورد مايرجعش
+          FocusScope.of(root).unfocus();
+        });
       },
       borderRadius: BorderRadius.circular(16),
       child: Container(

@@ -21,8 +21,6 @@ class InventoryRow {
     required this.coll,
     required this.ref,
   });
-
-  bool get isBlend => coll == 'blends';
 }
 
 InventoryRow _fromDoc(DocumentSnapshot<Map<String, dynamic>> d) {
@@ -37,12 +35,11 @@ InventoryRow _fromDoc(DocumentSnapshot<Map<String, dynamic>> d) {
   );
 }
 
-/// ⚠️ شِلّنا orderBy('variant') لتجنّب الاندكس المركّب.
-/// هنفرز بالـ variant محليًا تحت.
 final singlesStreamProvider = StreamProvider<List<InventoryRow>>((ref) {
   return FirebaseFirestore.instance
       .collection('singles')
       .orderBy('name')
+      .orderBy('variant')
       .snapshots()
       .map((s) => s.docs.map(_fromDoc).toList());
 });
@@ -51,6 +48,7 @@ final blendsStreamProvider = StreamProvider<List<InventoryRow>>((ref) {
   return FirebaseFirestore.instance
       .collection('blends')
       .orderBy('name')
+      .orderBy('variant')
       .snapshots()
       .map((s) => s.docs.map(_fromDoc).toList());
 });
@@ -64,44 +62,41 @@ int _blendRank(String name) {
   return 4;
 }
 
-/// القائمة النهائية مرتبة: (Blends أوّلًا بتصنيفك) ثم Singles.
-/// ملاحظة: ننسخ الليست قبل sort لتجنّب Unsupported operation.
 final grindListProvider = Provider<List<InventoryRow>>((ref) {
   final singlesA = ref.watch(singlesStreamProvider);
   final blendsA = ref.watch(blendsStreamProvider);
 
-  // ناخد نسخة قابلة للتعديل
-  final singles = [
-    ...singlesA.maybeWhen(data: (v) => v, orElse: () => const <InventoryRow>[]),
-  ];
-  final blends = [
-    ...blendsA.maybeWhen(data: (v) => v, orElse: () => const <InventoryRow>[]),
-  ];
+  final singles = singlesA.maybeWhen(
+    data: (v) => [...v],
+    orElse: () => <InventoryRow>[],
+  );
+  final blends = blendsA.maybeWhen(
+    data: (v) => [...v],
+    orElse: () => <InventoryRow>[],
+  );
 
-  // ترتيب التوليفات
   blends.sort((a, b) {
     final r = _blendRank(a.name).compareTo(_blendRank(b.name));
     if (r != 0) return r;
-    final byName = a.name.compareTo(b.name);
-    if (byName != 0) return byName;
+    final c = a.name.compareTo(b.name);
+    if (c != 0) return c;
     return a.variant.compareTo(b.variant);
   });
 
-  // ترتيب المفردة بالاسم ثم التحميص
   singles.sort((a, b) {
-    final byName = a.name.compareTo(b.name);
-    if (byName != 0) return byName;
+    final c = a.name.compareTo(b.name);
+    if (c != 0) return c;
     return a.variant.compareTo(b.variant);
   });
 
   return [...blends, ...singles];
 });
 
-/// خصم من المخزون (بدون أسعار)
+/// خصم آمن داخل ترانزاكشن (يمنع الخصم لو المخزون صفر أو أقل من المطلوب)
 Future<void> grindAndDeduct({
   required InventoryRow item,
   required double grams,
-  required bool isSpiced, // متسيبة زي ما هي حتى لو ثابتة
+  required bool isSpiced, // احتفظنا به للتوافق
 }) async {
   if (grams <= 0) return;
 
@@ -110,12 +105,11 @@ Future<void> grindAndDeduct({
     final m = snap.data() ?? {};
     final cur = _d(m['stock']);
 
-    // حراسة صارمة داخل الترانزاكشن
     if (cur <= 0) {
-      throw StateError('empty_stock'); // مفيش مخزون
+      throw StateError('empty_stock');
     }
     if (grams > cur) {
-      throw StateError('insufficient_stock'); // الكمية أكبر من المتاح
+      throw StateError('insufficient_stock');
     }
 
     final newStock = (cur - grams).clamp(0.0, double.infinity);

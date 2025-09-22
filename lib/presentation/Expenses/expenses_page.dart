@@ -41,7 +41,54 @@ class ExpensesPage extends ConsumerWidget {
               centerTitle: true,
               elevation: 8,
               backgroundColor: Colors.transparent,
-
+              actions: [
+                IconButton(
+                  tooltip: 'تصفية بالتاريخ',
+                  onPressed: () async {
+                    final picked = await showDateRangePicker(
+                      context: context,
+                      firstDate: DateTime(DateTime.now().year - 2),
+                      lastDate: DateTime(DateTime.now().year + 1),
+                      initialDateRange: range,
+                      locale: const Locale('ar'),
+                      builder: (context, child) => Directionality(
+                        textDirection: TextDirection.rtl,
+                        child: child!,
+                      ),
+                    );
+                    if (picked != null) {
+                      // نثبت بداية كل يوم 4 ص ونهاية اليوم التالي 4 ص
+                      final start = DateTime(
+                        picked.start.year,
+                        picked.start.month,
+                        picked.start.day,
+                        4,
+                      );
+                      final endBase = DateTime(
+                        picked.end.year,
+                        picked.end.month,
+                        picked.end.day,
+                        4,
+                      );
+                      final end = endBase.add(const Duration(days: 1));
+                      ref.read(expensesRangeProvider.notifier).state =
+                          DateTimeRange(start: start, end: end);
+                    }
+                  },
+                  icon: const Icon(Icons.filter_alt_rounded),
+                  color: Colors.white,
+                ),
+                if (range != todayOperationalRangeLocal())
+                  IconButton(
+                    tooltip: 'اليوم التشغيلي',
+                    onPressed: () {
+                      ref.read(expensesRangeProvider.notifier).state =
+                          todayOperationalRangeLocal();
+                    },
+                    icon: const Icon(Icons.restart_alt),
+                    color: Colors.white,
+                  ),
+              ],
               flexibleSpace: Container(
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
@@ -75,52 +122,6 @@ class ExpensesPage extends ConsumerWidget {
                     Icons.account_balance_wallet,
                   ),
                   const Spacer(),
-                  IconButton(
-                    tooltip: 'تصفية بالتاريخ',
-                    onPressed: () async {
-                      final picked = await showDateRangePicker(
-                        context: context,
-                        firstDate: DateTime(DateTime.now().year - 2),
-                        lastDate: DateTime(DateTime.now().year + 1),
-                        initialDateRange: range,
-                        locale: const Locale('ar'),
-                        builder: (context, child) => Directionality(
-                          textDirection: TextDirection.rtl,
-                          child: child!,
-                        ),
-                      );
-                      if (picked != null) {
-                        // نثبت بداية كل يوم 4 ص ونهاية اليوم التالي 4 ص
-                        final start = DateTime(
-                          picked.start.year,
-                          picked.start.month,
-                          picked.start.day,
-                          4,
-                        );
-                        final endBase = DateTime(
-                          picked.end.year,
-                          picked.end.month,
-                          picked.end.day,
-                          4,
-                        );
-                        final end = endBase.add(const Duration(days: 1));
-                        ref.read(expensesRangeProvider.notifier).state =
-                            DateTimeRange(start: start, end: end);
-                      }
-                    },
-                    icon: const Icon(Icons.filter_alt_rounded),
-                    color: kDarkBrown,
-                  ),
-                  if (range != todayOperationalRangeLocal())
-                    IconButton(
-                      tooltip: 'اليوم التشغيلي',
-                      onPressed: () {
-                        ref.read(expensesRangeProvider.notifier).state =
-                            todayOperationalRangeLocal();
-                      },
-                      icon: const Icon(Icons.restart_alt),
-                      color: kDarkBrown,
-                    ),
                 ],
               ),
             ),
