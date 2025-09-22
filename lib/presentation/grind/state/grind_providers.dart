@@ -38,19 +38,40 @@ InventoryRow _fromDoc(DocumentSnapshot<Map<String, dynamic>> d) {
 final singlesStreamProvider = StreamProvider<List<InventoryRow>>((ref) {
   return FirebaseFirestore.instance
       .collection('singles')
-      .orderBy('name')
-      .orderBy('variant')
+      .orderBy('name') // 👈 شيل orderBy('variant')
       .snapshots()
-      .map((s) => s.docs.map(_fromDoc).toList());
+      .map((s) {
+        final list = s.docs.map(_fromDoc).toList();
+        list.sort((a, b) {
+          final c = a.name.compareTo(b.name);
+          if (c != 0) return c;
+          return a.variant.compareTo(b.variant);
+        });
+        return list;
+      })
+      .handleError((e, st) {
+        // اختياري: سجّل الخطأ بدل ما يقطع الستريم
+        // debugPrint('singles stream error: $e');
+      });
 });
 
 final blendsStreamProvider = StreamProvider<List<InventoryRow>>((ref) {
   return FirebaseFirestore.instance
       .collection('blends')
-      .orderBy('name')
-      .orderBy('variant')
+      .orderBy('name') // 👈 شيل orderBy('variant')
       .snapshots()
-      .map((s) => s.docs.map(_fromDoc).toList());
+      .map((s) {
+        final list = s.docs.map(_fromDoc).toList();
+        list.sort((a, b) {
+          final c = a.name.compareTo(b.name);
+          if (c != 0) return c;
+          return a.variant.compareTo(b.variant);
+        });
+        return list;
+      })
+      .handleError((e, st) {
+        // debugPrint('blends stream error: $e');
+      });
 });
 
 int _blendRank(String name) {
