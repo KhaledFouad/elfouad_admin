@@ -1,4 +1,4 @@
-import 'package:elfouad_admin/core/widgets/branded_appbar.dart';
+import 'package:awesome_drawer_bar/awesome_drawer_bar.dart';
 import 'package:elfouad_admin/presentation/inventory/providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,6 +15,8 @@ final manageTabProvider = StateProvider<ManageTab>((_) => ManageTab.all);
 class ManagePage extends ConsumerWidget {
   const ManagePage({super.key});
   static const route = '/manage';
+  static const kDarkBrown = Color(0xFF543824);
+  static const kBeige = Color(0xFFC49A6C);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -180,7 +182,42 @@ class ManagePage extends ConsumerWidget {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        appBar: BrandedAppBar(title: 'التعديلات'),
+        appBar: PreferredSize(
+          preferredSize: const Size.fromHeight(64),
+          child: ClipRRect(
+            borderRadius: const BorderRadius.vertical(
+              bottom: Radius.circular(24),
+            ),
+            child: AppBar(
+              automaticallyImplyLeading: false,
+              leading: IconButton(
+                icon: const Icon(Icons.menu, color: Colors.white),
+                onPressed: () => AwesomeDrawerBar.of(context)?.toggle(),
+              ),
+              title: const Text(
+                "التعديلات",
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 35,
+                  color: Colors.white,
+                ),
+              ),
+              centerTitle: true,
+              elevation: 8,
+              backgroundColor: Colors.transparent,
+
+              flexibleSpace: Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFF5D4037), Color(0xFF795548)],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
         body: ListView(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
           children: [
@@ -197,7 +234,7 @@ class ManagePage extends ConsumerWidget {
             content(),
           ],
         ),
-        floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
+        // floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
         floatingActionButton: FloatingActionButton.extended(
           onPressed: () => showModalBottomSheet(
             context: context,
@@ -210,6 +247,8 @@ class ManagePage extends ConsumerWidget {
           ),
           icon: const Icon(Icons.add),
           label: const Text('إضافة'),
+          backgroundColor: kDarkBrown,
+          foregroundColor: Colors.white,
         ),
       ),
     );

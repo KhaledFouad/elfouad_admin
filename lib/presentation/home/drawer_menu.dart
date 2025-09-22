@@ -57,6 +57,12 @@ class SideMenu extends ConsumerWidget {
                 selected: selected == AppTab.expenses,
                 onTap: () => _go(context, ref, AppTab.expenses),
               ),
+              _MenuItem(
+                icon: Icons.coffee_outlined,
+                label: 'الطحن',
+                selected: selected == AppTab.grind,
+                onTap: () => _go(context, ref, AppTab.grind),
+              ),
 
               const Divider(height: 24),
               ListTile(
@@ -93,12 +99,8 @@ class _Header extends StatelessWidget {
         child: Icon(Icons.coffee, color: Colors.white),
       ),
       title: const Text(
-        'لوحة إدارة الفؤاد',
+        'لوحة إدارة بن الفؤاد',
         style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
-      ),
-      subtitle: const Text(
-        'القائمة الرئيسية',
-        style: TextStyle(color: Colors.white70),
       ),
     );
   }

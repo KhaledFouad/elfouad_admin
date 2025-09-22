@@ -31,7 +31,7 @@ class FirestoreProductsDs {
     List<Product> drinks = [];
 
     void emit() {
-      final list = <Product>[...singles, ...blends]..addAll(drinks);
+      final list = <Product>[...singles, ...blends, ...drinks];
       list.sort((a, b) => a.name.compareTo(b.name));
       ctrl.add(list);
     }

@@ -1,4 +1,5 @@
 import 'package:elfouad_admin/presentation/expenses/expenses_page.dart';
+import 'package:elfouad_admin/presentation/grind/grind_page.dart';
 import 'package:elfouad_admin/presentation/home/drawer_menu.dart';
 import 'package:elfouad_admin/presentation/manage/products_manage_page.dart';
 import 'package:flutter/material.dart';
@@ -24,6 +25,7 @@ class AppShell extends ConsumerWidget {
       InventoryPage(),
       ManagePage(),
       ExpensesPage(),
+      GrindPage(),
     ];
 
     return Directionality(

@@ -1,15 +1,17 @@
-import 'package:awesome_drawer_bar/awesome_drawer_bar.dart';
 import 'package:flutter/material.dart';
 
 class BrandedAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String title;
   final List<Widget>? actions;
   final bool showBack;
+  final bool showMenu;
+
   const BrandedAppBar({
     super.key,
     required this.title,
     this.actions,
     this.showBack = false,
+    this.showMenu = false,
   });
 
   @override
@@ -17,39 +19,47 @@ class BrandedAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
-      child: AppBar(
-        // أهم سطرين عشان يختفي أي Tint أبيض ويبان الجRADIENT
-        backgroundColor: Colors.transparent,
-        surfaceTintColor: Colors.transparent,
-
-        elevation: 6,
-        shadowColor: Colors.black26,
-        centerTitle: true,
-        leading: IconButton(
-          tooltip: 'القائمة',
-          icon: const Icon(Icons.menu, color: Colors.brown),
-          onPressed: () => AwesomeDrawerBar.of(context)?.toggle(),
-        ),
-        title: Text(
-          title,
-          style: const TextStyle(
+    return PreferredSize(
+      preferredSize: preferredSize,
+      child: ClipRRect(
+        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
+        child: AppBar(
+          automaticallyImplyLeading: false,
+          leading: showMenu
+              ? Builder(
+                  builder: (ctx) => IconButton(
+                    icon: const Icon(Icons.menu, color: Colors.brown),
+                    onPressed: () => Scaffold.of(ctx).openDrawer(),
+                    tooltip: 'القائمة',
+                  ),
+                )
+              : (showBack
+                    ? IconButton(
+                        icon: const Icon(
+                          Icons.arrow_back_ios_new_rounded,
+                          color: Colors.white,
+                        ),
+                        onPressed: () => Navigator.maybePop(context),
+                      )
+                    : null),
+          iconTheme: const IconThemeData(color: Colors.brown),
+          titleTextStyle: const TextStyle(
             fontWeight: FontWeight.w800,
             fontSize: 22,
             color: Colors.brown,
           ),
-        ),
-        actions: actions,
-        flexibleSpace: const DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Color(0xFF3C2717), // بني غامق
-                Color(0xFF966D41), // بني فاتح/بيج
-              ],
+          title: Text(title),
+          centerTitle: true,
+          elevation: 4,
+          backgroundColor: Colors.transparent,
+          actions: actions,
+          flexibleSpace: const DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF543824), Color(0xFFC49A6C)],
+              ),
             ),
           ),
         ),

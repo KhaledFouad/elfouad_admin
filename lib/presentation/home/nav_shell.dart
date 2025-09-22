@@ -25,6 +25,8 @@ class NavShell extends ConsumerWidget {
           return const EditsScreen(); // تعديلات
         case AppTab.expenses:
           return const ExpensesScreen(); // مصروفات
+        case AppTab.grind:
+          return const GrindPage(); // طحن
       }
     }
 
@@ -70,6 +72,12 @@ class EditsScreen extends StatelessWidget {
 
 class ExpensesScreen extends StatelessWidget {
   const ExpensesScreen({super.key});
+  @override
+  Widget build(_) => const SizedBox();
+}
+
+class GrindPage extends StatelessWidget {
+  const GrindPage({super.key});
   @override
   Widget build(_) => const SizedBox();
 }

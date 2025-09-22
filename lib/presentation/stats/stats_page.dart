@@ -254,7 +254,7 @@ class _StatsPageState extends ConsumerState<StatsPage> {
         borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
         child: AppBar(
           leading: IconButton(
-            icon: const Icon(Icons.menu, color: Colors.brown),
+            icon: const Icon(Icons.menu, color: Colors.white),
             onPressed: () =>
                 AwesomeDrawerBar.of(context)?.toggle(), // ✅ التعديل هنا
           ),
@@ -267,7 +267,7 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                 tooltip: 'الشهر السابق',
                 icon: const Icon(
                   Icons.chevron_left_rounded,
-                  color: Colors.brown,
+                  color: Colors.white,
                   size: 32,
                 ), // RTL: يمين=سابق
                 onPressed: () {
@@ -286,8 +286,8 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                 title,
                 style: const TextStyle(
                   fontWeight: FontWeight.w800,
-                  fontSize: 20,
-                  color: Colors.brown,
+                  fontSize: 22,
+                  color: Colors.white,
                 ),
               ),
               SizedBox(width: MediaQuery.of(context).size.width * 0.1),
@@ -295,7 +295,7 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                 tooltip: 'الشهر التالي',
                 icon: const Icon(
                   Icons.chevron_right_rounded,
-                  color: Colors.brown,
+                  color: Colors.white,
                   size: 32,
                 ), // RTL: يسار=التالي
                 onPressed: () {
@@ -313,15 +313,12 @@ class _StatsPageState extends ConsumerState<StatsPage> {
           backgroundColor: Colors.transparent,
           elevation: 4,
           iconTheme: const IconThemeData(color: Colors.white),
-          flexibleSpace: const DecoratedBox(
-            decoration: BoxDecoration(
+          flexibleSpace: Container(
+            decoration: const BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF543824), // بني غامق
-                  Color(0xFFC49A6C), // بيج
-                ],
+                colors: [Color(0xFF5D4037), Color(0xFF795548)],
               ),
             ),
           ),
