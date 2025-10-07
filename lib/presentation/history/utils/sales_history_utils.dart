@@ -152,6 +152,116 @@ List<Map<String, dynamic>> extractComponents(
 
   return const [];
 }
+// ==== Deferred settlement helpers ===========================================
+
+/// تسوية عملية أجل: تعليمها مدفوعة + تصفير المستحق وتثبيت الربح لو كان لسه 0
+Future<void> settleDeferredSale(String docId) async {
+  final ref = FirebaseFirestore.instance.collection('sales').doc(docId);
+  await FirebaseFirestore.instance.runTransaction((trx) async {
+    final snap = await trx.get(ref);
+    final data = snap.data() as Map<String, dynamic>? ?? {};
+
+    double _numD(dynamic v) =>
+        (v is num) ? v.toDouble() : double.tryParse(v?.toString() ?? '0') ?? 0;
+
+    final totalPrice = _numD(data['total_price']);
+    final totalCost = _numD(data['total_cost']);
+    final currentProfit = _numD(data['profit_total']);
+
+    // لو الربح مش متسجل، نحسبه بعد السداد
+    final newProfit = currentProfit != 0
+        ? currentProfit
+        : (totalPrice - totalCost);
+
+    trx.update(ref, {
+      'paid': true,
+      'due_amount': 0,
+      'profit_total': newProfit,
+      'updated_at': FieldValue.serverTimestamp(),
+    });
+  });
+}
+
+/// زرّ "تم الدفع" يُعرض فقط لو العملية أجل وغير مدفوعة وفيه مستحق > 0
+Widget deferredSettleButton({
+  required BuildContext context,
+  required String docId,
+  required bool isDeferred,
+  required bool paid,
+  required double dueAmount,
+}) {
+  if (!(isDeferred && !paid && dueAmount > 0)) {
+    return const SizedBox.shrink();
+  }
+  return Padding(
+    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+    child: Align(
+      alignment: Alignment.centerLeft,
+      child: FilledButton.icon(
+        style: ButtonStyle(
+          backgroundColor: MaterialStateProperty.all(
+            const Color.fromRGBO(93, 64, 55, 1),
+          ),
+        ),
+        onPressed: () async {
+          final ok = await showDialog<bool>(
+            context: context,
+            builder: (_) => AlertDialog(
+              title: const Text('تأكيد السداد'),
+              content: Text(
+                'سيتم تثبيت دفع ${dueAmount.toStringAsFixed(2)} جم.\nهل تريد المتابعة؟',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('إلغاء'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('تم الدفع'),
+                ),
+              ],
+            ),
+          );
+          if (ok == true) {
+            try {
+              await settleDeferredSale(docId);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('تم تسوية العملية المؤجّلة')),
+              );
+            } catch (e) {
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text('تعذّر التسوية: $e')));
+            }
+          }
+        },
+        icon: const Icon(Icons.payments),
+        label: const Text('تم الدفع'),
+      ),
+    ),
+  );
+}
+
+/// لفّ عنصر المكوّن ليضيف زر التسوية أسفله عند الحاجة
+Widget componentRowWithSettle(
+  Map<String, dynamic> component,
+  Map<String, dynamic> sale,
+  BuildContext context,
+  String docId,
+) {
+  final row = componentRow(component);
+  // نقرأ حالات الأجل من بيانات العملية الأصلية
+  final bool isDeferred = (sale['is_deferred'] ?? false) == true;
+  final bool paid = (sale['paid'] ?? false) == true;
+  final double dueAmt = numD(sale['due_amount']);
+
+  // نزود الزر أسفل صف س/ت بنفس الـpadding/Align المطلوب
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [row],
+  );
+}
 
 Map<String, dynamic> normalizeRow(Map<String, dynamic> c) {
   String name = (c['name'] ?? c['item_name'] ?? c['product_name'] ?? '')
@@ -287,4 +397,332 @@ double spiceRatePerKgForSingle(String name) {
   if (n.contains('حبش') || n.contains('حبشي')) return 60.0;
   if (n.contains('هند') || n.contains('هندي')) return 60.0;
   return 40.0;
+}
+// ====== INVENTORY SYNC (edit/delete) ========================================
+
+class _StockUsage {
+  final Map<String, double> singles; // single_id/item_id -> grams
+  final Map<String, double> blends; // blend_id/item_id -> grams
+  _StockUsage({Map<String, double>? singles, Map<String, double>? blends})
+    : singles = singles ?? {},
+      blends = blends ?? {};
+}
+
+_StockUsage _stockUsageForSale(Map<String, dynamic> m) {
+  double g(dynamic v) => numD(v);
+  String s(dynamic v) => (v ?? '').toString();
+
+  final usage = _StockUsage();
+  final type = detectType(m);
+
+  void addSingle(String? id, double grams) {
+    if (id == null || id.isEmpty || grams <= 0) return;
+    usage.singles[id] = (usage.singles[id] ?? 0) + grams;
+  }
+
+  void addBlend(String? id, double grams) {
+    if (id == null || id.isEmpty || grams <= 0) return;
+    usage.blends[id] = (usage.blends[id] ?? 0) + grams;
+  }
+
+  if (type == 'single') {
+    final id = s(
+      m['single_id'].toString().isNotEmpty ? m['single_id'] : m['item_id'],
+    );
+    addSingle(id, g(m['grams']));
+  } else if (type == 'ready_blend') {
+    final id = s(
+      m['blend_id'].toString().isNotEmpty ? m['blend_id'] : m['item_id'],
+    );
+    addBlend(id, g(m['grams']));
+  } else if (type == 'custom_blend') {
+    final comps = asListMap(m['components']);
+    final items = asListMap(m['items']);
+    final lines = asListMap(m['lines']);
+    final rows = comps.isNotEmpty ? comps : (items.isNotEmpty ? items : lines);
+
+    for (final r in rows) {
+      final grams = g(r['grams']);
+      // المكوّنات عادة بتبقى من singles
+      final id = s(r['single_id'] ?? r['item_id'] ?? r['id']);
+      if (id.isNotEmpty) {
+        addSingle(id, grams);
+      }
+    }
+  }
+
+  return usage;
+}
+
+Future<void> _applyToInventory({
+  required String collection, // 'singles' أو 'blends'
+  required String docId,
+  required double deltaGrams, // + يزيد / - ينقص
+}) async {
+  if (docId.isEmpty || deltaGrams == 0) return;
+  final ref = FirebaseFirestore.instance.collection(collection).doc(docId);
+
+  await FirebaseFirestore.instance.runTransaction((trx) async {
+    final snap = await trx.get(ref);
+    final data = (snap.data() as Map<String, dynamic>?) ?? {};
+
+    // نفضّل 'stock' ثم أي مفتاح شائع
+    final candidates = [
+      'stock',
+      'stock_grams',
+      'available_grams',
+      'in_stock_grams',
+      'grams_in_stock',
+    ];
+
+    // دور على أول مفتاح موجود رقميًا
+    String? stockKey;
+    for (final k in candidates) {
+      final v = data[k];
+      if (v is num) {
+        stockKey = k;
+        break;
+      }
+      if (v is String && double.tryParse(v.replaceAll(',', '.')) != null) {
+        stockKey = k;
+        break;
+      }
+    }
+
+    // لو مفيش ولا واحد، هننشئ/نستخدم 'stock'
+    stockKey ??= 'stock';
+
+    final currentNum = data[stockKey];
+    double current = 0.0;
+    if (currentNum is num) current = currentNum.toDouble();
+    if (currentNum is String) {
+      current = double.tryParse(currentNum.replaceAll(',', '.')) ?? 0.0;
+    }
+
+    trx.update(ref, {stockKey: current + deltaGrams});
+  });
+}
+
+/// استرجاع المخزون عند حذف عملية
+Future<void> revertStockForSale(Map<String, dynamic> sale) async {
+  final u = _stockUsageForSale(sale);
+  // نحط الجرامات تاني (علامة +)
+  for (final e in u.singles.entries) {
+    await _applyToInventory(
+      collection: 'singles',
+      docId: e.key,
+      deltaGrams: e.value,
+    );
+  }
+  for (final e in u.blends.entries) {
+    await _applyToInventory(
+      collection: 'blends',
+      docId: e.key,
+      deltaGrams: e.value,
+    );
+  }
+}
+
+/// تطبيق فرق المخزون بعد التعديل (after - before)
+Future<void> applyStockDiffForEdit({
+  required Map<String, dynamic> before,
+  required Map<String, dynamic> after,
+}) async {
+  final b = _stockUsageForSale(before);
+  final a = _stockUsageForSale(after);
+
+  // اجمع كل المفاتيح
+  final singleKeys = {...b.singles.keys, ...a.singles.keys};
+  final blendKeys = {...b.blends.keys, ...a.blends.keys};
+
+  for (final id in singleKeys) {
+    final prev = b.singles[id] ?? 0;
+    final next = a.singles[id] ?? 0;
+    final diff = next - prev; // لو زاد الاستهلاك → diff موجب
+    if (diff != 0) {
+      await _applyToInventory(
+        collection: 'singles',
+        docId: id,
+        deltaGrams: -diff, // الاستهلاك يزيد → المخزون ينقص
+      );
+    }
+  }
+
+  for (final id in blendKeys) {
+    final prev = b.blends[id] ?? 0;
+    final next = a.blends[id] ?? 0;
+    final diff = next - prev;
+    if (diff != 0) {
+      await _applyToInventory(
+        collection: 'blends',
+        docId: id,
+        deltaGrams: -diff,
+      );
+    }
+  }
+}
+// ==== Inventory stock adjust helpers ========================================
+
+class _StockOp {
+  final DocumentReference<Map<String, dynamic>> ref;
+  final double grams;
+  _StockOp(this.ref, this.grams);
+}
+
+double _numDYN(dynamic v) {
+  if (v is num) return v.toDouble();
+  return double.tryParse('${v ?? ''}'.replaceAll(',', '.')) ?? 0.0;
+}
+
+DocumentReference<Map<String, dynamic>>? _refForSingle(String? id) {
+  if (id == null || id.isEmpty) return null;
+  return FirebaseFirestore.instance.collection('singles').doc(id);
+}
+
+DocumentReference<Map<String, dynamic>>? _refForBlend(String? id) {
+  if (id == null || id.isEmpty) return null;
+  return FirebaseFirestore.instance.collection('blends').doc(id);
+}
+
+/// يحاول استخراج عمليات خصم/إضافة المخزون من مستند البيع
+List<_StockOp> _extractStockOpsFromSale(Map<String, dynamic> m) {
+  final type = '${m['type'] ?? ''}'.trim();
+
+  DocumentReference<Map<String, dynamic>>? _pickRef(Map<String, dynamic> x) {
+    final sid = (x['single_id'] ?? x['singleId'] ?? '').toString();
+    final bid = (x['blend_id'] ?? x['blendId'] ?? '').toString();
+    if (sid.isNotEmpty) return _refForSingle(sid);
+    if (bid.isNotEmpty) return _refForBlend(bid);
+
+    final itemId = (x['item_id'] ?? x['itemId'] ?? '').toString();
+    final itemType = (x['item_type'] ?? x['itemType'] ?? '')
+        .toString()
+        .toLowerCase();
+    if (itemId.isNotEmpty) {
+      if (itemType.contains('blend')) return _refForBlend(itemId);
+      // default single
+      return _refForSingle(itemId);
+    }
+    return null;
+  }
+
+  if (type == 'single' || type == 'ready_blend') {
+    DocumentReference<Map<String, dynamic>>? ref;
+    if (type == 'single') {
+      ref = _pickRef({
+        'single_id': m['single_id'],
+        'item_id': m['item_id'],
+        'item_type': 'single',
+      });
+    } else {
+      ref = _pickRef({
+        'blend_id': m['blend_id'],
+        'item_id': m['item_id'],
+        'item_type': 'blend',
+      });
+    }
+    final g = _numDYN(m['grams']);
+    if (ref != null && g > 0) return [_StockOp(ref, g)];
+    return const [];
+  }
+
+  if (type == 'custom_blend') {
+    List<Map<String, dynamic>> _asList(dynamic v) {
+      if (v is List) {
+        return v
+            .map(
+              (e) =>
+                  (e is Map) ? e.cast<String, dynamic>() : <String, dynamic>{},
+            )
+            .toList();
+      }
+      return const [];
+    }
+
+    final rows = () {
+      final c = _asList(m['components']);
+      if (c.isNotEmpty) return c;
+      final it = _asList(m['items']);
+      if (it.isNotEmpty) return it;
+      return _asList(m['lines']);
+    }();
+
+    final ops = <_StockOp>[];
+    for (final r in rows) {
+      final ref = _pickRef(r);
+      final grams = _numDYN(r['grams'] ?? r['weight'] ?? 0);
+      if (ref != null && grams > 0) ops.add(_StockOp(ref, grams));
+    }
+    return ops;
+  }
+
+  return const [];
+}
+
+Future<void> _applyStockOps(
+  List<_StockOp> ops,
+  double sign,
+  Transaction tx,
+) async {
+  final byRef = <DocumentReference<Map<String, dynamic>>, double>{};
+  for (final op in ops) {
+    byRef[op.ref] = (byRef[op.ref] ?? 0.0) + (op.grams * sign);
+  }
+  for (final entry in byRef.entries) {
+    final ref = entry.key;
+    final delta = entry.value; // قد يكون موجب (إضافة) أو سالب (خصم)
+    final snap = await tx.get(ref);
+    final cur = _numDYN(snap.data()?['stock']);
+    tx.update(ref, {'stock': cur + delta});
+  }
+}
+
+/// عند حذف بيع: رجّع المخزون ثم احذف المستند داخل نفس الترانزاكشن
+Future<void> restoreStockOnSaleDelete(
+  DocumentReference<Map<String, dynamic>> saleRef,
+) async {
+  await FirebaseFirestore.instance.runTransaction((tx) async {
+    final snap = await tx.get(saleRef);
+    final data = (snap.data() as Map<String, dynamic>?) ?? <String, dynamic>{};
+    final ops = _extractStockOpsFromSale(data);
+    await _applyStockOps(ops, 1.0, tx); // 1.0 = إضافة راجعة
+    tx.delete(saleRef);
+  });
+}
+
+/// عند تعديل بيع: طبّق فرق المخزون = (الجرامات بعد) - (الجرامات قبل)
+Future<void> applyStockDeltaOnSaleEdit({
+  required Map<String, dynamic> before,
+  required Map<String, dynamic> after,
+}) async {
+  Map<DocumentReference<Map<String, dynamic>>, double> _collapse(
+    List<_StockOp> ops,
+  ) {
+    final m = <DocumentReference<Map<String, dynamic>>, double>{};
+    for (final o in ops) {
+      m[o.ref] = (m[o.ref] ?? 0.0) + o.grams;
+    }
+    return m;
+  }
+
+  final b = _collapse(_extractStockOpsFromSale(before));
+  final a = _collapse(_extractStockOpsFromSale(after));
+
+  await FirebaseFirestore.instance.runTransaction((tx) async {
+    final allRefs = <DocumentReference<Map<String, dynamic>>>{
+      ...b.keys,
+      ...a.keys,
+    };
+    for (final ref in allRefs) {
+      final newG = a[ref] ?? 0.0;
+      final oldG = b[ref] ?? 0.0;
+      final delta =
+          newG - oldG; // موجب = بيع زاد → هنخصم, سالب = بيع قل → هنضيف
+      if (delta == 0.0) continue;
+
+      final snap = await tx.get(ref);
+      final cur = _numDYN(snap.data()?['stock']);
+      tx.update(ref, {'stock': cur - delta});
+    }
+  });
 }

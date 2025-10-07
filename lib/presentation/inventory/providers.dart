@@ -41,6 +41,26 @@ class InventoryRow {
   bool get isBlend => coll == 'blends';
 }
 
+double _stockGFrom(Map<String, dynamic> m) {
+  // ترتيب التفضيل: stock ثم باقي الأسماء الشائعة
+  final keys = [
+    'stock',
+    'stock_grams',
+    'available_grams',
+    'in_stock_grams',
+    'grams_in_stock',
+  ];
+  for (final k in keys) {
+    final v = m[k];
+    if (v is num) return v.toDouble();
+    if (v is String) {
+      final p = double.tryParse(v.replaceAll(',', '.'));
+      if (p != null) return p;
+    }
+  }
+  return 0.0;
+}
+
 InventoryRow _fromDoc(DocumentSnapshot<Map<String, dynamic>> d) {
   final m = d.data() ?? <String, dynamic>{};
   final sell = _d(
@@ -53,7 +73,7 @@ InventoryRow _fromDoc(DocumentSnapshot<Map<String, dynamic>> d) {
     id: d.id,
     name: '${m['name'] ?? ''}',
     variant: '${m['variant'] ?? ''}',
-    stockG: _d(m['stock']),
+    stockG: _stockGFrom(m), // ← هنا التعديل
     minLevelG: _d(m['minLevel']),
     sellPerKg: sell,
     costPerKg: cost,

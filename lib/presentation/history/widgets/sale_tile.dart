@@ -22,13 +22,28 @@ class SaleTile extends StatelessWidget {
         DateTime.tryParse(m['created_at']?.toString() ?? '') ??
         DateTime.fromMillisecondsSinceEpoch(0);
 
+    double _num(dynamic v) =>
+        (v is num) ? v.toDouble() : double.tryParse('${v ?? 0}') ?? 0.0;
+
     final detectedType = detectType(m);
     final type = (m['type'] ?? detectedType).toString();
+
     final isCompl = (m['is_complimentary'] ?? false) == true;
+    final isDeferred = (m['is_deferred'] ?? false) == true;
+    final paid = (m['paid'] ?? (!isDeferred)) == true;
+    final dueAmount = _num(m['due_amount']);
 
     final totalPrice = numD(m['total_price']);
     final totalCost = numD(m['total_cost']);
-    final profit = totalPrice - totalCost;
+    final profitFromDoc = numD(m['profit_total']);
+
+    // عرض الربح:
+    // - ضيافة => 0
+    // - أجل ولسه متدفعش => 0
+    // - غير كده => profit_total إن وُجد وإلا (السعر - التكلفة)
+    final displayedProfit = (isCompl || (isDeferred && !paid))
+        ? 0.0
+        : (profitFromDoc != 0 ? profitFromDoc : (totalPrice - totalCost));
 
     final components = extractComponents(m, type);
 
@@ -37,7 +52,11 @@ class SaleTile extends StatelessWidget {
       leading: CircleAvatar(
         radius: 18,
         backgroundColor: Colors.brown.shade100,
-        child: Icon(iconForType(type), color: Colors.brown.shade700, size: 18),
+        child: Icon(
+          iconForType(type),
+          color: const Color.fromRGBO(93, 64, 55, 1),
+          size: 18,
+        ),
       ),
       title: Row(
         children: [
@@ -60,6 +79,30 @@ class SaleTile extends StatelessWidget {
               child: const Text('ضيافة', style: TextStyle(fontSize: 11)),
             ),
           ],
+          if (isDeferred && !paid) ...[
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red.shade200),
+              ),
+              child: const Text('أجل', style: TextStyle(fontSize: 11)),
+            ),
+          ],
+          if (isDeferred && paid) ...[
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red.shade200),
+              ),
+              child: const Text('مدفوع', style: TextStyle(fontSize: 11)),
+            ),
+          ],
           const SizedBox(width: 6),
           Text(
             fmtTime(createdAt),
@@ -74,7 +117,7 @@ class SaleTile extends StatelessWidget {
         children: [
           kv('الإجمالي', totalPrice),
           kv('التكلفة', totalCost),
-          kv('الربح', profit),
+          kv('الربح', displayedProfit),
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -98,8 +141,19 @@ class SaleTile extends StatelessWidget {
         else
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
-            child: Column(children: components.map(componentRow).toList()),
+            child: Column(
+              children: components
+                  .map((c) => componentRowWithSettle(c, m, context, doc.id))
+                  .toList(),
+            ),
           ),
+        deferredSettleButton(
+          context: context,
+          docId: doc.id,
+          isDeferred: isDeferred,
+          paid: paid,
+          dueAmount: dueAmount,
+        ),
       ],
     );
   }

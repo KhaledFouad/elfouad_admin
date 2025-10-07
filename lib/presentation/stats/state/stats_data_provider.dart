@@ -69,7 +69,7 @@ double _d(dynamic v) {
 DateTime _asUtc(dynamic v) {
   if (v is DateTime) return v.toUtc();
   try {
-    // Firestore Timestamp
+    // Firestore Timestamp (dynamic)
     // ignore: avoid_dynamic_calls
     if (v != null && v.toDate != null) {
       // ignore: avoid_dynamic_calls
@@ -98,7 +98,7 @@ final statsSalesProvider = FutureProvider<List<Map<String, dynamic>>>((
   final month = ref.watch(statsForMonthProvider);
   final period = ref.watch(statsSelectedPeriodProvider);
 
-  // اسحب الشهر كله مرّة واحدة (أسرع + أقل تكلفة)
+  // اسحب الشهر كله مرّة واحدة
   final rawMonth = await ref.watch(salesRawForMonthProvider(month).future);
 
   // فلتر بالمدى المحسوب (4ص → 4ص)
@@ -122,7 +122,7 @@ final statsExpensesProvider = FutureProvider<List<Map<String, dynamic>>>((
   return snap.docs.map((d) => d.data()).toList();
 });
 
-/// Preview للأثلاث كلها عشان الـ chips تعرض أرقام صحيحة
+/// Preview للأثلاث كلها عشان الـ chips تعرض أرقام صحيحة (من غير استثناء الأجل هنا)
 final statsThirdsPreviewProvider =
     FutureProvider<({Kpis third1, Kpis third2, Kpis third3, Kpis month})>((
       ref,
@@ -185,13 +185,15 @@ final statsThirdsPreviewProvider =
       );
     });
 
-/// ============ KPIs للثلث/الشهر المختار (بالمصروفات) ============
+/// ============ KPIs (المبيعات والربح يستثنوا الأجل غير المدفوع) ============
 
 final statsKpisProvider = FutureProvider<Kpis>((ref) async {
   final data = await ref.watch(statsSalesProvider.future);
   final expensesList = await ref.watch(statsExpensesProvider.future);
 
-  double sales = 0, cost = 0, grams = 0;
+  double salesNet = 0, costNet = 0; // يستثني الأجل غير المدفوع
+  double costFull = 0; // للتعرض في الـ KPI لو حابب
+  double grams = 0;
   int cups = 0;
 
   for (final m in data) {
@@ -203,8 +205,15 @@ final statsKpisProvider = FutureProvider<Kpis>((ref) async {
         ? (m['total_cost'] as num).toDouble()
         : _d(m['total_cost']);
 
-    sales += price;
-    cost += tcost;
+    final isDeferred = (m['is_deferred'] ?? false) == true;
+    final paid = (m['paid'] ?? false) == true;
+
+    costFull += tcost;
+
+    if (!(isDeferred && !paid)) {
+      salesNet += price;
+      costNet += tcost;
+    }
 
     if (type == 'drink') {
       final q = (m['quantity'] is num)
@@ -230,9 +239,9 @@ final statsKpisProvider = FutureProvider<Kpis>((ref) async {
   }
 
   return Kpis(
-    sales: sales,
-    cost: cost,
-    profit: sales - cost, // الربح التشغيلي (المصروفات حقل منفصل)
+    sales: salesNet, // مستبعد منه الأجل غير المدفوع
+    cost: costFull, // إجمالي التكلفة (للإظهار)
+    profit: salesNet - costNet, // الربح بدون الأجل غير المدفوع
     cups: cups,
     grams: grams,
     expenses: expensesSum,
@@ -267,11 +276,7 @@ final drinksByNameProvider = FutureProvider<List<GroupRow>>((ref) async {
   return list;
 });
 
-/// يفكّك "توليفة العميل" ويجمع كل مكوّن باسمُه (name - variant) بالجرامات والسعر/التكلفة.
-/// بنستخدم الحقول:
-/// - components / items / lines (أيهم موجود)
-/// - لكل مكوّن: name/variant/grams/line_total_price/line_total_cost
-/// - لو line_total_price مفقود: بنوزّع beansAmount على المكونات بنِسَب الجرامات.
+/// يفكّك "توليفة العميل" ويجمع كل مكوّن باسمُه (name - variant)
 final beansByNameProvider = FutureProvider<List<GroupRow>>((ref) async {
   final data = await ref.watch(statsSalesProvider.future);
   final map = <String, GroupRow>{};
@@ -323,7 +328,7 @@ final beansByNameProvider = FutureProvider<List<GroupRow>>((ref) async {
   for (final m in data) {
     final type = '${m['type'] ?? ''}';
 
-    // الأصناف/التوليفات العادية (ليست توليفة عميل)
+    // الأصناف/التوليفات العادية
     if (type == 'single' || type == 'ready_blend') {
       final name = ('${m['name'] ?? m['single_name'] ?? m['blend_name'] ?? ''}')
           .trim();
@@ -341,7 +346,7 @@ final beansByNameProvider = FutureProvider<List<GroupRow>>((ref) async {
       continue;
     }
 
-    // توليفة العميل: نفكّك المكوّنات
+    // توليفة العميل
     if (type == 'custom_blend') {
       final comps = asListMap(m['components']);
       final items = asListMap(m['items']);
@@ -351,7 +356,6 @@ final beansByNameProvider = FutureProvider<List<GroupRow>>((ref) async {
           : (items.isNotEmpty ? items : lines);
 
       if (rowsRaw.isEmpty) {
-        // fallback: لو مفيش تفاصيل، حطها تحت "مخصص"
         final gramsAll =
             (m['total_grams'] as num?)?.toDouble() ?? _d(m['total_grams']);
         final price =
@@ -380,28 +384,21 @@ final beansByNameProvider = FutureProvider<List<GroupRow>>((ref) async {
 
         if (name.isEmpty && grams <= 0) continue;
 
-        final key = (variant.isEmpty ? name : '$name - $variant').trim().isEmpty
-            ? 'مكوّن'
-            : (variant.isEmpty ? name : '$name - $variant');
+        final label = (variant.isEmpty ? name : '$name - $variant').trim();
+        final key = label.isEmpty ? 'مكوّن' : label;
 
-        // السعر/التكلفة لكل مكوّن:
-        // لو موجود line_total_price/line_total_cost نستخدمهم.
-        // لو مش موجود السعر: نوزّع beansAmount بنسبة الجرامات.
         double linePrice = r['line_total_price'] as double;
         double lineCost = r['line_total_cost'] as double;
 
         if (linePrice <= 0 && beansAmount > 0 && totalGrams > 0) {
           linePrice = beansAmount * (grams / totalGrams);
         }
-        // لو مفيش cost على مستوى المكوّن هنسيبه 0 (غالبًا total_cost متوزّع أصلاً على السطور)
 
         addToMap(key: key, grams: grams, sales: linePrice, cost: lineCost);
       }
 
       continue;
     }
-
-    // أي حاجات تانية مش مشروبات: نتجاهلها هنا
   }
 
   final list = map.values.toList()..sort((a, b) => b.sales.compareTo(a.sales));
@@ -474,3 +471,17 @@ final statsTrendsProvider = FutureProvider<TrendsBundle>((ref) async {
     beansProfit: toList(beansProfitM),
   );
 });
+// استورد مزوّدات الإحصائيات اللي عندك (نفس اللي بتستخدمها الصفحة)
+
+// دالة بتعمل Refresh لكل الداتا من السورس
+Future<void> refreshStatsProviders(WidgetRef ref) async {
+  ref.invalidate(statsSalesProvider);
+  ref.invalidate(statsExpensesProvider);
+  ref.invalidate(statsKpisProvider);
+  ref.invalidate(drinksByNameProvider);
+  ref.invalidate(beansByNameProvider);
+  ref.invalidate(statsTrendsProvider);
+  // كمان بنعمل invalidate للكاش الخام الشهري (family)
+  ref.invalidate(salesRawForMonthProvider);
+  await Future.delayed(const Duration(milliseconds: 1));
+}

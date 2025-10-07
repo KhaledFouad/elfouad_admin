@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../utils/sales_history_utils.dart';
+import '../utils/sales_history_utils.dart' show applyStockDeltaOnSaleEdit;
 
 class SaleEditSheet extends StatefulWidget {
   final DocumentSnapshot<Map<String, dynamic>> snap;
@@ -251,13 +252,18 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
         updates['manual_override'] = true;
       }
 
+      // 1) حدّث مستند البيع
       await widget.snap.reference.update(updates);
+
+      // 2) طبّق فرق المخزون بناءً على (قبل/بعد)
+      final after = <String, dynamic>{..._m, ...updates};
+      await applyStockDeltaOnSaleEdit(before: _m, after: after);
 
       if (!mounted) return;
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('تم حفظ التعديلات (تطبيق سعرك اليدوي عند إدخاله)'),
+          content: Text('تم حفظ التعديل وتمت تسوية المخزون تلقائيًا'),
         ),
       );
     } catch (e) {
@@ -286,7 +292,6 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
     return LayoutBuilder(
       builder: (context, constraints) {
         return SingleChildScrollView(
-          // ندي مساحة للكيبورد + حافة تحت
           padding: EdgeInsets.only(
             left: 16,
             right: 16,
@@ -294,7 +299,6 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
             bottom: 16 + bottomInset,
           ),
           child: ConstrainedBox(
-            // خلي المحتوى على الأقل بعرض الشيت، ويتمدّد عموديًا حسب الحاجة
             constraints: BoxConstraints(minWidth: constraints.maxWidth),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -385,7 +389,7 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
 
                 const SizedBox(height: 8),
                 const Text(
-                  'ملاحظة: تعديل عملية البيع لا يعيد تسوية المخزون تلقائيًا.',
+                  'ملاحظة: تعديل عملية البيع يعيد تسوية المخزون تلقائيًا.',
                   style: TextStyle(fontSize: 12, color: Colors.black54),
                 ),
                 const SizedBox(height: 12),

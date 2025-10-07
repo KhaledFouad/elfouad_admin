@@ -4,6 +4,7 @@ import 'package:elfouad_admin/presentation/stats/widgets/drinks_by_type_table.da
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'widgets/stats_refresh_button.dart';
 
 import 'state/stats_data_provider.dart';
 import 'widgets/kpi_wrap.dart';
@@ -258,7 +259,7 @@ class _StatsPageState extends ConsumerState<StatsPage> {
             onPressed: () =>
                 AwesomeDrawerBar.of(context)?.toggle(), // ✅ التعديل هنا
           ),
-
+          actions: [const StatsRefreshButton()],
           title: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             mainAxisSize: MainAxisSize.min,
@@ -268,7 +269,7 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                 icon: const Icon(
                   Icons.chevron_left_rounded,
                   color: Colors.white,
-                  size: 32,
+                  size: 25,
                 ), // RTL: يمين=سابق
                 onPressed: () {
                   final m = ref.read(statsForMonthProvider);
@@ -280,7 +281,7 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                 },
               ),
               SizedBox(
-                width: MediaQuery.of(context).size.width * 0.1,
+                width: MediaQuery.of(context).size.width * 0.05,
               ), // توسيط العنوان
               Text(
                 title,
@@ -290,13 +291,13 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                   color: Colors.white,
                 ),
               ),
-              SizedBox(width: MediaQuery.of(context).size.width * 0.1),
+              SizedBox(width: MediaQuery.of(context).size.width * 0.05),
               IconButton(
                 tooltip: 'الشهر التالي',
                 icon: const Icon(
                   Icons.chevron_right_rounded,
                   color: Colors.white,
-                  size: 32,
+                  size: 25,
                 ), // RTL: يسار=التالي
                 onPressed: () {
                   final m = ref.read(statsForMonthProvider);
