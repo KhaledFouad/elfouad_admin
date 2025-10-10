@@ -90,6 +90,12 @@ bool _inRangeUtc(DateTime ts, DateTime start, DateTime end) {
   return afterOrEqual && before;
 }
 
+bool _isUnpaidDeferred(Map<String, dynamic> m) {
+  final isDeferred = (m['is_deferred'] ?? false) == true;
+  final paid = (m['paid'] ?? (!isDeferred)) == true;
+  return isDeferred && !paid;
+}
+
 /// ============ RAW الشهري + فلترة الثلث/الشهر ============
 
 final statsSalesProvider = FutureProvider<List<Map<String, dynamic>>>((
@@ -122,7 +128,7 @@ final statsExpensesProvider = FutureProvider<List<Map<String, dynamic>>>((
   return snap.docs.map((d) => d.data()).toList();
 });
 
-/// Preview للأثلاث كلها عشان الـ chips تعرض أرقام صحيحة (من غير استثناء الأجل هنا)
+/// Preview للأثلاث/الشهر — **يستثني الأجل غير المدفوع** ويقرأ الربح من الداتا
 final statsThirdsPreviewProvider =
     FutureProvider<({Kpis third1, Kpis third2, Kpis third3, Kpis month})>((
       ref,
@@ -131,11 +137,12 @@ final statsThirdsPreviewProvider =
       final rawMonth = await ref.watch(salesRawForMonthProvider(month).future);
 
       Kpis kpisForRange(DateTime start, DateTime end) {
-        double sales = 0, cost = 0, grams = 0;
+        double sales = 0, cost = 0, profit = 0, grams = 0;
         int cups = 0;
         for (final m in rawMonth) {
           final ts = _asUtc(m['created_at']);
           if (!_inRangeUtc(ts, start, end)) continue;
+          if (_isUnpaidDeferred(m)) continue;
 
           final type = '${m['type'] ?? ''}';
           final price = (m['total_price'] is num)
@@ -144,8 +151,13 @@ final statsThirdsPreviewProvider =
           final tcost = (m['total_cost'] is num)
               ? (m['total_cost'] as num).toDouble()
               : _d(m['total_cost']);
+          final p = (m['profit_total'] is num)
+              ? (m['profit_total'] as num).toDouble()
+              : _d(m['profit_total']);
+
           sales += price;
           cost += tcost;
+          profit += p;
 
           if (type == 'drink') {
             final q = (m['quantity'] is num)
@@ -165,10 +177,10 @@ final statsThirdsPreviewProvider =
         return Kpis(
           sales: sales,
           cost: cost,
-          profit: sales - cost,
+          profit: profit,
           cups: cups,
           grams: grams,
-          expenses: 0, // preview سريع
+          expenses: 0,
         );
       }
 
@@ -185,36 +197,27 @@ final statsThirdsPreviewProvider =
       );
     });
 
-/// ============ KPIs (المبيعات والربح يستثنوا الأجل غير المدفوع) ============
-
+/// ============ KPIs (الربح من الداتا + استبعاد الأجل غير المدفوع) ============
 final statsKpisProvider = FutureProvider<Kpis>((ref) async {
   final data = await ref.watch(statsSalesProvider.future);
   final expensesList = await ref.watch(statsExpensesProvider.future);
 
-  double salesNet = 0, costNet = 0; // يستثني الأجل غير المدفوع
-  double costFull = 0; // للتعرض في الـ KPI لو حابب
-  double grams = 0;
+  double sales = 0, cost = 0, profit = 0, grams = 0;
   int cups = 0;
 
   for (final m in data) {
-    final type = '${m['type'] ?? ''}';
-    final price = (m['total_price'] is num)
-        ? (m['total_price'] as num).toDouble()
-        : _d(m['total_price']);
-    final tcost = (m['total_cost'] is num)
-        ? (m['total_cost'] as num).toDouble()
-        : _d(m['total_cost']);
-
     final isDeferred = (m['is_deferred'] ?? false) == true;
-    final paid = (m['paid'] ?? false) == true;
+    final paid = (m['paid'] ?? (!isDeferred)) == true;
+    if (isDeferred && !paid) continue; // استبعاد الأجل غير المدفوع
 
-    costFull += tcost;
+    final type = '${m['type'] ?? ''}';
 
-    if (!(isDeferred && !paid)) {
-      salesNet += price;
-      costNet += tcost;
-    }
+    // الإجمالي والتكلفة والربح — كلهم من الداتا
+    sales += _d(m['total_price']);
+    cost += _d(m['total_cost']);
+    profit += _d(m['profit_total']); // ← الربح من الداتا بيز
 
+    // أكواب/جرامات زي ما هي
     if (type == 'drink') {
       final q = (m['quantity'] is num)
           ? (m['quantity'] as num).toDouble()
@@ -231,17 +234,15 @@ final statsKpisProvider = FutureProvider<Kpis>((ref) async {
     }
   }
 
-  double expensesSum = 0;
-  for (final e in expensesList) {
-    expensesSum += (e['amount'] is num)
-        ? (e['amount'] as num).toDouble()
-        : _d(e['amount']);
-  }
+  final expensesSum = expensesList.fold<double>(
+    0.0,
+    (s, e) => s + _d(e['amount']),
+  );
 
   return Kpis(
-    sales: salesNet, // مستبعد منه الأجل غير المدفوع
-    cost: costFull, // إجمالي التكلفة (للإظهار)
-    profit: salesNet - costNet, // الربح بدون الأجل غير المدفوع
+    sales: sales, // بدون الأجل غير المدفوع
+    cost: cost, // بدون الأجل غير المدفوع
+    profit: profit, // مجموع profit_total من الداتا
     cups: cups,
     grams: grams,
     expenses: expensesSum,
@@ -255,6 +256,7 @@ final drinksByNameProvider = FutureProvider<List<GroupRow>>((ref) async {
   final map = <String, GroupRow>{};
 
   for (final m in data) {
+    if (_isUnpaidDeferred(m)) continue;
     if ('${m['type'] ?? ''}' != 'drink') continue;
 
     final name = ('${m['drink_name'] ?? m['name'] ?? 'مشروب'}').trim();
@@ -264,12 +266,14 @@ final drinksByNameProvider = FutureProvider<List<GroupRow>>((ref) async {
     final price =
         (m['total_price'] as num?)?.toDouble() ?? _d(m['total_price']);
     final cost = (m['total_cost'] as num?)?.toDouble() ?? _d(m['total_cost']);
+    final profit =
+        (m['profit_total'] as num?)?.toDouble() ?? _d(m['profit_total']);
     final qRaw = (m['quantity'] as num?)?.toDouble() ?? _d(m['quantity']);
     final cups = (qRaw > 0 ? qRaw.round() : 1);
 
     final prev = map[key] ?? const GroupRow(key: '');
     final base = prev.key.isEmpty ? GroupRow(key: key) : prev;
-    map[key] = base.add(s: price, c: cost, p: price - cost, cu: cups);
+    map[key] = base.add(s: price, c: cost, p: profit, cu: cups);
   }
 
   final list = map.values.toList()..sort((a, b) => b.sales.compareTo(a.sales));
@@ -326,9 +330,10 @@ final beansByNameProvider = FutureProvider<List<GroupRow>>((ref) async {
   }
 
   for (final m in data) {
+    if (_isUnpaidDeferred(m)) continue;
     final type = '${m['type'] ?? ''}';
 
-    // الأصناف/التوليفات العادية
+    // الأصناف الجاهزة/المنفردة
     if (type == 'single' || type == 'ready_blend') {
       final name = ('${m['name'] ?? m['single_name'] ?? m['blend_name'] ?? ''}')
           .trim();
@@ -381,11 +386,11 @@ final beansByNameProvider = FutureProvider<List<GroupRow>>((ref) async {
         final name = r['name'] as String;
         final variant = r['variant'] as String;
         final grams = r['grams'] as double;
-
         if (name.isEmpty && grams <= 0) continue;
 
-        final label = (variant.isEmpty ? name : '$name - $variant').trim();
-        final key = label.isEmpty ? 'مكوّن' : label;
+        final key = (variant.isEmpty ? name : '$name - $variant').trim().isEmpty
+            ? 'مكوّن'
+            : (variant.isEmpty ? name : '$name - $variant');
 
         double linePrice = r['line_total_price'] as double;
         double lineCost = r['line_total_cost'] as double;
@@ -396,8 +401,6 @@ final beansByNameProvider = FutureProvider<List<GroupRow>>((ref) async {
 
         addToMap(key: key, grams: grams, sales: linePrice, cost: lineCost);
       }
-
-      continue;
     }
   }
 
@@ -405,7 +408,7 @@ final beansByNameProvider = FutureProvider<List<GroupRow>>((ref) async {
   return list;
 });
 
-/// ============ Trends (3 خطوط: إجمالي + مشروبات + بن) ============
+/// ============ Trends (مدفوع فقط + الربح من الداتا) ============
 
 class TrendsBundle {
   final List<DayVal> totalSales;
@@ -435,14 +438,16 @@ final statsTrendsProvider = FutureProvider<TrendsBundle>((ref) async {
   final Map<DateTime, double> beansProfitM = {};
 
   for (final m in data) {
+    if (_isUnpaidDeferred(m)) continue;
+
     final ts = _asUtc(m['created_at']);
     final k = opDayKeyUtc(ts); // 4ص تشغيلية
     final type = '${m['type'] ?? ''}';
 
     final price =
         (m['total_price'] as num?)?.toDouble() ?? _d(m['total_price']);
-    final cost = (m['total_cost'] as num?)?.toDouble() ?? _d(m['total_cost']);
-    final profit = price - cost;
+    final profit =
+        (m['profit_total'] as num?)?.toDouble() ?? _d(m['profit_total']);
 
     salesM[k] = (salesM[k] ?? 0) + price;
     profitM[k] = (profitM[k] ?? 0) + profit;
@@ -451,7 +456,6 @@ final statsTrendsProvider = FutureProvider<TrendsBundle>((ref) async {
       drinksSalesM[k] = (drinksSalesM[k] ?? 0) + price;
       drinksProfitM[k] = (drinksProfitM[k] ?? 0) + profit;
     } else {
-      // single/ready_blend/custom_blend → بن
       beansSalesM[k] = (beansSalesM[k] ?? 0) + price;
       beansProfitM[k] = (beansProfitM[k] ?? 0) + profit;
     }
@@ -471,7 +475,6 @@ final statsTrendsProvider = FutureProvider<TrendsBundle>((ref) async {
     beansProfit: toList(beansProfitM),
   );
 });
-// استورد مزوّدات الإحصائيات اللي عندك (نفس اللي بتستخدمها الصفحة)
 
 // دالة بتعمل Refresh لكل الداتا من السورس
 Future<void> refreshStatsProviders(WidgetRef ref) async {

@@ -34,15 +34,12 @@ class DaySection extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // سطر اليوم لوحده عشان ما يزاحمش الكبسولات
             Text(
               day,
-              textAlign: TextAlign.start, // في RTL هتبقى ناحية اليمين
+              textAlign: TextAlign.start,
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 8),
-
-            // الكبسولات: Wrap بدل Row علشان ما يحصلش Overflow
             Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -56,10 +53,7 @@ class DaySection extends StatelessWidget {
                 _pill(Icons.scale, 'جرام بن', grams),
               ],
             ),
-
             const Divider(height: 18),
-
-            // العناصر
             ...entries.map(
               (e) => SaleTile(
                 doc: e,
@@ -76,7 +70,6 @@ class DaySection extends StatelessWidget {
   static Widget _pill(IconData icon, String label, double v) {
     final isGrams = label.contains('جرام');
     final text = isGrams ? '${v.toStringAsFixed(0)} جم' : v.toStringAsFixed(2);
-
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
@@ -89,7 +82,6 @@ class DaySection extends StatelessWidget {
         children: [
           Icon(icon, size: 16, color: const Color(0xFF543824)),
           const SizedBox(width: 6),
-          // نتأكد مايحصلش قصّة طول نص
           Text(
             '$label: $text',
             maxLines: 1,

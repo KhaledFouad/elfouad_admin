@@ -18,6 +18,7 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
   final TextEditingController _totalPriceCtrl = TextEditingController();
   final TextEditingController _qtyCtrl = TextEditingController();
   final TextEditingController _gramsCtrl = TextEditingController();
+  final TextEditingController _noteCtrl = TextEditingController(); // ملاحظة
   bool _isComplimentary = false;
   bool _isSpiced = false;
   bool _busy = false;
@@ -29,6 +30,7 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
     _type = (_m['type'] ?? 'unknown').toString();
 
     _totalPriceCtrl.text = numD(_m['total_price']).toStringAsFixed(2);
+    _noteCtrl.text = ((_m['note'] ?? _m['notes'] ?? '') as Object).toString();
 
     if (_type == 'drink') {
       final qRaw = _m['quantity'];
@@ -48,7 +50,100 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
     _totalPriceCtrl.dispose();
     _qtyCtrl.dispose();
     _gramsCtrl.dispose();
+    _noteCtrl.dispose();
     super.dispose();
+  }
+
+  // ======= استخراج عمليات الخصم من المخزون من عملية البيع =======
+  Map<DocumentReference<Map<String, dynamic>>, double> _opsFromSale(
+    Map<String, dynamic> m,
+  ) {
+    final db = FirebaseFirestore.instance;
+    final out = <DocumentReference<Map<String, dynamic>>, double>{};
+
+    double _d(v) =>
+        (v is num) ? v.toDouble() : double.tryParse('${v ?? ''}') ?? 0.0;
+
+    void _acc(String? coll, dynamic id, double grams) {
+      if (coll == null || id == null || grams <= 0) return;
+      final ref = db.collection(coll).doc(id.toString());
+      out[ref] = (out[ref] ?? 0) + grams;
+    }
+
+    final type = '${m['type'] ?? ''}';
+
+    if (type == 'single' || type == 'ready_blend') {
+      final coll = (type == 'single') ? 'singles' : 'blends';
+      final id = m['single_id'] ?? m['blend_id'] ?? m['item_id'] ?? m['id'];
+      final grams = _d(m['grams']);
+      _acc(coll, id, grams);
+      return out;
+    }
+
+    if (type == 'custom_blend') {
+      List<Map<String, dynamic>> _asList(dynamic v) {
+        if (v is List) {
+          return v
+              .map(
+                (e) => (e is Map)
+                    ? e.cast<String, dynamic>()
+                    : <String, dynamic>{},
+              )
+              .toList();
+        }
+        return const [];
+      }
+
+      final rows = [
+        ..._asList(m['components']),
+        ..._asList(m['items']),
+        ..._asList(m['lines']),
+      ];
+
+      for (final r in rows) {
+        final grams = _d(r['grams']);
+        String? coll = (r['coll'] ?? r['collection'])?.toString();
+        dynamic id = r['id'] ?? r['item_id'] ?? r['single_id'] ?? r['blend_id'];
+
+        coll ??= (r['blend_id'] != null)
+            ? 'blends'
+            : (r['single_id'] != null)
+            ? 'singles'
+            : null;
+
+        _acc(coll, id, grams);
+      }
+      return out;
+    }
+
+    // drinks/unknown → لا تأثير على المخزون
+    return out;
+  }
+
+  Future<void> applyStockDeltaOnThisEdit(Map<String, dynamic> updates) async {
+    final saleRef = widget.snap.reference;
+    await FirebaseFirestore.instance.runTransaction((tx) async {
+      final oldSnap = await tx.get(saleRef);
+      final oldSale = oldSnap.data() ?? <String, dynamic>{};
+
+      final newSale = {...oldSale, ...updates};
+
+      final oldOps = _opsFromSale(oldSale);
+      final newOps = _opsFromSale(newSale);
+
+      final refs = {...oldOps.keys, ...newOps.keys};
+      for (final r in refs) {
+        final oldG = oldOps[r] ?? 0.0;
+        final newG = newOps[r] ?? 0.0;
+        final diff = newG - oldG;
+
+        if (diff.abs() > 0.0001) {
+          tx.update(r, {'stock': FieldValue.increment(-diff)});
+        }
+      }
+
+      tx.update(saleRef, updates);
+    });
   }
 
   Future<void> _save() async {
@@ -96,6 +191,14 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
           double.tryParse(_gramsCtrl.text.replaceAll(',', '.')) ??
           numOf(_m['grams']);
 
+      // احفظ الملاحظة
+      updates['note'] = _noteCtrl.text.trim();
+
+      // الحالة: هل العملية أجل وغير مدفوعة؟
+      final bool isDeferred = (_m['is_deferred'] ?? false) == true;
+      final bool paid = (_m['paid'] ?? (!isDeferred)) == true;
+      final bool freezeProfit = isDeferred && !paid;
+
       updates['is_complimentary'] = isCompl;
       if (_m.containsKey('is_spiced')) updates['is_spiced'] = isSpiced;
 
@@ -132,7 +235,9 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
 
         updates['total_price'] = newTotalPrice;
         updates['total_cost'] = newTotalCost;
-        updates['profit_total'] = newTotalPrice - newTotalCost;
+        if (!freezeProfit) {
+          updates['profit_total'] = newTotalPrice - newTotalCost;
+        }
       } else if (type == 'single' || type == 'ready_blend') {
         grams = grams > 0 ? grams : numOf(_m['grams']);
         updates['grams'] = grams;
@@ -210,7 +315,9 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
 
         updates['total_price'] = newTotalPrice;
         updates['total_cost'] = newTotalCost;
-        updates['profit_total'] = newTotalPrice - newTotalCost;
+        if (!freezeProfit) {
+          updates['profit_total'] = newTotalPrice - newTotalCost;
+        }
       } else if (type == 'custom_blend') {
         final gramsAll = totalGramsSaved > 0
             ? totalGramsSaved
@@ -243,29 +350,30 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
         newTotalCost = numOf(_m['total_cost']);
         updates['total_price'] = newTotalPrice;
         updates['total_cost'] = newTotalCost;
-        updates['profit_total'] = newTotalPrice - newTotalCost;
+        if (!freezeProfit) {
+          updates['profit_total'] = newTotalPrice - newTotalCost;
+        }
       } else {
         newTotalPrice = isCompl ? 0.0 : uiTotalPrice;
         updates['total_price'] = newTotalPrice;
         updates['total_cost'] = oldTotalCost;
-        updates['profit_total'] = newTotalPrice - oldTotalCost;
+        if (!freezeProfit) {
+          updates['profit_total'] = newTotalPrice - oldTotalCost;
+        }
         updates['manual_override'] = true;
       }
 
-      // 1) حدّث مستند البيع
+      // اكتب التعديلات
       await widget.snap.reference.update(updates);
 
-      // 2) طبّق فرق المخزون بناءً على (قبل/بعد)
-      final after = <String, dynamic>{..._m, ...updates};
-      await applyStockDeltaOnSaleEdit(before: _m, after: after);
+      // سوّي المخزون بناءً على الفرق
+      await applyStockDeltaOnThisEdit(updates);
 
       if (!mounted) return;
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('تم حفظ التعديل وتمت تسوية المخزون تلقائيًا'),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('تم حفظ التعديل')));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -369,6 +477,19 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
                   const SizedBox(height: 10),
                 ],
 
+                // حقل الملاحظة
+                TextFormField(
+                  controller: _noteCtrl,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  decoration: const InputDecoration(
+                    labelText: 'ملاحظة (اختياري)',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+
+                const SizedBox(height: 10),
                 CheckboxListTile(
                   value: _isComplimentary,
                   onChanged: (v) =>
@@ -389,7 +510,7 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
 
                 const SizedBox(height: 8),
                 const Text(
-                  'ملاحظة: تعديل عملية البيع يعيد تسوية المخزون تلقائيًا.',
+                  'ملاحظة: تعديل عملية البيع لا يغيّر ربح الأجل غير المدفوع.',
                   style: TextStyle(fontSize: 12, color: Colors.black54),
                 ),
                 const SizedBox(height: 12),

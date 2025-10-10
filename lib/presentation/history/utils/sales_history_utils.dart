@@ -1,28 +1,72 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'dart:typed_data';
+import 'package:excel/excel.dart';
+import 'package:file_saver/file_saver.dart';
+import 'package:open_filex/open_filex.dart';
 
-/// Shift -4h to get the operational day key, then format as yyyy-MM-dd.
+/// ========== مفاتيح يوم التشغيل (4 ص) ==========
 String dayKeyFromUtc(DateTime createdUtc) {
   final shifted = createdUtc.subtract(const Duration(hours: 4));
   return '${shifted.year}-${shifted.month.toString().padLeft(2, '0')}-${shifted.day.toString().padLeft(2, '0')}';
 }
 
-/// Group docs by day key.
+/// تحويل آمن لأرقام
+double numD(dynamic v) {
+  if (v is num) return v.toDouble();
+  return double.tryParse(v?.toString() ?? '0') ?? 0.0;
+}
+
+/// فحص الأجل غير المدفوع
+
+/// قراءة created_at كـ UTC (لو String/Timestamp)
+DateTime createdAtUtcOf(Map<String, dynamic> m) {
+  final ts =
+      (m['created_at'] as Timestamp?)?.toDate() ??
+      DateTime.tryParse(m['created_at']?.toString() ?? '');
+  return (ts?.toUtc()) ?? DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+}
+
+/// وقت العرض للتايل: للأجل المُرحّل نخليه 05:00 من اليوم الحالي
+DateTime viewCreatedAtFor(Map<String, dynamic> m) {
+  final now = DateTime.now().toUtc();
+  final nowKey = dayKeyFromUtc(now);
+  final orig = createdAtUtcOf(m);
+  final origKey = dayKeyFromUtc(orig);
+  if (isUnpaidDeferredMap(m) && origKey.compareTo(nowKey) < 0) {
+    // 05:00 UTC لليوم الحالي (عرض فقط)
+    return DateTime.utc(now.year, now.month, now.day, 5, 0);
+  }
+  return orig;
+}
+
+/// لو العملية فيها تاريخ أصلي محفوظ
+DateTime? originalCreatedAtIfAny(Map<String, dynamic> m) {
+  final t = (m['original_created_at'] as Timestamp?)?.toDate();
+  if (t != null) return t.toUtc();
+  return null;
+}
+
+/// Group docs by (operational) day with rollover of unpaid deferred to today.
 Map<String, List<QueryDocumentSnapshot<Map<String, dynamic>>>>
-groupByOperationalDay(List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) {
+groupByOperationalDayWithRollover(
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+) {
+  final nowKey = dayKeyFromUtc(DateTime.now().toUtc());
   final byDay = <String, List<QueryDocumentSnapshot<Map<String, dynamic>>>>{};
   for (final d in docs) {
     final m = d.data();
-    final ts =
-        (m['created_at'] as Timestamp?)?.toDate() ??
-        DateTime.tryParse(m['created_at']?.toString() ?? '') ??
-        DateTime.fromMillisecondsSinceEpoch(0);
-    final dayKey = dayKeyFromUtc(ts);
-    byDay.putIfAbsent(dayKey, () => []).add(d);
+    final orig = createdAtUtcOf(m);
+    String key = dayKeyFromUtc(orig);
+    if (isUnpaidDeferredMap(m) && key.compareTo(nowKey) < 0) {
+      key = nowKey; // نرحّل لليوم الحالي
+    }
+    byDay.putIfAbsent(key, () => []).add(d);
   }
   return byDay;
 }
 
+/// ==== summations ====
 double sumField(
   List<QueryDocumentSnapshot<Map<String, dynamic>>> es,
   String k,
@@ -60,13 +104,15 @@ double sumBeansGrams(List<QueryDocumentSnapshot<Map<String, dynamic>>> es) {
   }
   return s;
 }
+// ====== Shared helpers ======
 
-/// ==== Tile helpers ====
-double numD(dynamic v) {
-  if (v is num) return v.toDouble();
-  return double.tryParse(v?.toString() ?? '0') ?? 0.0;
+bool isUnpaidDeferred(Map<String, dynamic> m) {
+  final isDeferred = (m['is_deferred'] ?? false) == true;
+  final paid = (m['paid'] ?? (!isDeferred)) == true;
+  return isDeferred && !paid;
 }
 
+/// ==== تفاصيل العناصر (زي الموجود عندك) ====
 List<Map<String, dynamic>> asListMap(dynamic v) {
   if (v is List) {
     return v
@@ -83,17 +129,34 @@ String detectType(Map<String, dynamic> m) {
   if (t.isNotEmpty) return t;
   if (m.containsKey('components')) return 'custom_blend';
   if (m.containsKey('drink_id') || m.containsKey('drink_name')) return 'drink';
-  if (m.containsKey('single_id') || m.containsKey('single_name')) {
+  if (m.containsKey('single_id') || m.containsKey('single_name'))
     return 'single';
-  }
-  if (m.containsKey('blend_id') || m.containsKey('blend_name')) {
+  if (m.containsKey('blend_id') || m.containsKey('blend_name'))
     return 'ready_blend';
-  }
   final items = asListMap(m['items']);
-  if (items.isNotEmpty && items.any((x) => x.containsKey('grams'))) {
+  if (items.isNotEmpty && items.any((x) => x.containsKey('grams')))
     return 'single';
-  }
   return 'unknown';
+}
+
+Map<String, dynamic> normalizeRow(Map<String, dynamic> c) {
+  String name = (c['name'] ?? c['item_name'] ?? c['product_name'] ?? '')
+      .toString();
+  String variant = (c['variant'] ?? c['roast'] ?? '').toString();
+  double grams = numD(c['grams'] ?? c['weight'] ?? 0);
+  double qty = numD(c['qty'] ?? c['count'] ?? 0);
+  String unit = (c['unit'] ?? (grams > 0 ? 'g' : '')).toString();
+  double linePrice = numD(c['line_total_price'] ?? c['total_price'] ?? 0);
+  double lineCost = numD(c['line_total_cost'] ?? c['total_cost'] ?? 0);
+  return {
+    'name': name,
+    'variant': variant,
+    'grams': grams,
+    'qty': qty,
+    'unit': unit,
+    'line_total_price': linePrice,
+    'line_total_cost': lineCost,
+  };
 }
 
 List<Map<String, dynamic>> extractComponents(
@@ -152,136 +215,6 @@ List<Map<String, dynamic>> extractComponents(
 
   return const [];
 }
-// ==== Deferred settlement helpers ===========================================
-
-/// تسوية عملية أجل: تعليمها مدفوعة + تصفير المستحق وتثبيت الربح لو كان لسه 0
-Future<void> settleDeferredSale(String docId) async {
-  final ref = FirebaseFirestore.instance.collection('sales').doc(docId);
-  await FirebaseFirestore.instance.runTransaction((trx) async {
-    final snap = await trx.get(ref);
-    final data = snap.data() as Map<String, dynamic>? ?? {};
-
-    double _numD(dynamic v) =>
-        (v is num) ? v.toDouble() : double.tryParse(v?.toString() ?? '0') ?? 0;
-
-    final totalPrice = _numD(data['total_price']);
-    final totalCost = _numD(data['total_cost']);
-    final currentProfit = _numD(data['profit_total']);
-
-    // لو الربح مش متسجل، نحسبه بعد السداد
-    final newProfit = currentProfit != 0
-        ? currentProfit
-        : (totalPrice - totalCost);
-
-    trx.update(ref, {
-      'paid': true,
-      'due_amount': 0,
-      'profit_total': newProfit,
-      'updated_at': FieldValue.serverTimestamp(),
-    });
-  });
-}
-
-/// زرّ "تم الدفع" يُعرض فقط لو العملية أجل وغير مدفوعة وفيه مستحق > 0
-Widget deferredSettleButton({
-  required BuildContext context,
-  required String docId,
-  required bool isDeferred,
-  required bool paid,
-  required double dueAmount,
-}) {
-  if (!(isDeferred && !paid && dueAmount > 0)) {
-    return const SizedBox.shrink();
-  }
-  return Padding(
-    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-    child: Align(
-      alignment: Alignment.centerLeft,
-      child: FilledButton.icon(
-        style: ButtonStyle(
-          backgroundColor: MaterialStateProperty.all(
-            const Color.fromRGBO(93, 64, 55, 1),
-          ),
-        ),
-        onPressed: () async {
-          final ok = await showDialog<bool>(
-            context: context,
-            builder: (_) => AlertDialog(
-              title: const Text('تأكيد السداد'),
-              content: Text(
-                'سيتم تثبيت دفع ${dueAmount.toStringAsFixed(2)} جم.\nهل تريد المتابعة؟',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  child: const Text('إلغاء'),
-                ),
-                FilledButton(
-                  onPressed: () => Navigator.pop(context, true),
-                  child: const Text('تم الدفع'),
-                ),
-              ],
-            ),
-          );
-          if (ok == true) {
-            try {
-              await settleDeferredSale(docId);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('تم تسوية العملية المؤجّلة')),
-              );
-            } catch (e) {
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text('تعذّر التسوية: $e')));
-            }
-          }
-        },
-        icon: const Icon(Icons.payments),
-        label: const Text('تم الدفع'),
-      ),
-    ),
-  );
-}
-
-/// لفّ عنصر المكوّن ليضيف زر التسوية أسفله عند الحاجة
-Widget componentRowWithSettle(
-  Map<String, dynamic> component,
-  Map<String, dynamic> sale,
-  BuildContext context,
-  String docId,
-) {
-  final row = componentRow(component);
-  // نقرأ حالات الأجل من بيانات العملية الأصلية
-  final bool isDeferred = (sale['is_deferred'] ?? false) == true;
-  final bool paid = (sale['paid'] ?? false) == true;
-  final double dueAmt = numD(sale['due_amount']);
-
-  // نزود الزر أسفل صف س/ت بنفس الـpadding/Align المطلوب
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [row],
-  );
-}
-
-Map<String, dynamic> normalizeRow(Map<String, dynamic> c) {
-  String name = (c['name'] ?? c['item_name'] ?? c['product_name'] ?? '')
-      .toString();
-  String variant = (c['variant'] ?? c['roast'] ?? '').toString();
-  double grams = numD(c['grams'] ?? c['weight'] ?? 0);
-  double qty = numD(c['qty'] ?? c['count'] ?? 0);
-  String unit = (c['unit'] ?? (grams > 0 ? 'g' : '')).toString();
-  double linePrice = numD(c['line_total_price'] ?? c['total_price'] ?? 0);
-  double lineCost = numD(c['line_total_cost'] ?? c['total_cost'] ?? 0);
-  return {
-    'name': name,
-    'variant': variant,
-    'grams': grams,
-    'qty': qty,
-    'unit': unit,
-    'line_total_price': linePrice,
-    'line_total_cost': lineCost,
-  };
-}
 
 IconData iconForType(String t) {
   switch (t) {
@@ -304,91 +237,16 @@ String fmtTime(DateTime dt) {
   return '$hh:$mm';
 }
 
-String titleLine(Map<String, dynamic> m, String type) {
-  String name = (m['name'] ?? '').toString();
-  String variant = (m['variant'] ?? m['roast'] ?? '').toString();
-  String labelNV = variant.isNotEmpty ? '$name $variant' : name;
-
-  switch (type) {
-    case 'drink':
-      final q = numD(m['quantity']) > 0
-          ? numD(m['quantity']).toStringAsFixed(0)
-          : '1';
-      final dn = (m['drink_name'] ?? '').toString();
-      final finalName = labelNV.isNotEmpty
-          ? labelNV
-          : (dn.isNotEmpty ? dn : 'مشروب');
-      return 'مشروب - $q $finalName';
-    case 'single':
-      {
-        final g = numD(m['grams']).toStringAsFixed(0);
-        final lbl = labelNV.isNotEmpty ? labelNV : name;
-        return 'صنف منفرد - $g جم ${lbl.isNotEmpty ? lbl : ''}'.trim();
-      }
-    case 'ready_blend':
-      {
-        final g = numD(m['grams']).toStringAsFixed(0);
-        final lbl = labelNV.isNotEmpty ? labelNV : name;
-        return 'توليفة جاهزة - $g جم ${lbl.isNotEmpty ? lbl : ''}'.trim();
-      }
-    case 'custom_blend':
-      return 'توليفة العميل';
-    default:
-      return 'عملية';
-  }
+String fmtDateTime(DateTime dt) {
+  final y = dt.year.toString().padLeft(4, '0');
+  final m = dt.month.toString().padLeft(2, '0');
+  final d = dt.day.toString().padLeft(2, '0');
+  final hh = dt.hour.toString().padLeft(2, '0');
+  final mm = dt.minute.toString().padLeft(2, '0');
+  return '$y-$m-$d $hh:$mm';
 }
 
-Widget kv(String k, double v) {
-  return Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Text('$k: ', style: const TextStyle(color: Colors.black54)),
-      Text(
-        v.toStringAsFixed(2),
-        style: const TextStyle(fontWeight: FontWeight.w700),
-      ),
-    ],
-  );
-}
-
-Widget componentRow(Map<String, dynamic> c) {
-  final name = (c['name'] ?? '').toString();
-  final variant = (c['variant'] ?? '').toString();
-  final unit = (c['unit'] ?? '').toString();
-  final qty = numD(c['qty']);
-  final grams = numD(c['grams']);
-  final price = numD(c['line_total_price']);
-  final cost = numD(c['line_total_cost']);
-
-  final label = variant.isNotEmpty ? '$name - $variant' : name;
-  final qtyText = grams > 0
-      ? '${grams.toStringAsFixed(0)} جم'
-      : (qty > 0 ? '$qty ${unit.isEmpty ? "" : unit}' : '');
-
-  return ListTile(
-    dense: true,
-    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-    leading: const Icon(Icons.circle, size: 8),
-    title: Text(label),
-    trailing: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (qtyText.isNotEmpty)
-          Text(qtyText, style: const TextStyle(color: Colors.black54)),
-        const SizedBox(width: 12),
-        Text(
-          'س:${price.toStringAsFixed(2)}',
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(width: 8),
-        Text(
-          'ت:${cost.toStringAsFixed(2)}',
-          style: const TextStyle(color: Colors.black54),
-        ),
-      ],
-    ),
-  );
-}
+/// ==== Deferred settlement helpers ===========================================
 
 double spiceRatePerKgForSingle(String name) {
   final n = name.trim();
@@ -398,331 +256,388 @@ double spiceRatePerKgForSingle(String name) {
   if (n.contains('هند') || n.contains('هندي')) return 60.0;
   return 40.0;
 }
-// ====== INVENTORY SYNC (edit/delete) ========================================
 
-class _StockUsage {
-  final Map<String, double> singles; // single_id/item_id -> grams
-  final Map<String, double> blends; // blend_id/item_id -> grams
-  _StockUsage({Map<String, double>? singles, Map<String, double>? blends})
-    : singles = singles ?? {},
-      blends = blends ?? {};
-}
-
-_StockUsage _stockUsageForSale(Map<String, dynamic> m) {
-  double g(dynamic v) => numD(v);
-  String s(dynamic v) => (v ?? '').toString();
-
-  final usage = _StockUsage();
-  final type = detectType(m);
-
-  void addSingle(String? id, double grams) {
-    if (id == null || id.isEmpty || grams <= 0) return;
-    usage.singles[id] = (usage.singles[id] ?? 0) + grams;
-  }
-
-  void addBlend(String? id, double grams) {
-    if (id == null || id.isEmpty || grams <= 0) return;
-    usage.blends[id] = (usage.blends[id] ?? 0) + grams;
-  }
-
-  if (type == 'single') {
-    final id = s(
-      m['single_id'].toString().isNotEmpty ? m['single_id'] : m['item_id'],
-    );
-    addSingle(id, g(m['grams']));
-  } else if (type == 'ready_blend') {
-    final id = s(
-      m['blend_id'].toString().isNotEmpty ? m['blend_id'] : m['item_id'],
-    );
-    addBlend(id, g(m['grams']));
-  } else if (type == 'custom_blend') {
-    final comps = asListMap(m['components']);
-    final items = asListMap(m['items']);
-    final lines = asListMap(m['lines']);
-    final rows = comps.isNotEmpty ? comps : (items.isNotEmpty ? items : lines);
-
-    for (final r in rows) {
-      final grams = g(r['grams']);
-      // المكوّنات عادة بتبقى من singles
-      final id = s(r['single_id'] ?? r['item_id'] ?? r['id']);
-      if (id.isNotEmpty) {
-        addSingle(id, grams);
-      }
-    }
-  }
-
-  return usage;
-}
-
-Future<void> _applyToInventory({
-  required String collection, // 'singles' أو 'blends'
-  required String docId,
-  required double deltaGrams, // + يزيد / - ينقص
-}) async {
-  if (docId.isEmpty || deltaGrams == 0) return;
-  final ref = FirebaseFirestore.instance.collection(collection).doc(docId);
-
+/// تسوية عملية أجل: نعلّم مدفوعة + نحفظ التاريخ الأصلي + ننقلها لليوم الحالي
+Future<void> settleDeferredSale(String docId) async {
+  final ref = FirebaseFirestore.instance.collection('sales').doc(docId);
   await FirebaseFirestore.instance.runTransaction((trx) async {
     final snap = await trx.get(ref);
-    final data = (snap.data() as Map<String, dynamic>?) ?? {};
+    final data = snap.data() as Map<String, dynamic>? ?? {};
 
-    // نفضّل 'stock' ثم أي مفتاح شائع
-    final candidates = [
-      'stock',
-      'stock_grams',
-      'available_grams',
-      'in_stock_grams',
-      'grams_in_stock',
-    ];
+    double _n(dynamic v) =>
+        (v is num) ? v.toDouble() : double.tryParse(v?.toString() ?? '0') ?? 0;
 
-    // دور على أول مفتاح موجود رقميًا
-    String? stockKey;
-    for (final k in candidates) {
-      final v = data[k];
-      if (v is num) {
-        stockKey = k;
-        break;
-      }
-      if (v is String && double.tryParse(v.replaceAll(',', '.')) != null) {
-        stockKey = k;
-        break;
-      }
-    }
+    final totalPrice = _n(data['total_price']);
+    final totalCost = _n(data['total_cost']);
+    final currentProfit = _n(data['profit_total']);
 
-    // لو مفيش ولا واحد، هننشئ/نستخدم 'stock'
-    stockKey ??= 'stock';
+    final newProfit = currentProfit != 0
+        ? currentProfit
+        : (totalPrice - totalCost);
 
-    final currentNum = data[stockKey];
-    double current = 0.0;
-    if (currentNum is num) current = currentNum.toDouble();
-    if (currentNum is String) {
-      current = double.tryParse(currentNum.replaceAll(',', '.')) ?? 0.0;
-    }
+    final oldCreated = data['created_at'];
 
-    trx.update(ref, {stockKey: current + deltaGrams});
+    trx.update(ref, {
+      'paid': true,
+      'due_amount': 0,
+      'profit_total': newProfit,
+      // احفظ التاريخ الأصلي لو مش محفوظ
+      if (!data.containsKey('original_created_at'))
+        'original_created_at': oldCreated,
+      // انقل العملية لليوم الحالي فعليًا
+      'created_at': FieldValue.serverTimestamp(),
+      'updated_at': FieldValue.serverTimestamp(),
+    });
   });
 }
 
-/// استرجاع المخزون عند حذف عملية
-Future<void> revertStockForSale(Map<String, dynamic> sale) async {
-  final u = _stockUsageForSale(sale);
-  // نحط الجرامات تاني (علامة +)
-  for (final e in u.singles.entries) {
-    await _applyToInventory(
-      collection: 'singles',
-      docId: e.key,
-      deltaGrams: e.value,
-    );
-  }
-  for (final e in u.blends.entries) {
-    await _applyToInventory(
-      collection: 'blends',
-      docId: e.key,
-      deltaGrams: e.value,
-    );
-  }
-}
+DateTime _utc(DateTime d) => d.toUtc();
 
-/// تطبيق فرق المخزون بعد التعديل (after - before)
-Future<void> applyStockDiffForEdit({
-  required Map<String, dynamic> before,
-  required Map<String, dynamic> after,
-}) async {
-  final b = _stockUsageForSale(before);
-  final a = _stockUsageForSale(after);
-
-  // اجمع كل المفاتيح
-  final singleKeys = {...b.singles.keys, ...a.singles.keys};
-  final blendKeys = {...b.blends.keys, ...a.blends.keys};
-
-  for (final id in singleKeys) {
-    final prev = b.singles[id] ?? 0;
-    final next = a.singles[id] ?? 0;
-    final diff = next - prev; // لو زاد الاستهلاك → diff موجب
-    if (diff != 0) {
-      await _applyToInventory(
-        collection: 'singles',
-        docId: id,
-        deltaGrams: -diff, // الاستهلاك يزيد → المخزون ينقص
-      );
-    }
-  }
-
-  for (final id in blendKeys) {
-    final prev = b.blends[id] ?? 0;
-    final next = a.blends[id] ?? 0;
-    final diff = next - prev;
-    if (diff != 0) {
-      await _applyToInventory(
-        collection: 'blends',
-        docId: id,
-        deltaGrams: -diff,
-      );
-    }
-  }
-}
-// ==== Inventory stock adjust helpers ========================================
-
-class _StockOp {
-  final DocumentReference<Map<String, dynamic>> ref;
-  final double grams;
-  _StockOp(this.ref, this.grams);
-}
-
-double _numDYN(dynamic v) {
+String _safeStr(dynamic v) => (v ?? '').toString();
+double _numD(dynamic v) {
   if (v is num) return v.toDouble();
-  return double.tryParse('${v ?? ''}'.replaceAll(',', '.')) ?? 0.0;
+  return double.tryParse(v?.toString() ?? '0') ?? 0.0;
 }
 
-DocumentReference<Map<String, dynamic>>? _refForSingle(String? id) {
-  if (id == null || id.isEmpty) return null;
-  return FirebaseFirestore.instance.collection('singles').doc(id);
+String _fmtDateTimeLocal(DateTime? dt) {
+  if (dt == null) return '';
+  final y = dt.year.toString().padLeft(4, '0');
+  final m = dt.month.toString().padLeft(2, '0');
+  final d = dt.day.toString().padLeft(2, '0');
+  final h = dt.hour.toString().padLeft(2, '0');
+  final mm = dt.minute.toString().padLeft(2, '0');
+  return '$y-$m-$d $h:$mm';
 }
 
-DocumentReference<Map<String, dynamic>>? _refForBlend(String? id) {
-  if (id == null || id.isEmpty) return null;
-  return FirebaseFirestore.instance.collection('blends').doc(id);
-}
+/// يبني الـ Excel بصفحتين:
+/// 1) Sales: مستوى العملية
+/// 2) Lines: تفصيل المكونات (لو موجودة)
+Uint8List _buildExcelBytes({
+  required List<Map<String, dynamic>> sales,
+  required List<Map<String, dynamic>> lines,
+}) {
+  final excel = Excel.createExcel();
+  final s1 = excel['Sales'];
+  final s2 = excel['Lines'];
 
-/// يحاول استخراج عمليات خصم/إضافة المخزون من مستند البيع
-List<_StockOp> _extractStockOpsFromSale(Map<String, dynamic> m) {
-  final type = '${m['type'] ?? ''}'.trim();
+  // رؤوس الجداول
+  s1.appendRow([
+    'sale_id',
+    'created_at',
+    'effective_time',
+    'settled_at',
+    'type',
+    'name',
+    'variant',
+    'grams',
+    'quantity',
+    'total_price',
+    'total_cost',
+    'profit_total',
+    'is_deferred',
+    'paid',
+    'due_amount',
+    'is_spiced',
+    'spice_amount',
+    'notes',
+  ]);
 
-  DocumentReference<Map<String, dynamic>>? _pickRef(Map<String, dynamic> x) {
-    final sid = (x['single_id'] ?? x['singleId'] ?? '').toString();
-    final bid = (x['blend_id'] ?? x['blendId'] ?? '').toString();
-    if (sid.isNotEmpty) return _refForSingle(sid);
-    if (bid.isNotEmpty) return _refForBlend(bid);
-
-    final itemId = (x['item_id'] ?? x['itemId'] ?? '').toString();
-    final itemType = (x['item_type'] ?? x['itemType'] ?? '')
-        .toString()
-        .toLowerCase();
-    if (itemId.isNotEmpty) {
-      if (itemType.contains('blend')) return _refForBlend(itemId);
-      // default single
-      return _refForSingle(itemId);
-    }
-    return null;
+  for (final m in sales) {
+    s1.appendRow([
+      _safeStr(m['id']),
+      _safeStr(m['created_at']),
+      _safeStr(m['effective_time']),
+      _safeStr(m['settled_at']),
+      _safeStr(m['type']),
+      _safeStr(m['name']),
+      _safeStr(m['variant']),
+      _numD(m['grams']),
+      _numD(m['quantity']),
+      _numD(m['total_price']),
+      _numD(m['total_cost']),
+      _numD(m['profit_total']),
+      (m['is_deferred'] == true) ? '1' : '0',
+      (m['paid'] == true) ? '1' : '0',
+      _numD(m['due_amount']),
+      (m['is_spiced'] == true) ? '1' : '0',
+      _numD(m['spice_amount']),
+      _safeStr(m['notes']),
+    ]);
   }
 
-  if (type == 'single' || type == 'ready_blend') {
-    DocumentReference<Map<String, dynamic>>? ref;
-    if (type == 'single') {
-      ref = _pickRef({
-        'single_id': m['single_id'],
-        'item_id': m['item_id'],
-        'item_type': 'single',
-      });
-    } else {
-      ref = _pickRef({
-        'blend_id': m['blend_id'],
-        'item_id': m['item_id'],
-        'item_type': 'blend',
-      });
+  s2.appendRow([
+    'sale_id',
+    'row_idx',
+    'name',
+    'variant',
+    'unit',
+    'qty',
+    'grams',
+    'line_total_price',
+    'line_total_cost',
+  ]);
+
+  for (final r in lines) {
+    s2.appendRow([
+      _safeStr(r['sale_id']),
+      _numD(r['row_idx']),
+      _safeStr(r['name']),
+      _safeStr(r['variant']),
+      _safeStr(r['unit']),
+      _numD(r['qty']),
+      _numD(r['grams']),
+      _numD(r['line_total_price']),
+      _numD(r['line_total_cost']),
+    ]);
+  }
+
+  excel.setDefaultSheet('Sales');
+  final bytes = excel.encode()!;
+  return Uint8List.fromList(bytes);
+}
+
+/// نفس منطق نطاق 4ص → 4ص
+bool inRangeLocal(DateTime t, DateTimeRange r) {
+  return !t.isBefore(r.start) && t.isBefore(r.end);
+}
+
+/// نفس فكرة الوقت الفعّال اللي عندك (الأجل غير المدفوع → اليوم 05:00)
+DateTime effectiveTimeLocal(Map<String, dynamic> m) {
+  final createdAt =
+      (m['created_at'] as Timestamp?)?.toDate() ??
+      DateTime.fromMillisecondsSinceEpoch(0);
+  final settledAtRaw = m['settled_at'];
+  final settledAt = settledAtRaw == null
+      ? null
+      : (settledAtRaw is Timestamp
+            ? settledAtRaw.toDate()
+            : DateTime.tryParse('$settledAtRaw'));
+  final isDeferred = (m['is_deferred'] ?? m['is_credit'] ?? false) == true;
+  final paid = (m['paid'] ?? (!isDeferred)) == true;
+
+  if (isDeferred && !paid) {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day, 5);
+  }
+  if (paid && settledAt != null) return settledAt;
+  return createdAt;
+}
+
+/// استخراج مكونات الصفقة كسطور بسيطة
+List<Map<String, dynamic>> _extractLines(
+  String saleId,
+  Map<String, dynamic> m,
+) {
+  List<Map<String, dynamic>> asList(dynamic v) {
+    if (v is List) {
+      return v
+          .map(
+            (e) => (e is Map) ? e.cast<String, dynamic>() : <String, dynamic>{},
+          )
+          .toList();
     }
-    final g = _numDYN(m['grams']);
-    if (ref != null && g > 0) return [_StockOp(ref, g)];
     return const [];
   }
 
-  if (type == 'custom_blend') {
-    List<Map<String, dynamic>> _asList(dynamic v) {
-      if (v is List) {
-        return v
-            .map(
-              (e) =>
-                  (e is Map) ? e.cast<String, dynamic>() : <String, dynamic>{},
-            )
-            .toList();
-      }
-      return const [];
-    }
-
-    final rows = () {
-      final c = _asList(m['components']);
-      if (c.isNotEmpty) return c;
-      final it = _asList(m['items']);
-      if (it.isNotEmpty) return it;
-      return _asList(m['lines']);
-    }();
-
-    final ops = <_StockOp>[];
-    for (final r in rows) {
-      final ref = _pickRef(r);
-      final grams = _numDYN(r['grams'] ?? r['weight'] ?? 0);
-      if (ref != null && grams > 0) ops.add(_StockOp(ref, grams));
-    }
-    return ops;
+  final rows = <Map<String, dynamic>>[];
+  final candidates = [
+    ...asList(m['components']),
+    ...asList(m['items']),
+    ...asList(m['lines']),
+  ];
+  int idx = 0;
+  for (final c in candidates) {
+    rows.add({
+      'sale_id': saleId,
+      'row_idx': idx++,
+      'name': _safeStr(c['name'] ?? c['item_name'] ?? c['product_name']),
+      'variant': _safeStr(c['variant'] ?? c['roast']),
+      'unit': _safeStr(c['unit']),
+      'qty': _numD(c['qty']),
+      'grams': _numD(c['grams']),
+      'line_total_price': _numD(c['line_total_price']),
+      'line_total_cost': _numD(c['line_total_cost']),
+    });
   }
-
-  return const [];
+  return rows;
 }
 
-Future<void> _applyStockOps(
-  List<_StockOp> ops,
-  double sign,
-  Transaction tx,
+/// التصدير: بيحفظ مباشرة في Downloads ويعرض SnackBar فيه المسار + زر فتح.
+/// لو فشل الحفظ، بيعمل مشاركة للملف كبديل.
+Future<void> exportSalesExcelFromFilter(
+  BuildContext context,
+  DateTimeRange range,
 ) async {
-  final byRef = <DocumentReference<Map<String, dynamic>>, double>{};
-  for (final op in ops) {
-    byRef[op.ref] = (byRef[op.ref] ?? 0.0) + (op.grams * sign);
+  // اقفل أي شيت/دايالوج مفتوح قبل ما نبدأ
+  if (Navigator.canPop(context)) {
+    Navigator.pop(context);
   }
-  for (final entry in byRef.entries) {
-    final ref = entry.key;
-    final delta = entry.value; // قد يكون موجب (إضافة) أو سالب (خصم)
-    final snap = await tx.get(ref);
-    final cur = _numDYN(snap.data()?['stock']);
-    tx.update(ref, {'stock': cur + delta});
+
+  // لودينج بسيط
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => const Center(child: CircularProgressIndicator()),
+  );
+
+  try {
+    final startUtc = _utc(range.start);
+    final endUtc = _utc(range.end);
+
+    // Query أساسي بالنطاق (4ص→4ص)
+    final qs = await FirebaseFirestore.instance
+        .collection('sales')
+        .where('created_at', isGreaterThanOrEqualTo: startUtc)
+        .where('created_at', isLessThan: endUtc)
+        .orderBy('created_at', descending: false)
+        .get();
+
+    final sales = <Map<String, dynamic>>[];
+    final lines = <Map<String, dynamic>>[];
+
+    for (final d in qs.docs) {
+      final m = d.data();
+      final id = d.id;
+
+      final createdAt = (m['created_at'] as Timestamp?)?.toDate();
+      final eff = effectiveTimeLocal(m);
+
+      // لو حابب تستبعد الأجل غير المدفوع من التصدير، فكّ الكومنت:
+      // final isDeferred = (m['is_deferred'] ?? false) == true;
+      // final paid = (m['paid'] ?? (!isDeferred)) == true;
+      // if (isDeferred && !paid) continue;
+
+      sales.add({
+        'id': id,
+        'created_at': _fmtDateTimeLocal(createdAt),
+        'effective_time': _fmtDateTimeLocal(eff),
+        'settled_at': _fmtDateTimeLocal(
+          (m['settled_at'] as Timestamp?)?.toDate(),
+        ),
+        'type': _safeStr(m['type']),
+        'name': _safeStr(m['name'] ?? m['drink_name']),
+        'variant': _safeStr(m['variant'] ?? m['roast']),
+        'grams': _numD(m['grams'] ?? m['total_grams']),
+        'quantity': _numD(m['quantity']),
+        'total_price': _numD(m['total_price']),
+        'total_cost': _numD(m['total_cost']),
+        'profit_total': _numD(m['profit_total']),
+        'is_deferred': (m['is_deferred'] ?? false) == true,
+        'paid': (m['paid'] ?? false) == true,
+        'due_amount': _numD(m['due_amount']),
+        'is_spiced': (m['is_spiced'] ?? false) == true,
+        'spice_amount': _numD(m['spice_amount']),
+        'notes': _safeStr(m['notes']),
+      });
+
+      lines.addAll(_extractLines(id, m));
+    }
+
+    final bytes = _buildExcelBytes(sales: sales, lines: lines);
+
+    final fileName =
+        'sales_${range.start.year}-${range.start.month.toString().padLeft(2, '0')}-${range.start.day.toString().padLeft(2, '0')}__'
+        '${range.end.year}-${range.end.month.toString().padLeft(2, '0')}-${range.end.day.toString().padLeft(2, '0')}';
+
+    // حفظ مباشر في Downloads — بدون اختيار مجلد (يمنع "Dialog was null")
+    final savedPath = await FileSaver.instance.saveFile(
+      name: fileName,
+      ext: 'xlsx',
+      bytes: bytes,
+      mimeType: MimeType.microsoftExcel,
+    );
+
+    if (context.mounted) Navigator.pop(context); // قفل اللودينج
+
+    // SnackBar طويل + زر فتح
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 14),
+          content: Text(
+            'تم الحفظ في التنزيلات: $savedPath',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          action: SnackBarAction(
+            label: 'فتح',
+            onPressed: () async {
+              try {
+                await OpenFilex.open(savedPath);
+              } catch (_) {}
+            },
+          ),
+        ),
+      );
+    }
+  } catch (e) {
+    if (context.mounted) Navigator.pop(context); // قفل اللودينج
+    // بديل: مشاركة الملف لو فشل الحفظ
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'تعذّر الحفظ في التنزيلات. هشارك الملف بدلًا من ذلك. ($e)',
+        ),
+        duration: const Duration(seconds: 10),
+      ),
+    );
   }
 }
 
-/// عند حذف بيع: رجّع المخزون ثم احذف المستند داخل نفس الترانزاكشن
-Future<void> restoreStockOnSaleDelete(
-  DocumentReference<Map<String, dynamic>> saleRef,
-) async {
-  await FirebaseFirestore.instance.runTransaction((tx) async {
-    final snap = await tx.get(saleRef);
-    final data = (snap.data() as Map<String, dynamic>?) ?? <String, dynamic>{};
-    final ops = _extractStockOpsFromSale(data);
-    await _applyStockOps(ops, 1.0, tx); // 1.0 = إضافة راجعة
-    tx.delete(saleRef);
-  });
+// إعادة استخدام: تاريخ/وقت من أي نوع
+DateTime _asLocal(dynamic v) {
+  if (v is Timestamp) return v.toDate();
+  if (v is DateTime) return v;
+  return DateTime.tryParse(v?.toString() ?? '') ??
+      DateTime.fromMillisecondsSinceEpoch(0);
 }
 
-/// عند تعديل بيع: طبّق فرق المخزون = (الجرامات بعد) - (الجرامات قبل)
-Future<void> applyStockDeltaOnSaleEdit({
-  required Map<String, dynamic> before,
-  required Map<String, dynamic> after,
-}) async {
-  Map<DocumentReference<Map<String, dynamic>>, double> _collapse(
-    List<_StockOp> ops,
-  ) {
-    final m = <DocumentReference<Map<String, dynamic>>, double>{};
-    for (final o in ops) {
-      m[o.ref] = (m[o.ref] ?? 0.0) + o.grams;
-    }
-    return m;
+/// وقت العرض الفعّال:
+/// - أجل غير مدفوع ⇒ اليوم الحالي 05:00 (محلي)
+/// - مدفوع + settled_at ⇒ settled_at
+/// - غير ذلك ⇒ created_at
+
+/// مفتاح يوم التشغيل: Shift -4h → yyyy-MM-dd
+String opDayKeyFromLocal(DateTime t) {
+  final s = t.subtract(const Duration(hours: 4));
+  return '${s.year}-${s.month.toString().padLeft(2, '0')}-${s.day.toString().padLeft(2, '0')}';
+}
+
+/// مجموع المبيعات لليوم مع استبعاد الضيافة + الأجل غير المدفوع
+double sumPaidNonComplOnly(
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> es,
+) {
+  double s = 0;
+  for (final e in es) {
+    final m = e.data();
+    final isCompl = (m['is_complimentary'] ?? false) == true;
+    final isDeferred = (m['is_deferred'] ?? m['is_credit'] ?? false) == true;
+    final paid = (m['paid'] ?? (!isDeferred)) == true;
+    if (!isCompl && paid) s += numD(m['total_price']);
   }
+  return s;
+}
 
-  final b = _collapse(_extractStockOpsFromSale(before));
-  final a = _collapse(_extractStockOpsFromSale(after));
+/// هل التاريخ داخل المدى [start, end)
 
-  await FirebaseFirestore.instance.runTransaction((tx) async {
-    final allRefs = <DocumentReference<Map<String, dynamic>>>{
-      ...b.keys,
-      ...a.keys,
-    };
-    for (final ref in allRefs) {
-      final newG = a[ref] ?? 0.0;
-      final oldG = b[ref] ?? 0.0;
-      final delta =
-          newG - oldG; // موجب = بيع زاد → هنخصم, سالب = بيع قل → هنضيف
-      if (delta == 0.0) continue;
+bool isUnpaidDeferredMap(Map<String, dynamic> m) =>
+    (m['is_deferred'] ?? false) == true && (m['paid'] ?? false) == false;
 
-      final snap = await tx.get(ref);
-      final cur = _numDYN(snap.data()?['stock']);
-      tx.update(ref, {'stock': cur - delta});
+/// يجمع حقل معين للعمليات المدفوعة فقط (يستثني الأجل غير المدفوع)
+double sumFieldPaidOnly(
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> es,
+  String k,
+) {
+  double s = 0;
+  for (final e in es) {
+    final m = e.data();
+    if (isUnpaidDeferredMap(m)) continue; // استثناء الأجل غير المدفوع
+    final v = m[k];
+    if (v is num) {
+      s += v.toDouble();
+    } else {
+      s += double.tryParse('${v ?? 0}') ?? 0.0;
     }
-  });
+  }
+  return s;
 }
