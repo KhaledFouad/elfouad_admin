@@ -26,9 +26,19 @@ class TripleTrendChart extends StatelessWidget {
     }
 
     final xs = all.map((e) => e.day.millisecondsSinceEpoch.toDouble()).toList();
-    final minX = xs.reduce((a, b) => a < b ? a : b);
-    final maxX = xs.reduce((a, b) => a > b ? a : b);
+    var minX = xs.reduce((a, b) => a < b ? a : b);
+    var maxX = xs.reduce((a, b) => a > b ? a : b);
+    // ✅ لو نطاق يوم واحد فقط، نزود padding 12 ساعة يمين وشمال
+    const dayMs = 86400000.0; // Duration(days: 1) in ms
+    if (minX == maxX) {
+      const pad = 12 * 60 * 60 * 1000.0; // 12h
+      minX -= pad;
+      maxX += pad;
+    }
 
+    final span = (maxX - minX).abs();
+    // ✅ ضمان إن الـ interval عمره ما يبقى 0
+    final safeInterval = span < dayMs ? dayMs : span / 4;
     double maxY = 0;
     for (final v in all) {
       if (v.v > maxY) maxY = v.v;
@@ -92,7 +102,7 @@ class TripleTrendChart extends StatelessWidget {
                   sideTitles: SideTitles(
                     showTitles: true,
                     reservedSize: 28,
-                    interval: (maxX - minX) / 4,
+                    interval: safeInterval,
                     getTitlesWidget: (v, meta) {
                       final d = DateTime.fromMillisecondsSinceEpoch(v.toInt());
                       final mm = d.month.toString().padLeft(2, '0');

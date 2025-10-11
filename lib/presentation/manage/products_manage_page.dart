@@ -1,11 +1,15 @@
 import 'package:awesome_drawer_bar/awesome_drawer_bar.dart';
+import 'package:cloud_firestore/cloud_firestore.dart' show FirebaseFirestore;
 import 'package:elfouad_admin/presentation/inventory/providers.dart';
+import 'package:elfouad_admin/presentation/manage/product_edit_sheet.dart'
+    show ProductEditSheet;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
+import 'package:flutter_riverpod/legacy.dart' show StateProvider;
 import 'state/drinks_provider.dart';
-import 'widgets/drink_edit_sheet.dart';
-import '../inventory/widgets/edit_inventory_sheet.dart';
+// NOTE: لم نعد نستخدم الشيتات القديمة هنا
+// import 'widgets/drink_edit_sheet.dart';
+// import '../inventory/widgets/edit_inventory_sheet.dart';
 import 'widgets/add_item_sheet.dart';
 
 enum ManageTab { all, drinks, singles, blends }
@@ -16,7 +20,6 @@ class ManagePage extends ConsumerWidget {
   const ManagePage({super.key});
   static const route = '/manage';
   static const kDarkBrown = Color(0xFF543824);
-  static const kBeige = Color(0xFFC49A6C);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -61,16 +64,10 @@ class ManagePage extends ConsumerWidget {
                       IconButton(
                         icon: const Icon(Icons.edit),
                         tooltip: 'تعديل',
-                        onPressed: () => showModalBottomSheet(
-                          context: context,
-                          isScrollControlled: true,
-                          useSafeArea: true,
-                          shape: const RoundedRectangleBorder(
-                            borderRadius: BorderRadius.vertical(
-                              top: Radius.circular(18),
-                            ),
-                          ),
-                          builder: (_) => DrinkEditSheet(drink: d),
+                        onPressed: () => _openProductEditor(
+                          context,
+                          collection: 'drinks',
+                          id: d.id, // عندك d.id مستخدم أصلًا في الحذف
                         ),
                       ),
                       IconButton(
@@ -87,7 +84,8 @@ class ManagePage extends ConsumerWidget {
       ),
     );
 
-    Widget invList(List<InventoryRow> rows) => Column(
+    // خليه يعرف الـ collection علشان يفتح الـ ProductEditSheet
+    Widget invList(String collection, List<InventoryRow> rows) => Column(
       children: rows
           .map(
             (r) => Card(
@@ -121,16 +119,12 @@ class ManagePage extends ConsumerWidget {
                     IconButton(
                       icon: const Icon(Icons.edit),
                       tooltip: 'تعديل',
-                      onPressed: () => showModalBottomSheet(
-                        context: context,
-                        isScrollControlled: true,
-                        useSafeArea: true,
-                        shape: const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.vertical(
-                            top: Radius.circular(18),
-                          ),
-                        ),
-                        builder: (_) => EditInventorySheet(row: r),
+                      onPressed: () => _openProductEditor(
+                        context,
+                        collection: collection,
+                        // InventoryRow عندك غالبًا فيه ref/id.
+                        // استخدم اللي موجود:
+                        id: r.id ?? r.ref.id,
                       ),
                     ),
                     IconButton(
@@ -149,11 +143,14 @@ class ManagePage extends ConsumerWidget {
     Widget singles0() => singles.when(
       loading: _loading,
       error: _err('الأصناف المنفردة'),
-      data: invList,
+      data: (rows) => invList('singles', rows),
     );
 
-    Widget blends0() =>
-        blends.when(loading: _loading, error: _err('التوليفات'), data: invList);
+    Widget blends0() => blends.when(
+      loading: _loading,
+      error: _err('التوليفات'),
+      data: (rows) => invList('blends', rows),
+    );
 
     Widget content() {
       switch (tab) {
@@ -205,7 +202,6 @@ class ManagePage extends ConsumerWidget {
               centerTitle: true,
               elevation: 8,
               backgroundColor: Colors.transparent,
-
               flexibleSpace: Container(
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
@@ -234,7 +230,6 @@ class ManagePage extends ConsumerWidget {
             content(),
           ],
         ),
-        // floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
         floatingActionButton: FloatingActionButton.extended(
           onPressed: () => showModalBottomSheet(
             context: context,
@@ -253,45 +248,6 @@ class ManagePage extends ConsumerWidget {
       ),
     );
   }
-
-  // PreferredSizeWidget _bar(BuildContext context) {
-  //   return PreferredSize(
-  //     preferredSize: const Size.fromHeight(72),
-  //     child: ClipRRect(
-  //       borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
-  //       child: AppBar(
-  //         leading: Builder(
-  //           builder: (ctx) => IconButton(
-  //             icon: const Icon(Icons.menu, color: Colors.white),
-  //             onPressed: () => Scaffold.of(ctx).openDrawer(),
-  //             tooltip: 'القائمة',
-  //           ),
-  //         ),
-  //         title: const Text(
-  //           'التعديلات',
-  //           style: TextStyle(
-  //             fontWeight: FontWeight.w800,
-  //             fontSize: 22,
-  //             color: Colors.white,
-  //           ),
-  //         ),
-  //         centerTitle: true,
-  //         backgroundColor: Colors.transparent,
-  //         elevation: 4,
-  //         iconTheme: const IconThemeData(color: Colors.white),
-  //         flexibleSpace: const DecoratedBox(
-  //           decoration: BoxDecoration(
-  //             gradient: LinearGradient(
-  //               begin: Alignment.topLeft,
-  //               end: Alignment.bottomRight,
-  //               colors: [Color(0xFF543824), Color(0xFFC49A6C)],
-  //             ),
-  //           ),
-  //         ),
-  //       ),
-  //     ),
-  //   );
-  // }
 
   Widget _loading() => const Padding(
     padding: EdgeInsets.symmetric(vertical: 16),
@@ -417,4 +373,27 @@ class _Section extends StatelessWidget {
       ),
     );
   }
+}
+
+// يفتح المحرّر العام بعد ما يجيب الـ Doc
+Future<void> _openProductEditor(
+  BuildContext context, {
+  required String collection, // 'drinks' | 'singles' | 'blends'
+  required String id,
+}) async {
+  final snap = await FirebaseFirestore.instance
+      .collection(collection)
+      .doc(id)
+      .get();
+
+  if (!context.mounted) return;
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+    ),
+    builder: (_) => ProductEditSheet(collection: collection, snap: snap),
+  );
 }

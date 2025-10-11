@@ -27,17 +27,31 @@ DateTime createdAtUtcOf(Map<String, dynamic> m) {
   return (ts?.toUtc()) ?? DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
 }
 
-/// وقت العرض للتايل: للأجل المُرحّل نخليه 05:00 من اليوم الحالي
+const int kOpShiftHours = 4;
+
+// مثال استخدام:
+String opDayKeyFromLocal(DateTime t) => (() {
+  final s = t.subtract(Duration(hours: kOpShiftHours));
+  return '${s.year}-${s.month.toString().padLeft(2, '0')}-${s.day.toString().padLeft(2, '0')}';
+})();
+
+DateTime opRolloverLocalToday() {
+  final now = DateTime.now();
+  return DateTime(now.year, now.month, now.day, kOpShiftHours);
+}
+
 DateTime viewCreatedAtFor(Map<String, dynamic> m) {
-  final now = DateTime.now().toUtc();
-  final nowKey = dayKeyFromUtc(now);
-  final orig = createdAtUtcOf(m);
-  final origKey = dayKeyFromUtc(orig);
-  if (isUnpaidDeferredMap(m) && origKey.compareTo(nowKey) < 0) {
-    // 05:00 UTC لليوم الحالي (عرض فقط)
-    return DateTime.utc(now.year, now.month, now.day, 5, 0);
-  }
-  return orig;
+  final origUtc = createdAtUtcOf(m); // UTC من الداتابيز
+  if (!isUnpaidDeferredMap(m)) return origUtc;
+
+  final anchorLocal = opAnchorForNowLocal(); // 04:00 اليوم/أمس (محلي)
+  final anchorUtc = anchorLocal.toUtc();
+
+  final origKey = opDayKeyFromLocal(origUtc.toLocal());
+  final anchorKey = opDayKeyFromLocal(anchorLocal);
+
+  // نرحّل فقط لو الأقدم من المرساة
+  return (origKey.compareTo(anchorKey) < 0) ? anchorUtc : origUtc;
 }
 
 /// لو العملية فيها تاريخ أصلي محفوظ
@@ -52,15 +66,21 @@ Map<String, List<QueryDocumentSnapshot<Map<String, dynamic>>>>
 groupByOperationalDayWithRollover(
   List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
 ) {
-  final nowKey = dayKeyFromUtc(DateTime.now().toUtc());
+  final anchorLocal = opAnchorForNowLocal();
+  final anchorKey = opDayKeyFromLocal(anchorLocal);
+
   final byDay = <String, List<QueryDocumentSnapshot<Map<String, dynamic>>>>{};
+
   for (final d in docs) {
     final m = d.data();
-    final orig = createdAtUtcOf(m);
-    String key = dayKeyFromUtc(orig);
-    if (isUnpaidDeferredMap(m) && key.compareTo(nowKey) < 0) {
-      key = nowKey; // نرحّل لليوم الحالي
+    final origLocal = createdAtUtcOf(m).toLocal();
+    String key = opDayKeyFromLocal(origLocal);
+
+    if (isUnpaidDeferredMap(m) && key.compareTo(anchorKey) < 0) {
+      // نرحّل للأيام الأقدم إلى مفتاح المرساة الحالي
+      key = anchorKey;
     }
+
     byDay.putIfAbsent(key, () => []).add(d);
   }
   return byDay;
@@ -401,27 +421,24 @@ bool inRangeLocal(DateTime t, DateTimeRange r) {
   return !t.isBefore(r.start) && t.isBefore(r.end);
 }
 
-/// نفس فكرة الوقت الفعّال اللي عندك (الأجل غير المدفوع → اليوم 05:00)
-DateTime effectiveTimeLocal(Map<String, dynamic> m) {
-  final createdAt =
-      (m['created_at'] as Timestamp?)?.toDate() ??
-      DateTime.fromMillisecondsSinceEpoch(0);
-  final settledAtRaw = m['settled_at'];
-  final settledAt = settledAtRaw == null
-      ? null
-      : (settledAtRaw is Timestamp
-            ? settledAtRaw.toDate()
-            : DateTime.tryParse('$settledAtRaw'));
-  final isDeferred = (m['is_deferred'] ?? m['is_credit'] ?? false) == true;
-  final paid = (m['paid'] ?? (!isDeferred)) == true;
+// يبدأ يوم التشغيل 04:00
 
-  if (isDeferred && !paid) {
-    final now = DateTime.now();
-    return DateTime(now.year, now.month, now.day, 5);
-  }
-  if (paid && settledAt != null) return settledAt;
-  return createdAt;
+/// 04:00 من يوم التاريخ الممرر
+DateTime opStartOfDayLocal(DateTime d) =>
+    DateTime(d.year, d.month, d.day, kOpShiftHours);
+
+/// المرساة الحالية ليوم التشغيل:
+/// - قبل 04:00 → ترجع 04:00 بتاعة "أمس"
+/// - 04:00 فما بعد → ترجع 04:00 بتاعة "اليوم"
+DateTime opAnchorForNowLocal() {
+  final now = DateTime.now();
+  final startToday = opStartOfDayLocal(now);
+  return now.isBefore(startToday)
+      ? startToday.subtract(const Duration(days: 1))
+      : startToday;
 }
+
+/// مفتاح يوم التشغيل (shift -4h)
 
 /// استخراج مكونات الصفقة كسطور بسيطة
 List<Map<String, dynamic>> _extractLines(
@@ -460,6 +477,34 @@ List<Map<String, dynamic>> _extractLines(
     });
   }
   return rows;
+}
+
+DateTime effectiveTimeLocal(Map<String, dynamic> m) {
+  final createdAt =
+      (m['created_at'] as Timestamp?)?.toDate() ??
+      DateTime.fromMillisecondsSinceEpoch(0);
+
+  final settledAtRaw = m['settled_at'];
+  final settledAt = settledAtRaw == null
+      ? null
+      : (settledAtRaw is Timestamp
+            ? settledAtRaw.toDate()
+            : DateTime.tryParse('$settledAtRaw'));
+
+  final isDeferred = (m['is_deferred'] ?? m['is_credit'] ?? false) == true;
+  final paid = (m['paid'] ?? (!isDeferred)) == true;
+
+  if (isDeferred && !paid) {
+    // مرساة اليوم التشغيلي الحالية (04:00 اليوم أو 04:00 أمس حسب الوقت)
+    final anchor = opAnchorForNowLocal();
+    // لا ننقل إلا لو يوم العملية أقدم من المرساة
+    final origKey = opDayKeyFromLocal(createdAt);
+    final anchorKey = opDayKeyFromLocal(anchor);
+    return (origKey.compareTo(anchorKey) < 0) ? anchor : createdAt;
+  }
+
+  if (paid && settledAt != null) return settledAt;
+  return createdAt;
 }
 
 /// التصدير: بيحفظ مباشرة في Downloads ويعرض SnackBar فيه المسار + زر فتح.
@@ -598,10 +643,6 @@ DateTime _asLocal(dynamic v) {
 /// - غير ذلك ⇒ created_at
 
 /// مفتاح يوم التشغيل: Shift -4h → yyyy-MM-dd
-String opDayKeyFromLocal(DateTime t) {
-  final s = t.subtract(const Duration(hours: 4));
-  return '${s.year}-${s.month.toString().padLeft(2, '0')}-${s.day.toString().padLeft(2, '0')}';
-}
 
 /// مجموع المبيعات لليوم مع استبعاد الضيافة + الأجل غير المدفوع
 double sumPaidNonComplOnly(
@@ -640,4 +681,192 @@ double sumFieldPaidOnly(
     }
   }
   return s;
+}
+// ========= ADD THIS TO utils/sales_history_utils.dart =========
+
+double _dNum(dynamic v) {
+  if (v is num) return v.toDouble();
+  return double.tryParse(v?.toString() ?? '0') ?? 0.0;
+}
+
+/// اجمع جرامات البيع لكل صنف (singles/blends) من مستند عملية بيع
+Map<DocumentReference<Map<String, dynamic>>, double> stockOpsFromSale(
+  Map<String, dynamic> m,
+) {
+  final db = FirebaseFirestore.instance;
+  final out = <DocumentReference<Map<String, dynamic>>, double>{};
+  void acc(String? coll, dynamic id, double grams) {
+    if (coll == null || id == null || grams <= 0) return;
+    final ref = db.collection(coll).doc(id.toString());
+    out[ref] = (out[ref] ?? 0.0) + grams;
+  }
+
+  List<Map<String, dynamic>> asList(dynamic v) {
+    if (v is List) {
+      return v
+          .map(
+            (e) => (e is Map) ? e.cast<String, dynamic>() : <String, dynamic>{},
+          )
+          .toList();
+    }
+    return const [];
+  }
+
+  final type = '${m['type'] ?? ''}';
+  if (type == 'single' || type == 'ready_blend') {
+    final coll = type == 'single' ? 'singles' : 'blends';
+    final id = m['single_id'] ?? m['blend_id'] ?? m['item_id'] ?? m['id'];
+    acc(coll, id, _dNum(m['grams']));
+    return out;
+  }
+
+  if (type == 'custom_blend') {
+    final rows = [
+      ...asList(m['components']),
+      ...asList(m['items']),
+      ...asList(m['lines']),
+    ];
+    for (final r in rows) {
+      final grams = _dNum(r['grams']);
+      String? coll = (r['coll'] ?? r['collection'])?.toString();
+      dynamic id = r['id'] ?? r['item_id'] ?? r['single_id'] ?? r['blend_id'];
+      coll ??= (r['blend_id'] != null)
+          ? 'blends'
+          : (r['single_id'] != null)
+          ? 'singles'
+          : null;
+      acc(coll, id, grams);
+    }
+  }
+
+  return out; // drinks/unknown => مفيش تأثير
+}
+
+/// تعديل بيع: طبّق فرق المخزون Old vs New داخل Transaction + حدّث المستند.
+Future<void> applyStockDeltaOnSaleEdit(
+  DocumentReference<Map<String, dynamic>> saleRef,
+  Map<String, dynamic> updates,
+) async {
+  await FirebaseFirestore.instance.runTransaction((tx) async {
+    final oldSnap = await tx.get(saleRef);
+    final oldSale = oldSnap.data() ?? <String, dynamic>{};
+    final newSale = {...oldSale, ...updates};
+
+    final oldOps = stockOpsFromSale(oldSale);
+    final newOps = stockOpsFromSale(newSale);
+
+    final refs = {...oldOps.keys, ...newOps.keys};
+    for (final r in refs) {
+      final oldG = oldOps[r] ?? 0.0;
+      final newG = newOps[r] ?? 0.0;
+      final diff = newG - oldG; // + يعني هننقص من المخزون، - يعني هنزود
+      if (diff.abs() > 0.0001) {
+        tx.update(r, {'stock': FieldValue.increment(-diff)});
+      }
+    }
+
+    tx.update(saleRef, updates);
+  });
+}
+
+/// حذف بيع: رجّع المخزون (إضافة راجعة) داخل Transaction ثم احذف المستند.
+Future<void> deleteSaleWithStockRollback(
+  DocumentReference<Map<String, dynamic>> saleRef,
+) async {
+  await FirebaseFirestore.instance.runTransaction((tx) async {
+    final snap = await tx.get(saleRef);
+    if (!snap.exists) return;
+    final m = snap.data() ?? <String, dynamic>{};
+    final ops = stockOpsFromSale(m);
+
+    // رجوع كامل الجرامات التي كانت متباعة
+    for (final r in ops.keys) {
+      final grams = ops[r] ?? 0.0;
+      if (grams > 0) {
+        tx.update(r, {'stock': FieldValue.increment(grams)});
+      }
+    }
+
+    tx.delete(saleRef);
+  });
+}
+
+/// جلب معدّلات التحويج (سعر/تكلفة للكيلو) من الداتا.
+/// الأولوية: Doc الصنف (singles/blends) -> إعدادات عامة settings/spice -> 0
+
+/// يرجّع (pricePerKg, costPerKg) للتحويج.
+/// الأولويات: Doc الصنف -> settings/spice -> fallback حسب الاسم.
+/// NOTE: لو cost مش موجود هندي fallback = 50% من السعر كرقم تقريبي (عدّله لو عندك سياسة مختلفة).
+Future<({double pricePerKg, double costPerKg})> fetchSpiceRatesForSale(
+  Map<String, dynamic> sale,
+) async {
+  final db = FirebaseFirestore.instance;
+  double price = 0.0;
+  double cost = 0.0;
+
+  // حدّد المجموعة والـ id
+  String type = '${sale['type'] ?? ''}';
+  String? coll;
+  String? id =
+      sale['single_id']?.toString() ??
+      sale['blend_id']?.toString() ??
+      sale['item_id']?.toString() ??
+      sale['id']?.toString();
+
+  if (type == 'single' ||
+      sale.containsKey('single_id') ||
+      sale['lines_type'] == 'single') {
+    coll = 'singles';
+  } else if (type == 'ready_blend' ||
+      sale.containsKey('blend_id') ||
+      sale['lines_type'] == 'ready_blend') {
+    coll = 'blends';
+  }
+
+  // (1) جرّب من Doc الصنف
+  if (coll != null && id != null) {
+    try {
+      final doc = await db.collection(coll).doc(id).get();
+      final m = doc.data();
+      if (m != null) {
+        price = _numOf(m['spicePricePerKg'] ?? m['spice_price_per_kg']);
+        cost = _numOf(m['spiceCostPerKg'] ?? m['spice_cost_per_kg']);
+      }
+    } catch (_) {}
+  }
+
+  // (2) جرّب من settings/spice
+  if (price <= 0 || cost <= 0) {
+    try {
+      final s = await db.collection('settings').doc('spice').get();
+      final m = s.data();
+      if (m != null) {
+        if (price <= 0) price = _numOf(m['price_per_kg']);
+        if (cost <= 0) cost = _numOf(m['cost_per_kg']);
+      }
+    } catch (_) {}
+  }
+
+  // (3) Fallback حسب الاسم
+  if (price <= 0) {
+    final name =
+        (sale['name'] ??
+                sale['single_name'] ??
+                sale['blend_name'] ??
+                sale['product_name'] ??
+                '')
+            .toString();
+    price = spiceRatePerKgForSingle(name);
+  }
+
+  // تكلفة احتياطية: لو لسه 0 خلّيها 50% من السعر (غيّره لو عايز)
+  if (cost <= 0 && price > 0) cost = (price * 0.5);
+
+  return (pricePerKg: price, costPerKg: cost);
+}
+
+// Helper: parse number safely
+double _numOf(dynamic v) {
+  if (v is num) return v.toDouble();
+  return double.tryParse(v?.toString() ?? '0') ?? 0.0;
 }

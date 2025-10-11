@@ -39,3 +39,29 @@ DateTime opDayKeyUtc(DateTime createdUtc) {
   final shifted = createdUtc.subtract(const Duration(hours: 4));
   return DateTime.utc(shifted.year, shifted.month, shifted.day, 4);
 }
+// op_day.dart  (تحديث شامل)
+
+/// كل الحسابات على 4 صباحًا محلي
+const int kOpShiftHours = 4;
+
+/// بداية يوم التشغيل لوقت محلي معيّن
+DateTime opStartLocal(DateTime t) {
+  final base = DateTime(t.year, t.month, t.day, kOpShiftHours);
+  // لو الوقت قبل 4 ص → اليوم يبدأ أمس 4 ص
+  return t.isBefore(base) ? base.subtract(const Duration(days: 1)) : base;
+}
+
+/// نهاية يوم التشغيل (start + 1 يوم)
+DateTime opEndLocal(DateTime t) => opStartLocal(t).add(const Duration(days: 1));
+
+/// مفتاح يوم التشغيل (yyyy-MM-dd) بالاعتماد على 4 ص
+String opDayKeyFromLocal(DateTime t) {
+  final s = t.subtract(const Duration(hours: kOpShiftHours));
+  return '${s.year}-${s.month.toString().padLeft(2, '0')}-${s.day.toString().padLeft(2, '0')}';
+}
+
+/// حافة الترحيل لليوم الحالي (اليوم 4 ص)
+DateTime opRolloverLocalToday() {
+  final now = DateTime.now();
+  return DateTime(now.year, now.month, now.day, kOpShiftHours);
+}

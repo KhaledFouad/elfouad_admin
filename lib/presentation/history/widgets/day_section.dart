@@ -23,45 +23,51 @@ class DaySection extends StatelessWidget {
     required this.onEdit,
     required this.onDelete,
   });
+  bool get wantKeepAlive => true;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              day,
-              textAlign: TextAlign.start,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              alignment: WrapAlignment.start,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                _pill(Icons.attach_money, 'مبيعات', sumPrice),
-                _pill(Icons.factory, 'تكلفة', sumCost),
-                _pill(Icons.trending_up, 'ربح', sumProfit),
-                _pill(Icons.local_cafe, 'مشروبات', cups.toDouble()),
-                _pill(Icons.scale, 'جرام بن', grams),
-              ],
-            ),
-            const Divider(height: 18),
-            ...entries.map(
-              (e) => SaleTile(
-                doc: e,
-                onEdit: () => onEdit(e),
-                onDelete: () => onDelete(e),
+    return RepaintBoundary(
+      child: Card(
+        elevation: 3,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                day,
+                textAlign: TextAlign.start,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                alignment: WrapAlignment.start,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  _pill(Icons.attach_money, 'مبيعات', sumPrice),
+                  _pill(Icons.factory, 'تكلفة', sumCost),
+                  _pill(Icons.trending_up, 'ربح', sumProfit),
+                  _pill(Icons.local_cafe, 'مشروبات', cups.toDouble()),
+                  _pill(Icons.scale, 'جرام بن', grams),
+                ],
+              ),
+              const Divider(height: 18),
+              ...entries.map(
+                (e) => SaleTile(
+                  doc: e,
+                  onEdit: () => onEdit(e),
+                  onDelete: () => onDelete(e),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

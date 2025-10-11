@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../utils/sales_history_utils.dart';
-import '../utils/sales_history_utils.dart' show applyStockDeltaOnSaleEdit;
+import '../utils/sales_history_utils.dart' show fetchSpiceRatesForSale;
 
 class SaleEditSheet extends StatefulWidget {
   final DocumentSnapshot<Map<String, dynamic>> snap;
@@ -120,7 +120,8 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
     return out;
   }
 
-  Future<void> applyStockDeltaOnThisEdit(Map<String, dynamic> updates) async {
+  /// ترانزاكشن: عدّل المخزون بالفرق + اكتب التعديلات مرة واحدة
+  Future<void> _applyStockDeltaAndUpdate(Map<String, dynamic> updates) async {
     final saleRef = widget.snap.reference;
     await FirebaseFirestore.instance.runTransaction((tx) async {
       final oldSnap = await tx.get(saleRef);
@@ -136,7 +137,6 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
         final oldG = oldOps[r] ?? 0.0;
         final newG = newOps[r] ?? 0.0;
         final diff = newG - oldG;
-
         if (diff.abs() > 0.0001) {
           tx.update(r, {'stock': FieldValue.increment(-diff)});
         }
@@ -178,8 +178,6 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
 
       final linesAmount = numOf(_m['lines_amount']);
       final totalGramsSaved = numOf(_m['total_grams']);
-      double spiceRatePerKg = numOf(_m['spice_rate_per_kg']);
-      final spiceAmountSaved = numOf(_m['spice_amount']);
 
       final uiTotalPrice =
           double.tryParse(_totalPriceCtrl.text.replaceAll(',', '.')) ??
@@ -191,16 +189,18 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
           double.tryParse(_gramsCtrl.text.replaceAll(',', '.')) ??
           numOf(_m['grams']);
 
-      // احفظ الملاحظة
-      updates['note'] = _noteCtrl.text.trim();
-
-      // الحالة: هل العملية أجل وغير مدفوعة؟
+      // هل أجل غير مدفوع؟
       final bool isDeferred = (_m['is_deferred'] ?? false) == true;
       final bool paid = (_m['paid'] ?? (!isDeferred)) == true;
-      final bool freezeProfit = isDeferred && !paid;
+      bool freezeProfit = isDeferred && !paid;
 
+      // دايمًا خزّن الملاحظة و أعلام الحالة
+      updates['note'] = _noteCtrl.text.trim();
       updates['is_complimentary'] = isCompl;
-      if (_m.containsKey('is_spiced')) updates['is_spiced'] = isSpiced;
+      updates['is_spiced'] = isSpiced;
+
+      // لو ضيافة → نجبر الربح على صفر حتى لو العملية أجل غير مدفوع
+      if (isCompl) freezeProfit = false;
 
       final bool manualOverride =
           !isCompl && (uiTotalPrice - oldTotalPrice).abs() > 0.0005;
@@ -213,10 +213,15 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
         updates['quantity'] = qty;
 
         if (isCompl) {
+          // ضيافة: مبيعات=0، ربح=0، تكلفة الخامات فقط
           newTotalPrice = 0.0;
           newTotalCost = unitCost * qty;
           updates['unit_price'] = 0.0;
           updates['unit_cost'] = unitCost;
+
+          updates['total_price'] = newTotalPrice;
+          updates['total_cost'] = newTotalCost;
+          updates['profit_total'] = 0.0; // إجبار الربح صفر
         } else if (manualOverride) {
           final u = (qty > 0) ? (uiTotalPrice / qty) : uiTotalPrice;
           updates['unit_price'] = u;
@@ -225,115 +230,132 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
           newTotalCost = unitCost * qty;
           updates['manual_override'] = true;
           updates['discount_amount'] = (listPrice * qty) - newTotalPrice;
+
+          updates['total_price'] = newTotalPrice;
+          updates['total_cost'] = newTotalCost;
+          if (!freezeProfit)
+            updates['profit_total'] = newTotalPrice - newTotalCost;
         } else {
           final unitPriceEffective = unitPrice > 0 ? unitPrice : listPrice;
-          updates['unit_price'] = isCompl ? 0.0 : unitPriceEffective;
+          updates['unit_price'] = unitPriceEffective;
           updates['unit_cost'] = unitCost;
-          newTotalPrice = isCompl ? 0.0 : unitPriceEffective * qty;
+          newTotalPrice = unitPriceEffective * qty;
           newTotalCost = unitCost * qty;
-        }
 
-        updates['total_price'] = newTotalPrice;
-        updates['total_cost'] = newTotalCost;
-        if (!freezeProfit) {
-          updates['profit_total'] = newTotalPrice - newTotalCost;
+          updates['total_price'] = newTotalPrice;
+          updates['total_cost'] = newTotalCost;
+          if (!freezeProfit)
+            updates['profit_total'] = newTotalPrice - newTotalCost;
         }
       } else if (type == 'single' || type == 'ready_blend') {
         grams = grams > 0 ? grams : numOf(_m['grams']);
         updates['grams'] = grams;
 
-        newTotalCost = costPerG * grams;
+        // أساس البن
+        final beansAmount = pricePerG * grams;
+        final beansCost = costPerG * grams;
+
+        // معدلات التحويج + Fallback
+        final saleForRates = {..._m, 'type': type};
+        final rates = await fetchSpiceRatesForSale(saleForRates);
+        double spicePricePerKg = rates.pricePerKg;
+        double spiceCostPerKg = rates.costPerKg;
+        if (spicePricePerKg <= 0) {
+          final name =
+              (_m['name'] ?? _m['single_name'] ?? _m['blend_name'] ?? '')
+                  .toString();
+          spicePricePerKg = (type == 'single')
+              ? spiceRatePerKgForSingle(name)
+              : 40.0;
+        }
+        if (spiceCostPerKg < 0) spiceCostPerKg = 0.0;
+
+        double spiceAmount = 0.0;
+        double spiceCostAmount = 0.0;
 
         if (isCompl) {
+          // ضيافة: صفر مبيعات/ربح، صِفر تحويج، تكلفة = تكلفة البن فقط
           newTotalPrice = 0.0;
-          updates['beans_amount'] = 0.0;
-          if (_m.containsKey('spice_amount')) {
-            updates['spice_amount'] = 0.0;
-            updates['spice_rate_per_kg'] = 0.0;
-          }
-        } else if (manualOverride) {
-          double spiceAmount = spiceAmountSaved;
-          if (_m.containsKey('is_spiced')) {
-            if (isSpiced) {
-              if (spiceRatePerKg <= 0) {
-                if (type == 'single') {
-                  final name = (_m['name'] ?? '').toString();
-                  spiceRatePerKg = spiceRatePerKgForSingle(name);
-                } else {
-                  spiceRatePerKg = 40.0;
-                }
-              }
-              spiceAmount = (grams / 1000.0) * spiceRatePerKg;
-            } else {
-              spiceAmount = 0.0;
-              spiceRatePerKg = 0.0;
-            }
-            updates['spice_rate_per_kg'] = spiceRatePerKg;
-            updates['spice_amount'] = spiceAmount;
-          }
+          newTotalCost = beansCost;
 
-          final beansAmount = (uiTotalPrice - spiceAmount).clamp(
+          updates['beans_amount'] = 0.0;
+          updates['spice_rate_per_kg'] = 0.0;
+          updates['spice_cost_per_kg'] = 0.0;
+          updates['spice_amount'] = 0.0;
+          updates['spice_cost_amount'] = 0.0;
+
+          updates['total_price'] = newTotalPrice;
+          updates['total_cost'] = newTotalCost;
+          updates['profit_total'] = 0.0; // إجبار الربح صفر
+        } else if (manualOverride) {
+          if (isSpiced) {
+            spiceAmount = (grams / 1000.0) * spicePricePerKg;
+            spiceCostAmount = (grams / 1000.0) * spiceCostPerKg;
+          }
+          final beansAmountFromUi = (uiTotalPrice - spiceAmount).clamp(
             0.0,
             double.infinity,
           );
-          updates['beans_amount'] = beansAmount;
-
           newTotalPrice = uiTotalPrice;
-          final autoPrice =
-              (pricePerG * grams) +
-              (isSpiced ? ((grams / 1000.0) * spiceRatePerKg) : 0.0);
+          newTotalCost = beansCost + spiceCostAmount;
+
+          updates['beans_amount'] = beansAmountFromUi;
+          updates['spice_rate_per_kg'] = isSpiced ? spicePricePerKg : 0.0;
+          updates['spice_cost_per_kg'] = isSpiced ? spiceCostPerKg : 0.0;
+          updates['spice_amount'] = spiceAmount;
+          updates['spice_cost_amount'] = spiceCostAmount;
+
+          final autoPrice = beansAmount + (isSpiced ? spiceAmount : 0.0);
           updates['manual_override'] = true;
           updates['discount_amount'] = (autoPrice - newTotalPrice);
+
+          updates['total_price'] = newTotalPrice;
+          updates['total_cost'] = newTotalCost;
+          if (!freezeProfit)
+            updates['profit_total'] = newTotalPrice - newTotalCost;
         } else {
-          final beansAmount = pricePerG * grams;
-          double spiceAmount = 0.0;
-          if (_m.containsKey('is_spiced')) {
-            if (isSpiced) {
-              if (spiceRatePerKg <= 0) {
-                if (type == 'single') {
-                  final name = (_m['name'] ?? '').toString();
-                  spiceRatePerKg = spiceRatePerKgForSingle(name);
-                } else {
-                  spiceRatePerKg = 40.0;
-                }
-              }
-              spiceAmount = (grams / 1000.0) * spiceRatePerKg;
-            } else {
-              spiceRatePerKg = 0.0;
-            }
-            updates['spice_rate_per_kg'] = spiceRatePerKg;
-            updates['spice_amount'] = spiceAmount;
+          if (isSpiced) {
+            spiceAmount = (grams / 1000.0) * spicePricePerKg;
+            spiceCostAmount = (grams / 1000.0) * spiceCostPerKg;
           }
-          updates['beans_amount'] = beansAmount;
+
           newTotalPrice = beansAmount + spiceAmount;
+          newTotalCost = beansCost + spiceCostAmount;
+
+          updates['beans_amount'] = beansAmount;
+          updates['spice_rate_per_kg'] = isSpiced ? spicePricePerKg : 0.0;
+          updates['spice_cost_per_kg'] = isSpiced ? spiceCostPerKg : 0.0;
+          updates['spice_amount'] = spiceAmount;
+          updates['spice_cost_amount'] = spiceCostAmount;
+
+          updates['total_price'] = newTotalPrice;
+          updates['total_cost'] = newTotalCost;
+          if (!freezeProfit)
+            updates['profit_total'] = newTotalPrice - newTotalCost;
         }
 
+        // ثوابت مرجعية
         updates['price_per_kg'] = pricePerKg;
         updates['price_per_g'] = pricePerG;
         updates['cost_per_kg'] = costPerKg;
         updates['cost_per_g'] = costPerG;
-
-        updates['total_price'] = newTotalPrice;
-        updates['total_cost'] = newTotalCost;
-        if (!freezeProfit) {
-          updates['profit_total'] = newTotalPrice - newTotalCost;
-        }
       } else if (type == 'custom_blend') {
         final gramsAll = totalGramsSaved > 0
             ? totalGramsSaved
             : numOf(_m['total_grams']);
 
-        double spiceAmount = spiceAmountSaved;
-        if (_m.containsKey('is_spiced')) {
-          if (isSpiced) {
-            spiceRatePerKg = spiceRatePerKg > 0 ? spiceRatePerKg : 50.0;
-            spiceAmount = (gramsAll / 1000.0) * spiceRatePerKg;
-          } else {
-            spiceRatePerKg = 0.0;
-            spiceAmount = 0.0;
-          }
+        double spiceAmount = 0.0;
+        if (isSpiced && !isCompl) {
+          final rates = await fetchSpiceRatesForSale({..._m, 'type': type});
+          final spiceRatePerKg = (rates.pricePerKg > 0)
+              ? rates.pricePerKg
+              : 50.0;
+          spiceAmount = (gramsAll / 1000.0) * spiceRatePerKg;
           updates['spice_rate_per_kg'] = spiceRatePerKg;
           updates['spice_amount'] = spiceAmount;
+        } else {
+          updates['spice_rate_per_kg'] = 0.0;
+          updates['spice_amount'] = 0.0;
         }
 
         final autoPrice = linesAmount + spiceAmount;
@@ -347,27 +369,36 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
           newTotalPrice = autoPrice;
         }
 
-        newTotalCost = numOf(_m['total_cost']);
+        newTotalCost = numOf(_m['total_cost']); // محفوظ مسبقًا
+
         updates['total_price'] = newTotalPrice;
         updates['total_cost'] = newTotalCost;
-        if (!freezeProfit) {
+        if (isCompl) {
+          updates['profit_total'] = 0.0; // إجبار الربح صفر
+        } else if (!freezeProfit) {
           updates['profit_total'] = newTotalPrice - newTotalCost;
         }
       } else {
-        newTotalPrice = isCompl ? 0.0 : uiTotalPrice;
-        updates['total_price'] = newTotalPrice;
-        updates['total_cost'] = oldTotalCost;
-        if (!freezeProfit) {
-          updates['profit_total'] = newTotalPrice - oldTotalCost;
+        // unknown
+        if (isCompl) {
+          newTotalPrice = 0.0;
+          newTotalCost = oldTotalCost;
+          updates['total_price'] = newTotalPrice;
+          updates['total_cost'] = newTotalCost;
+          updates['profit_total'] = 0.0; // إجبار الربح صفر
+        } else {
+          newTotalPrice = uiTotalPrice;
+          newTotalCost = oldTotalCost;
+          updates['total_price'] = newTotalPrice;
+          updates['total_cost'] = newTotalCost;
+          if (!freezeProfit)
+            updates['profit_total'] = newTotalPrice - newTotalCost;
+          updates['manual_override'] = true;
         }
-        updates['manual_override'] = true;
       }
 
-      // اكتب التعديلات
-      await widget.snap.reference.update(updates);
-
-      // سوّي المخزون بناءً على الفرق
-      await applyStockDeltaOnThisEdit(updates);
+      // كتابة كل شيء + تسوية المخزون داخل ترانزاكشن واحدة
+      await _applyStockDeltaAndUpdate(updates);
 
       if (!mounted) return;
       Navigator.pop(context);
@@ -499,7 +530,9 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
                   title: const Text('ضيافة'),
                 ),
 
-                if (_m.containsKey('is_spiced'))
+                if (_type == 'single' ||
+                    _type == 'ready_blend' ||
+                    _m.containsKey('is_spiced'))
                   CheckboxListTile(
                     value: _isSpiced,
                     onChanged: (v) => setState(() => _isSpiced = v ?? false),
@@ -510,7 +543,7 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
 
                 const SizedBox(height: 8),
                 const Text(
-                  'ملاحظة: تعديل عملية البيع لا يغيّر ربح الأجل غير المدفوع.',
+                  'ملاحظة: ربح الأجل غير المدفوع لا يتغير حتى التسوية.',
                   style: TextStyle(fontSize: 12, color: Colors.black54),
                 ),
                 const SizedBox(height: 12),

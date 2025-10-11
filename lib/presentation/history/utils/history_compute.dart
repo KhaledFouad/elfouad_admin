@@ -1,7 +1,3 @@
-// history_compute.dart (ملف مساعد جديد)
-import 'package:flutter/foundation.dart'; // compute
-import 'package:cloud_firestore/cloud_firestore.dart';
-
 class DayBucket {
   DayBucket({
     required this.dayKey,
@@ -53,8 +49,8 @@ Future<List<DayBucket>> buildBuckets(Map payload) async {
 
     final DateTime effectiveTime = (isDeferred && !paid)
         ? DateTime.now().copyWith(
-            hour: 5,
-            minute: 0,
+            hour: 3,
+            minute: 59,
             second: 0,
             millisecond: 0,
             microsecond: 0,

@@ -47,6 +47,8 @@ class SaleTile extends StatelessWidget {
         .trim();
 
     return ExpansionTile(
+      key: PageStorageKey(doc.id),
+      maintainState: true, // يثبت الفتح/الغلق أثناء السحب
       tilePadding: const EdgeInsets.symmetric(horizontal: 8),
       leading: CircleAvatar(
         radius: 18,

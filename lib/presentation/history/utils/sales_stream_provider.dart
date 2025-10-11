@@ -37,5 +37,5 @@ final salesQueryProvider = Provider<Query<Map<String, dynamic>>>((ref) {
 /// Stream حيّ للسجل
 final salesStreamProvider = StreamProvider<QuerySnapshot<Map<String, dynamic>>>(
   (ref) =>
-      ref.watch(salesQueryProvider).snapshots(includeMetadataChanges: true),
+      ref.watch(salesQueryProvider).snapshots(includeMetadataChanges: false),
 );

@@ -2,11 +2,9 @@
 import 'package:awesome_drawer_bar/awesome_drawer_bar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:elfouad_admin/presentation/history/utils/history_compute.dart';
-import 'package:elfouad_admin/presentation/history/widgets/filter_and_export_sheet.dart';
 import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'utils/export_sales_csv.dart' show exportSalesCsv;
 import 'utils/date_range_controller.dart'
     show dateRangeProvider, DateRangeController;
 import 'utils/sales_history_utils.dart';
@@ -14,10 +12,7 @@ import 'utils/sales_stream_provider.dart';
 import 'widgets/day_section.dart';
 import 'widgets/sale_edit_sheet.dart';
 import 'utils/sales_stream_provider.dart'
-    show
-        salesStreamProvider,
-        unpaidDeferredStreamProvider,
-        deferredCountStreamProvider;
+    show salesStreamProvider, deferredCountStreamProvider;
 
 class SalesHistoryPage extends ConsumerWidget {
   const SalesHistoryPage({super.key});
@@ -245,72 +240,106 @@ class SalesHistoryPage extends ConsumerWidget {
                         child: Text('لا يوجد عمليات في هذا النطاق'),
                       );
                     }
-                    return ListView.builder(
-                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
-                      itemCount: buckets.length,
-                      itemBuilder: (context, i) {
-                        final b = buckets[i];
-                        final entries = b.ids
-                            .map((id) => byId[id]!)
-                            .toList(growable: false);
-
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: DaySection(
-                            day: b.dayKey,
-                            entries: entries,
-                            sumPrice: b.sumPrice,
-                            sumCost: b.sumCost,
-                            sumProfit: b.sumProfit,
-                            cups: sumDrinkCups(entries),
-                            grams: sumBeansGrams(entries),
-                            onEdit: (doc) => showModalBottomSheet(
-                              context: context,
-                              isScrollControlled: true,
-                              useSafeArea: true,
-                              shape: const RoundedRectangleBorder(
-                                borderRadius: BorderRadius.vertical(
-                                  top: Radius.circular(16),
-                                ),
-                              ),
-                              builder: (_) => SaleEditSheet(snap: doc),
-                            ),
-                            onDelete: (doc) async {
-                              final ok = await showDialog<bool>(
-                                context: context,
-                                builder: (_) => AlertDialog(
-                                  title: const Text('تأكيد الحذف'),
-                                  content: const Text(
-                                    'هل تريد حذف عملية البيع هذه؟ لا يمكن التراجع.',
-                                  ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () =>
-                                          Navigator.pop(context, false),
-                                      child: const Text('إلغاء'),
-                                    ),
-                                    FilledButton(
-                                      onPressed: () =>
-                                          Navigator.pop(context, true),
-                                      child: const Text('حذف'),
-                                    ),
-                                  ],
-                                ),
-                              );
-                              if (ok == true) {
-                                await doc.reference.delete();
-                                if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('تم حذف عملية البيع'),
-                                    ),
-                                  );
-                                }
-                              }
-                            },
-                          ),
+                    return RefreshIndicator.adaptive(
+                      onRefresh: () async {
+                        // إجبار إعادة الاشتراك في الستريم
+                        ref.invalidate(salesStreamProvider);
+                        // مهلة خفيفة عشان يرجع الاشتراك يشتغل
+                        await Future<void>.delayed(
+                          const Duration(milliseconds: 300),
                         );
                       },
+                      child: ListView.builder(
+                        physics: const AlwaysScrollableScrollPhysics(
+                          parent: BouncingScrollPhysics(),
+                        ),
+                        cacheExtent: 800,
+                        padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+                        itemCount: buckets.length,
+                        itemBuilder: (context, i) {
+                          final b = buckets[i];
+                          final entries =
+                              <QueryDocumentSnapshot<Map<String, dynamic>>>[
+                                for (final id in b.ids)
+                                  if (byId[id] != null) byId[id]!,
+                              ];
+
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: DaySection(
+                              day: b.dayKey,
+                              entries: entries,
+                              sumPrice: b.sumPrice,
+                              sumCost: b.sumCost,
+                              sumProfit: b.sumProfit,
+                              cups: sumDrinkCups(entries),
+                              grams: sumBeansGrams(entries),
+                              onEdit: (doc) => showModalBottomSheet(
+                                context: context,
+                                isScrollControlled: true,
+                                useSafeArea: true,
+                                shape: const RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.vertical(
+                                    top: Radius.circular(16),
+                                  ),
+                                ),
+                                builder: (_) => SaleEditSheet(snap: doc),
+                              ),
+                              onDelete: (doc) async {
+                                final ok = await showDialog<bool>(
+                                  context: context,
+                                  builder: (_) => AlertDialog(
+                                    title: const Text('تأكيد الحذف'),
+                                    content: const Text(
+                                      'هل تريد حذف عملية البيع؟ سيتم تعديل المخزون تلقائيًا.',
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.pop(context, false),
+                                        child: const Text('إلغاء'),
+                                      ),
+                                      FilledButton(
+                                        onPressed: () =>
+                                            Navigator.pop(context, true),
+                                        child: const Text('حذف'),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                                if (ok == true) {
+                                  try {
+                                    await deleteSaleWithStockRollback(
+                                      doc.reference,
+                                    );
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'تم الحذف وتمت تسوية المخزون',
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                  } catch (e) {
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text('تعذر الحذف: $e'),
+                                        ),
+                                      );
+                                    }
+                                  }
+                                }
+                              },
+                            ),
+                          );
+                        },
+                      ),
                     );
                   },
                 );
@@ -319,4 +348,11 @@ class SalesHistoryPage extends ConsumerWidget {
       ),
     );
   }
+}
+
+Future<void> _forceRefresh(WidgetRef ref) async {
+  // خفّف: متعملش q.get(...).
+  ref.invalidate(salesStreamProvider);
+  ref.invalidate(deferredCountStreamProvider);
+  await Future<void>.delayed(const Duration(milliseconds: 150));
 }
