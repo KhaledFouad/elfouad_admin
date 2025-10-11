@@ -45,6 +45,19 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.13.1  # أو آخر إصدار
+
+flutter_launcher_icons:
+  android: true
+  image_path: assets/icon.png                 # اللوجو الأساسي
+  adaptive_icon_background: "#FFFFFF"         # خلفية للأيقونة المتكيّفة (اختياري لكن مُستحسن)
+  adaptive_icon_foreground: assets/icon.png   # ممكن نفس الصورة لو مش عامل layers
+  # adaptive_icon_monochrome: assets/icon-mono.png   # اختياري لأندرويد 13+
 
 flutter:
   uses-material-design: true
+
+  # To add assets to your application, add an assets section, like this:
+  assets:
+    - assets/
+
