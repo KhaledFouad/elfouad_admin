@@ -2,6 +2,7 @@ import 'package:elfouad_admin/presentation/expenses/expenses_page.dart';
 import 'package:elfouad_admin/presentation/grind/grind_page.dart';
 import 'package:elfouad_admin/presentation/home/drawer_menu.dart';
 import 'package:elfouad_admin/presentation/manage/products_manage_page.dart';
+import 'package:elfouad_admin/presentation/recipes/recipes_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:awesome_drawer_bar/awesome_drawer_bar.dart';
@@ -26,6 +27,7 @@ class AppShell extends ConsumerWidget {
       ManagePage(),
       ExpensesPage(),
       GrindPage(),
+      RecipesPage(),
     ];
 
     return Directionality(

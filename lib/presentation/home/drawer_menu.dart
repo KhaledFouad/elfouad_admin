@@ -52,6 +52,12 @@ class SideMenu extends ConsumerWidget {
                 onTap: () => _go(context, ref, AppTab.edits),
               ),
               _MenuItem(
+                icon: Icons.edit_note_outlined,
+                label: 'تحضير التوليفات',
+                selected: selected == AppTab.recipes,
+                onTap: () => _go(context, ref, AppTab.recipes),
+              ),
+              _MenuItem(
                 icon: Icons.account_balance_wallet_outlined,
                 label: 'المصروفات',
                 selected: selected == AppTab.expenses,

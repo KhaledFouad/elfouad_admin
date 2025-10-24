@@ -1,5 +1,6 @@
 import 'package:awesome_drawer_bar/awesome_drawer_bar.dart';
 import 'package:elfouad_admin/presentation/home/drawer_menu.dart';
+import 'package:elfouad_admin/presentation/recipes/recipes_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'nav_state.dart';
@@ -27,6 +28,8 @@ class NavShell extends ConsumerWidget {
           return const ExpensesScreen(); // مصروفات
         case AppTab.grind:
           return const GrindPage(); // طحن
+        case AppTab.recipes:
+          return const RecipesPage(); // توليفات
       }
     }
 
@@ -78,6 +81,12 @@ class ExpensesScreen extends StatelessWidget {
 
 class GrindPage extends StatelessWidget {
   const GrindPage({super.key});
+  @override
+  Widget build(_) => const SizedBox();
+}
+
+class RecipesPage extends StatelessWidget {
+  const RecipesPage({super.key});
   @override
   Widget build(_) => const SizedBox();
 }

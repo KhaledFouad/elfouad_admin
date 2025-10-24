@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
-enum AppTab { history, stats, inventory, edits, expenses, grind }
+enum AppTab { history, stats, inventory, edits, expenses, grind, recipes }
 
 final navIndexProvider = StateProvider<AppTab>((ref) => AppTab.history);
 
