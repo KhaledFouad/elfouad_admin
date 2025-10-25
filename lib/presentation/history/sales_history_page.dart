@@ -349,10 +349,3 @@ class SalesHistoryPage extends ConsumerWidget {
     );
   }
 }
-
-Future<void> _forceRefresh(WidgetRef ref) async {
-  // خفّف: متعملش q.get(...).
-  ref.invalidate(salesStreamProvider);
-  ref.invalidate(deferredCountStreamProvider);
-  await Future<void>.delayed(const Duration(milliseconds: 150));
-}

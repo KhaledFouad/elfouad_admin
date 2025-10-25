@@ -1,3 +1,4 @@
+// استبدل الملف كله بهذا:
 class RecipeComponent {
   final String coll; // 'singles' | 'blends'
   final String itemId;
@@ -37,15 +38,22 @@ class RecipeComponent {
     'percent': percent,
   };
 
+  static double _num(dynamic v) {
+    if (v is num) return v.toDouble();
+    if (v is String) {
+      final s = v.replaceAll(',', '.').trim();
+      return double.tryParse(s) ?? 0.0;
+    }
+    return 0.0;
+  }
+
   static RecipeComponent fromMap(Map<String, dynamic> m) {
-    double _n(v) =>
-        (v is num) ? v.toDouble() : double.tryParse('${v ?? 0}') ?? 0.0;
     return RecipeComponent(
       coll: (m['coll'] ?? '').toString(),
       itemId: (m['item_id'] ?? m['id'] ?? '').toString(),
       name: (m['name'] ?? '').toString(),
       variant: (m['variant'] ?? '').toString(),
-      percent: _n(m['percent']),
+      percent: _num(m['percent']),
     );
   }
 }

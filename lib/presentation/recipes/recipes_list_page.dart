@@ -1,240 +1,71 @@
+import 'package:awesome_drawer_bar/awesome_drawer_bar.dart'
+    show AwesomeDrawerBar;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
-import 'package:elfouad_admin/presentation/recipes/recipes_component.dart';
-import 'package:elfouad_admin/presentation/recipes/recipe_edit_sheet.dart';
-import 'package:elfouad_admin/presentation/recipes/recipe_prepare_sheet.dart';
-// لو أنت مستعمل اسم مختلف لورقة التحضير (prepare_batch_sheet) بدّل السطر اللي فوق بالاستيراد الصحيح.
+import 'recipe_edit_sheet.dart';
+import 'recipe_prepare_sheet.dart';
+import 'recipes_component.dart';
 
-class RecipesListPage extends StatelessWidget {
+class RecipesListPage extends StatefulWidget {
   const RecipesListPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: FirebaseFirestore.instance
-            .collection('recipes')
-            .orderBy('created_at', descending: true)
-            .snapshots(),
-        builder: (ctx, snap) {
-          if (snap.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snap.hasError) {
-            return Center(child: Text('تعذّر التحميل: ${snap.error}'));
-          }
-          final docs = snap.data?.docs ?? const [];
-
-          if (docs.isEmpty) {
-            return const Center(
-              child: Padding(
-                padding: EdgeInsets.all(24),
-                child: Text('لا توجد توليفات بعد'),
-              ),
-            );
-          }
-
-          return ListView.separated(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
-            itemBuilder: (ctx, i) => _RecipeTile(doc: docs[i]),
-            separatorBuilder: (_, __) => const SizedBox(height: 10),
-            itemCount: docs.length,
-          );
-        },
-      ),
-    );
-  }
+  State<RecipesListPage> createState() => _RecipesListPageState();
 }
 
-class _RecipeTile extends StatelessWidget {
-  final QueryDocumentSnapshot<Map<String, dynamic>> doc;
-  const _RecipeTile({required this.doc});
+class _RecipesListPageState extends State<RecipesListPage> {
+  Stream<QuerySnapshot<Map<String, dynamic>>> _recipesStream() {
+    return FirebaseFirestore.instance
+        .collection('recipes')
+        .orderBy('name')
+        .snapshots();
+  }
 
-  List<RecipeComponent> _readComponents(Map<String, dynamic> m) {
-    final rows = (m['components'] as List? ?? const [])
+  // يحسب سعر/تكلفة الكيلو بالتجميع المرجّح حسب نسب المكونات
+  Future<_PriceCost> _calcPriceCost(Map<String, dynamic> recipe) async {
+    final fs = FirebaseFirestore.instance;
+    final comps = ((recipe['components'] ?? []) as List)
         .map(
           (e) => (e is Map) ? e.cast<String, dynamic>() : <String, dynamic>{},
         )
         .map(RecipeComponent.fromMap)
         .toList();
-    return rows;
+
+    double pricePerKg = 0.0;
+    double costPerKg = 0.0;
+
+    for (final c in comps) {
+      final snap = await fs.collection(c.coll).doc(c.itemId).get();
+      final m = snap.data() ?? {};
+
+      // في داتا قديمة ممكن يبقى اسم الحقول مختلف
+      double _numOf(keys) {
+        for (final k in keys) {
+          final v = m[k];
+          if (v is num) return v.toDouble();
+        }
+        return 0.0;
+      }
+
+      final sell = _numOf(['sellPricePerKg', 'sellPerKg', 'sell_price_per_kg']);
+      final cost = _numOf(['costPricePerKg', 'costPerKg', 'cost_price_per_kg']);
+
+      pricePerKg += sell * (c.percent / 100.0);
+      costPerKg += cost * (c.percent / 100.0);
+    }
+    return _PriceCost(pricePerKg: pricePerKg, costPerKg: costPerKg);
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final m = doc.data();
-    final name = (m['name'] ?? '').toString();
-    final comps = _readComponents(m);
+  int _sumPercent(List<RecipeComponent> cs) =>
+      cs.fold(0, (s, c) => s + (c.percent.isNaN ? 0 : c.percent.round()));
 
-    return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      elevation: 0.5,
-      child: Theme(
-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-        child: ExpansionTile(
-          tilePadding: const EdgeInsetsDirectional.only(start: 16, end: 12),
-          childrenPadding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 12),
-          title: Text(
-            name.isEmpty ? 'توليفة بدون اسم' : name,
-            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
-          ),
-          subtitle: Text('اضغط لعرض التفاصيل'),
-          trailing: const Icon(Icons.expand_more),
-
-          // Expanded content:
-          children: [
-            // المكونات بالنِّسَب
-            Align(
-              alignment: Alignment.centerRight,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: comps.map((c) {
-                  final title = c.variant.isEmpty
-                      ? c.name
-                      : '${c.name} — ${c.variant}';
-                  return Padding(
-                    padding: const EdgeInsetsDirectional.only(bottom: 4),
-                    child: Text('• $title  (%${c.percent.toStringAsFixed(1)})'),
-                  );
-                }).toList(),
-              ),
-            ),
-            const SizedBox(height: 8),
-
-            // حساب سعر/تكلفة/كجم
-            FutureBuilder<_RecipeMetrics>(
-              future: _RecipeMetrics.compute(comps),
-              builder: (ctx, ss) {
-                if (ss.connectionState == ConnectionState.waiting) {
-                  return const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8),
-                    child: LinearProgressIndicator(minHeight: 2),
-                  );
-                }
-                if (ss.hasError) {
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 6),
-                    child: Text('تعذر الحساب: ${ss.error}'),
-                  );
-                }
-                final m = ss.data!;
-                return Wrap(
-                  spacing: 16,
-                  runSpacing: 8,
-                  children: [
-                    _pill(Icons.sell, 'سعر/كجم', m.pricePerKg),
-                    _pill(Icons.factory, 'تكلفة/كجم', m.costPerKg),
-                    _pill(
-                      Icons.trending_up,
-                      'ربح/كجم',
-                      (m.pricePerKg - m.costPerKg),
-                    ),
-                  ],
-                );
-              },
-            ),
-
-            const SizedBox(height: 10),
-            // أزرار الإجراءات
-            Row(
-              children: [
-                Expanded(
-                  child: FilledButton.icon(
-                    icon: const Icon(Icons.scale),
-                    label: const Text('تحضير التوليفة'),
-                    onPressed: () => _openPrepare(context, doc.id, comps),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                IconButton.filledTonal(
-                  tooltip: 'تعديل',
-                  icon: const Icon(Icons.edit),
-                  onPressed: () => _openEdit(context, doc.id),
-                ),
-                const SizedBox(width: 6),
-                IconButton.filledTonal(
-                  tooltip: 'حذف',
-                  icon: const Icon(Icons.delete_outline),
-                  onPressed: () => _confirmDelete(context, doc.id, name),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  static Widget _pill(IconData i, String k, double v) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.brown.shade50,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.brown.shade100),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(i, size: 16),
-          const SizedBox(width: 6),
-          Text(
-            '$k: ',
-            style: const TextStyle(
-              fontWeight: FontWeight.w600,
-              color: Colors.black54,
-            ),
-          ),
-          Text(
-            v.toStringAsFixed(2),
-            style: const TextStyle(fontWeight: FontWeight.w800),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _openEdit(BuildContext context, String id) async {
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
-      ),
-      builder: (_) => RecipeEditSheet(recipeId: id),
-    );
-  }
-
-  Future<void> _openPrepare(
-    BuildContext context,
-    String id,
-    List<RecipeComponent> comps,
-  ) async {
-    // بدّل الـ widget لو كان اسم ورقة التحضير عندك مختلف
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
-      ),
-      builder: (_) => RecipePrepareSheet(recipeId: id),
-    );
-  }
-
-  Future<void> _confirmDelete(
-    BuildContext context,
-    String id,
-    String name,
-  ) async {
+  Future<void> _deleteRecipe(String id, String displayName) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('حذف التوليفة'),
-        content: Text('هل تريد حذف "${name.isEmpty ? 'توليفة' : name}"؟'),
+        content: Text('هل تريد حذف "$displayName"؟ لا يمكن التراجع.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -247,40 +78,254 @@ class _RecipeTile extends StatelessWidget {
         ],
       ),
     );
-    if (ok == true) {
-      await FirebaseFirestore.instance.collection('recipes').doc(id).delete();
-      if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('تم الحذف')));
-      }
-    }
+    if (ok != true) return;
+
+    await FirebaseFirestore.instance.collection('recipes').doc(id).delete();
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('تم حذف "$displayName"')));
+  }
+
+  void _openEdit([String? recipeId]) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: RecipeEditSheet(recipeId: recipeId),
+      ),
+    );
+  }
+
+  void _openPrepare(String recipeId) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: RecipePrepareSheet(recipeId: recipeId),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+
+      child: Scaffold(
+        appBar: PreferredSize(
+          preferredSize: const Size.fromHeight(64),
+          child: ClipRRect(
+            borderRadius: const BorderRadius.vertical(
+              bottom: Radius.circular(24),
+            ),
+            child: AppBar(
+              automaticallyImplyLeading: false,
+              leading: IconButton(
+                icon: const Icon(Icons.menu, color: Colors.white),
+                onPressed: () => AwesomeDrawerBar.of(context)?.toggle(),
+              ),
+              title: const Text(
+                " تحضير التوليفات",
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 35,
+                  color: Colors.white,
+                ),
+              ),
+              centerTitle: true,
+              elevation: 8,
+              backgroundColor: Colors.transparent,
+
+              flexibleSpace: Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFF5D4037), Color(0xFF795548)],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        floatingActionButton: FloatingActionButton.extended(
+          onPressed: () => _openEdit(),
+          icon: const Icon(Icons.add),
+          label: const Text('توليفة جديدة'),
+        ),
+        body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: _recipesStream(),
+          builder: (context, s) {
+            if (s.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (s.hasError) {
+              return Center(child: Text('تعذر التحميل: ${s.error}'));
+            }
+
+            final docs = s.data?.docs ?? [];
+            if (docs.isEmpty) {
+              return const Center(child: Text('لا توجد توليفات بعد.'));
+            }
+
+            return ListView.separated(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 100),
+              itemCount: docs.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              itemBuilder: (_, i) {
+                final d = docs[i];
+                final m = d.data();
+                final name = (m['name'] ?? '').toString();
+                final variant = (m['variant'] ?? '').toString();
+                final comps = ((m['components'] ?? []) as List)
+                    .map(
+                      (e) => (e is Map)
+                          ? e.cast<String, dynamic>()
+                          : <String, dynamic>{},
+                    )
+                    .map(RecipeComponent.fromMap)
+                    .toList();
+                final sum = _sumPercent(comps);
+
+                final title = variant.isEmpty ? name : '$name — $variant';
+
+                return Card(
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    side: BorderSide(color: Colors.brown.shade100),
+                  ),
+                  child: ExpansionTile(
+                    tilePadding: const EdgeInsetsDirectional.only(
+                      start: 12,
+                      end: 8,
+                    ),
+                    childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                    title: Text(
+                      title.isEmpty ? 'بدون اسم' : title,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    subtitle: Row(
+                      children: [
+                        const Icon(
+                          Icons.percent,
+                          size: 16,
+                          color: Colors.brown,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'المجموع: $sum% • المكوّنات: ${comps.length}',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: sum == 100 ? Colors.green : Colors.red,
+                          ),
+                        ),
+                      ],
+                    ),
+                    children: [
+                      // تفاصيل المكونات
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 6,
+                          children: comps.map((c) {
+                            final t = c.variant.isEmpty
+                                ? c.name
+                                : '${c.name} — ${c.variant}';
+                            return Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Text('• '),
+                                Text('$t  (%${c.percent.toStringAsFixed(1)})'),
+                              ],
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+
+                      // السعر/التكلفة (FutureBuilder)
+                      FutureBuilder<_PriceCost>(
+                        future: _calcPriceCost(m),
+                        builder: (ctx, ps) {
+                          if (ps.connectionState == ConnectionState.waiting) {
+                            return const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 6),
+                              child: LinearProgressIndicator(minHeight: 2),
+                            );
+                          }
+                          final pc =
+                              ps.data ??
+                              const _PriceCost(pricePerKg: 0, costPerKg: 0);
+                          return Row(
+                            children: [
+                              const Icon(Icons.payments_outlined, size: 18),
+                              const SizedBox(width: 6),
+                              Text(
+                                'سعر/كجم: ${pc.pricePerKg.toStringAsFixed(2)}',
+                              ),
+                              const SizedBox(width: 18),
+                              const Icon(Icons.calculate_outlined, size: 18),
+                              const SizedBox(width: 6),
+                              Text(
+                                'تكلفة/كجم: ${pc.costPerKg.toStringAsFixed(2)}',
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+
+                      const SizedBox(height: 10),
+
+                      // أزرار الإجراءات
+                      Row(
+                        children: [
+                          Expanded(
+                            child: FilledButton.icon(
+                              icon: const Icon(Icons.scale_outlined),
+                              label: const Text('تحضير التوليفة'),
+                              onPressed: () => _openPrepare(d.id),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton.filledTonal(
+                            tooltip: 'تعديل',
+                            icon: const Icon(Icons.edit),
+                            onPressed: () => _openEdit(d.id),
+                          ),
+                          const SizedBox(width: 6),
+                          IconButton.filledTonal(
+                            tooltip: 'حذف',
+                            icon: const Icon(Icons.delete_outline),
+                            onPressed: () => _deleteRecipe(d.id, title),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        ),
+      ),
+    );
   }
 }
 
-/// حساب سريع لسعر/تكلفة/كجم من المخزون حسب النِّسَب
-class _RecipeMetrics {
+class _PriceCost {
   final double pricePerKg;
   final double costPerKg;
-  _RecipeMetrics(this.pricePerKg, this.costPerKg);
-
-  static Future<_RecipeMetrics> compute(List<RecipeComponent> comps) async {
-    double p = 0, c = 0;
-    final fs = FirebaseFirestore.instance;
-
-    // اجمع بالتوازي
-    final futures = comps.map((rc) async {
-      final coll = rc.coll; // 'singles' | 'blends'
-      final snap = await fs.collection(coll).doc(rc.itemId).get();
-      final m = snap.data() ?? const <String, dynamic>{};
-      final sellPerKg = (m['sellPricePerKg'] as num?)?.toDouble() ?? 0.0;
-      final costPerKg = (m['costPricePerKg'] as num?)?.toDouble() ?? 0.0;
-      final w = (rc.percent.isNaN ? 0.0 : rc.percent) / 100.0;
-      p += w * sellPerKg;
-      c += w * costPerKg;
-    }).toList();
-
-    await Future.wait(futures);
-    return _RecipeMetrics(p, c);
-  }
+  const _PriceCost({required this.pricePerKg, required this.costPerKg});
 }

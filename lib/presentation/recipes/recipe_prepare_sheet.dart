@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'recipes_component.dart'; // فيه RecipeComponent
+import 'recipes_component.dart';
 
 class RecipePrepareSheet extends StatefulWidget {
   final String recipeId;
@@ -11,125 +11,245 @@ class RecipePrepareSheet extends StatefulWidget {
 }
 
 class _RecipePrepareSheetState extends State<RecipePrepareSheet> {
-  final _kgCtrl = TextEditingController(text: '1'); // كمية التحضير بالكيلو
-  bool _busy = false;
+  final _kgCtrl = TextEditingController(text: '1');
+
+  bool _busy = false; // يمنع الضغط المزدوج
+  bool _done = false; // حالة نجاح التحضير
+  String? _doneMsg; // رسالة النجاح
+
+  // ✅ تحميل التوليفة مرة واحدة فقط
+  late Future<void> _recipeFuture;
+  String _name = '';
+  String _variant = '';
+  List<RecipeComponent> _comps = const [];
 
   @override
-  void dispose() {
-    _kgCtrl.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    _recipeFuture = _loadRecipeOnce();
   }
 
-  Future<_LoadedRecipe> _load() async {
-    final fs = FirebaseFirestore.instance;
-    final snap = await fs.collection('recipes').doc(widget.recipeId).get();
-    final data = snap.data() ?? {};
-    final name = (data['name'] ?? '').toString();
-    final comps = ((data['components'] ?? []) as List)
+  Future<void> _loadRecipeOnce() async {
+    final snap = await FirebaseFirestore.instance
+        .collection('recipes')
+        .doc(widget.recipeId)
+        .get();
+
+    if (!snap.exists) {
+      throw 'لم يتم العثور على التوليفة';
+    }
+    final m = snap.data() ?? {};
+    _name = (m['name'] ?? '').toString();
+    _variant = (m['variant'] ?? '').toString();
+    _comps = ((m['components'] ?? []) as List)
         .map(
           (e) => (e is Map) ? e.cast<String, dynamic>() : <String, dynamic>{},
         )
         .map(RecipeComponent.fromMap)
         .toList();
 
-    // هات مخزون كل مكوّن علشان نعرف نكفي ولا لأ
-    final withStock = await Future.wait(
-      comps.map((c) async {
-        final itemSnap = await fs.collection(c.coll).doc(c.itemId).get();
-        final m = itemSnap.data() ?? <String, dynamic>{};
-        final stock = (m['stock'] as num?)?.toDouble() ?? 0.0; // جرام
-        final name = (m['name'] ?? c.name).toString();
-        final variant = (m['variant'] ?? c.variant).toString();
-        final sellPerKg = (m['sellPricePerKg'] as num?)?.toDouble() ?? 0.0;
-        final costPerKg = (m['costPricePerKg'] as num?)?.toDouble() ?? 0.0;
-        return _CompState(
-          comp: c,
-          stockG: stock,
-          displayName: variant.isEmpty ? name : '$name — $variant',
-          sellPerKg: sellPerKg,
-          costPerKg: costPerKg,
-        );
-      }),
-    );
-
-    return _LoadedRecipe(name: name, items: withStock);
+    if (_comps.isEmpty) {
+      throw 'لا توجد مكونات في هذه التوليفة';
+    }
   }
 
-  double _parseKg() =>
-      double.tryParse(_kgCtrl.text.replaceAll(',', '.')) ?? 0.0;
+  double _parseKg() {
+    final raw = _kgCtrl.text.trim().replaceAll(',', '.');
+    final d = double.tryParse(raw);
+    return (d == null || d <= 0) ? 1.0 : d;
+  }
+
+  double _numOf(Map<String, dynamic> m, List<String> keys) {
+    for (final k in keys) {
+      final v = m[k];
+      if (v is num) return v.toDouble();
+    }
+    for (final k in keys) {
+      final v = m[k];
+      if (v is String) {
+        final d = double.tryParse(v.replaceAll(',', '.').trim());
+        if (d != null) return d;
+      }
+    }
+    return 0.0;
+  }
+
+  Future<void> _prepare() async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _done = false;
+      _doneMsg = null;
+    });
+
+    try {
+      final totalKg = _parseKg();
+      final totalGrams = (totalKg * 1000).round();
+
+      // ابحث/أنشئ دوك المنتج النهائي في blends بالاسم + النسخة
+      final blendsQuery = await FirebaseFirestore.instance
+          .collection('blends')
+          .where('name', isEqualTo: _name)
+          .where('variant', isEqualTo: _variant)
+          .limit(1)
+          .get();
+
+      final destBlendRef = blendsQuery.docs.isNotEmpty
+          ? blendsQuery.docs.first.reference
+          : FirebaseFirestore.instance.collection('blends').doc();
+
+      await FirebaseFirestore.instance.runTransaction((tx) async {
+        final updates = <DocumentReference<Map<String, dynamic>>, int>{};
+
+        // فحص المخزون أولًا
+        for (final c in _comps) {
+          final grams = ((c.percent / 100.0) * totalGrams).round();
+          final ref = FirebaseFirestore.instance
+              .collection(c.coll)
+              .doc(c.itemId);
+          final snap = await tx.get(ref);
+          if (!snap.exists) throw 'مكوّن غير موجود: ${c.name}';
+          final m = snap.data() ?? {};
+          final currentStock = _numOf(m, [
+            'stock',
+            'stockGrams',
+            'grams',
+            'qty',
+          ]);
+          if (currentStock - grams < -0.0001) {
+            throw 'مخزون غير كافٍ في "${c.name}${c.variant.isEmpty ? '' : ' — ${c.variant}'}": '
+                'متاح ${currentStock.toStringAsFixed(0)} جم';
+          }
+          updates[ref] = grams;
+        }
+
+        // خصم المكونات
+        for (final entry in updates.entries) {
+          final ref = entry.key;
+          final grams = entry.value;
+          final snap = await tx.get(ref);
+          final m = snap.data() ?? {};
+          final currentStock = _numOf(m, [
+            'stock',
+            'stockGrams',
+            'grams',
+            'qty',
+          ]);
+          tx.update(ref, {'stock': currentStock - grams});
+        }
+
+        // زيادة مخزون المنتج النهائي
+        final destSnap = await tx.get(destBlendRef);
+        final destData =
+            destSnap.data() ?? {'name': _name, 'variant': _variant, 'stock': 0};
+        final destStock = _numOf(destData, [
+          'stock',
+          'stockGrams',
+          'grams',
+          'qty',
+        ]);
+        tx.set(destBlendRef, {
+          'name': _name,
+          'variant': _variant,
+          'stock': destStock + totalGrams,
+        }, SetOptions(merge: true));
+
+        // تسجيل العملية
+        final prepRef = FirebaseFirestore.instance
+            .collection('recipe_preps')
+            .doc();
+        tx.set(prepRef, {
+          'recipe_id': widget.recipeId,
+          'name': _name,
+          'variant': _variant,
+          'amount_kg': totalKg,
+          'amount_grams': totalGrams,
+          'created_at': FieldValue.serverTimestamp(),
+          'components': _comps
+              .map(
+                (c) => {
+                  'coll': c.coll,
+                  'item_id': c.itemId,
+                  'name': c.name,
+                  'variant': c.variant,
+                  'percent': c.percent,
+                },
+              )
+              .toList(),
+        });
+      });
+
+      if (!mounted) return;
+      _doneMsg = 'تم تحضير $_name — ${totalKg.toStringAsFixed(2)} كجم';
+      _done = true;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_doneMsg!)));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('فشل التحضير: $e')));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Directionality(
       textDirection: TextDirection.rtl,
-      child: SingleChildScrollView(
-        padding: EdgeInsets.only(
-          left: 16,
-          right: 16,
-          top: 12,
-          bottom: 12 + MediaQuery.of(context).viewInsets.bottom,
-        ),
-        child: FutureBuilder<_LoadedRecipe>(
-          future: _load(),
-          builder: (ctx, s) {
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+        // ✅ Future واحد ثابت – مش بيتغيّر مع كل كتابة
+        child: FutureBuilder<void>(
+          future: _recipeFuture,
+          builder: (context, s) {
             if (s.connectionState == ConnectionState.waiting) {
-              return const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(24),
-                  child: CircularProgressIndicator(),
-                ),
+              return const SizedBox(
+                height: 160,
+                child: Center(child: CircularProgressIndicator()),
               );
             }
             if (s.hasError) {
-              return Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text('تعذّر تحميل التوليفة: ${s.error}'),
+              return SizedBox(
+                height: 160,
+                child: Center(child: Text('تعذر التحميل: ${s.error}')),
               );
             }
-            final r = s.data!;
+
             final kg = _parseKg();
-            final grams = kg * 1000.0;
-
-            // احسب الاحتياج وملخص السعر/التكلفة
-            double needOk = 0;
-            double pricePerKg = 0, costPerKg = 0;
-
-            final needs = r.items.map((it) {
-              final needG = grams * (it.comp.percent / 100.0);
-              final ok = it.stockG + 1e-6 >= needG; // يكفي ولا لأ
-              if (ok) needOk += 1;
-              pricePerKg += (it.sellPerKg) * (it.comp.percent / 100.0);
-              costPerKg += (it.costPerKg) * (it.comp.percent / 100.0);
-              return _NeedRow(item: it, needG: needG, ok: ok);
-            }).toList();
+            final gramsTotal = (kg * 1000).round();
 
             return Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Container(
-                  height: 4,
-                  width: 42,
-                  margin: const EdgeInsets.only(bottom: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.black26,
-                    borderRadius: BorderRadius.circular(100),
-                  ),
-                ),
                 Text(
-                  'تحضير التوليفة',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 18,
-                  ),
+                  'تحضير: $_name',
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  r.name.isEmpty ? 'بدون اسم' : r.name,
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
 
-                // إدخال كمية بالكيلو
+                if (_done && _doneMsg != null) ...[
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      border: Border.all(color: Colors.green.shade200),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.check_circle, color: Colors.green),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text(_doneMsg!)),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
+
                 Row(
                   children: [
                     Expanded(
@@ -144,7 +264,9 @@ class _RecipePrepareSheetState extends State<RecipePrepareSheet> {
                           isDense: true,
                           border: OutlineInputBorder(),
                         ),
-                        onChanged: (_) => setState(() {}),
+                        onChanged: (_) =>
+                            setState(() {}), // مجرد إعادة حساب الجرامات محليًا
+                        enabled: !_busy,
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -154,67 +276,59 @@ class _RecipePrepareSheetState extends State<RecipePrepareSheet> {
                         vertical: 10,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.brown.shade50,
+                        border: Border.all(color: Colors.brown.shade200),
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: Colors.brown.shade100),
+                        color: Colors.brown.shade50,
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('سعر/كجم: ${pricePerKg.toStringAsFixed(2)}'),
-                          Text('تكلفة/كجم: ${costPerKg.toStringAsFixed(2)}'),
-                        ],
-                      ),
+                      child: Text('جم: ${gramsTotal.toStringAsFixed(0)}'),
                     ),
                   ],
                 ),
+                const SizedBox(height: 10),
 
-                const SizedBox(height: 12),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Text(
-                    'المكوّنات المطلوبة:',
-                    style: const TextStyle(fontWeight: FontWeight.w800),
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.brown.shade50.withOpacity(.5),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('المكونات:'),
+                      const SizedBox(height: 6),
+                      ..._comps.map((c) {
+                        final grams = ((kg * 1000) * (c.percent / 100)).round();
+                        return Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('•  '),
+                            Expanded(
+                              child: Text(
+                                '${c.name}${c.variant.isEmpty ? '' : ' — ${c.variant}'}  '
+                                '(${c.percent.toStringAsFixed(1)}%)  ≈ $grams جم',
+                              ),
+                            ),
+                          ],
+                        );
+                      }).toList(),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 12),
 
-                Column(
-                  children: needs.map((n) {
-                    return ListTile(
-                      dense: true,
-                      contentPadding: const EdgeInsetsDirectional.only(
-                        start: 8,
-                        end: 8,
-                      ),
-                      leading: Icon(
-                        n.ok ? Icons.check_circle : Icons.error_outline,
-                        color: n.ok ? Colors.green : Colors.red,
-                        size: 20,
-                      ),
-                      title: Text(
-                        n.item.displayName,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      subtitle: Text(
-                        'يحتاج: ${n.needG.toStringAsFixed(0)} جم  •  متاح: ${n.item.stockG.toStringAsFixed(0)} جم',
-                      ),
-                    );
-                  }).toList(),
-                ),
-
-                const SizedBox(height: 14),
                 Row(
                   children: [
                     Expanded(
                       child: OutlinedButton(
                         onPressed: _busy ? null : () => Navigator.pop(context),
-                        child: const Text('إلغاء'),
+                        child: const Text('إغلاق'),
                       ),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: FilledButton.icon(
+                        onPressed: _busy ? null : _prepare,
                         icon: _busy
                             ? const SizedBox(
                                 width: 18,
@@ -223,11 +337,10 @@ class _RecipePrepareSheetState extends State<RecipePrepareSheet> {
                                   strokeWidth: 2,
                                 ),
                               )
-                            : const Icon(Icons.done),
-                        label: const Text('تأكيد الخصم من المخزون'),
-                        onPressed: (_busy || kg <= 0)
-                            ? null
-                            : () => _confirmDeduct(r, kg),
+                            : const Icon(Icons.scale_outlined),
+                        label: Text(
+                          _done ? 'تحضير دفعة أخرى' : 'تحضير التوليفة',
+                        ),
                       ),
                     ),
                   ],
@@ -239,89 +352,4 @@ class _RecipePrepareSheetState extends State<RecipePrepareSheet> {
       ),
     );
   }
-
-  Future<void> _confirmDeduct(_LoadedRecipe r, double kg) async {
-    final fs = FirebaseFirestore.instance;
-
-    // حوّل الكمية المطلوبة لجرامات صحيحة
-    int needFor(_CompState it) {
-      final need = kg * 1000.0 * (it.comp.percent / 100.0);
-      return need.round(); // أعداد صحيحة لتفادي كسور الفلووت
-    }
-
-    // تحقق مسبق من الكفاية
-    for (final it in r.items) {
-      final need = needFor(it);
-      final cur = it.stockG.round(); // نتعامل كأعداد صحيحة
-      if (cur < need) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('المخزون غير كافٍ لـ "${it.displayName}"')),
-        );
-        return;
-      }
-    }
-
-    setState(() => _busy = true);
-    try {
-      await fs.runTransaction((tx) async {
-        for (final it in r.items) {
-          final ref = fs.collection(it.comp.coll).doc(it.comp.itemId);
-
-          // اقرأ القيمة الحالية داخل الترانزاكشن للتأكد مرة تانية
-          final snap = await tx.get(ref);
-          final cur = ((snap.data()?['stock'] as num?)?.toDouble() ?? 0.0)
-              .round();
-          final need = needFor(it);
-
-          if (cur < need) {
-            throw Exception('نفد المخزون لـ ${it.displayName}');
-          }
-
-          // اطرح بالإنكريمنت بأعداد صحيحة
-          tx.update(ref, {'stock': FieldValue.increment(-need)});
-        }
-      });
-
-      if (!mounted) return;
-      Navigator.pop(context);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('تم الخصم من المخزون')));
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('تعذّر التحضير: $e')));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-}
-
-class _LoadedRecipe {
-  final String name;
-  final List<_CompState> items;
-  _LoadedRecipe({required this.name, required this.items});
-}
-
-class _CompState {
-  final RecipeComponent comp;
-  final double stockG;
-  final String displayName;
-  final double sellPerKg;
-  final double costPerKg;
-  _CompState({
-    required this.comp,
-    required this.stockG,
-    required this.displayName,
-    required this.sellPerKg,
-    required this.costPerKg,
-  });
-}
-
-class _NeedRow {
-  final _CompState item;
-  final double needG;
-  final bool ok;
-  _NeedRow({required this.item, required this.needG, required this.ok});
 }

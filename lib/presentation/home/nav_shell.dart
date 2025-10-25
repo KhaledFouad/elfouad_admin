@@ -1,6 +1,6 @@
 import 'package:awesome_drawer_bar/awesome_drawer_bar.dart';
 import 'package:elfouad_admin/presentation/home/drawer_menu.dart';
-import 'package:elfouad_admin/presentation/recipes/recipes_page.dart';
+import 'package:elfouad_admin/presentation/recipes/recipes_list_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'nav_state.dart';
@@ -29,7 +29,7 @@ class NavShell extends ConsumerWidget {
         case AppTab.grind:
           return const GrindPage(); // طحن
         case AppTab.recipes:
-          return const RecipesPage(); // توليفات
+          return const RecipesListPage(); // توليفات
       }
     }
 

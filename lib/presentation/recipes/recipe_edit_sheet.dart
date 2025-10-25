@@ -4,9 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:elfouad_admin/presentation/inventory/providers.dart';
 
-// لو بتستعمل FirebaseAuth، فعّل ده واستخدم uid في الحفظ
-// import 'package:firebase_auth/firebase_auth.dart';
-
 class RecipeEditSheet extends ConsumerStatefulWidget {
   final String? recipeId; // null => جديد
   const RecipeEditSheet({super.key, this.recipeId});
@@ -17,6 +14,7 @@ class RecipeEditSheet extends ConsumerStatefulWidget {
 
 class _RecipeEditSheetState extends ConsumerState<RecipeEditSheet> {
   final _name = TextEditingController();
+  final _variant = TextEditingController(); // جديد
   bool _busy = false;
 
   List<RecipeComponent> _comps = [];
@@ -27,10 +25,12 @@ class _RecipeEditSheetState extends ConsumerState<RecipeEditSheet> {
     if (widget.recipeId != null) _load();
   }
 
-  // double _n(dynamic v) {
-  //   if (v is num) return v.toDouble();
-  //   return double.tryParse(v?.toString() ?? '0') ?? 0.0;
-  // }
+  @override
+  void dispose() {
+    _name.dispose();
+    _variant.dispose();
+    super.dispose();
+  }
 
   Future<void> _load() async {
     final doc = await FirebaseFirestore.instance
@@ -40,6 +40,7 @@ class _RecipeEditSheetState extends ConsumerState<RecipeEditSheet> {
     final m = doc.data();
     if (m != null) {
       _name.text = (m['name'] ?? '').toString();
+      _variant.text = (m['variant'] ?? '').toString(); // جديد
       _comps = ((m['components'] ?? []) as List)
           .map(
             (e) => (e is Map) ? e.cast<String, dynamic>() : <String, dynamic>{},
@@ -54,54 +55,19 @@ class _RecipeEditSheetState extends ConsumerState<RecipeEditSheet> {
     0,
     (s, c) => s + (c.percent.isNaN ? 0 : c.percent.round()),
   );
-
   int get _remainingInt => (100 - _sumPercentInt);
 
   bool get _validToSave =>
       _name.text.trim().isNotEmpty &&
+      _variant.text.trim().isNotEmpty && // لازم للتحضير
       _comps.isNotEmpty &&
       _sumPercentInt == 100;
 
-  // void _normalizeTo100() {
-  //   final sum = _sumPercent;
-  //   if (sum == 0) return;
-  //   setState(() {
-  //     _comps = _comps
-  //         .map(
-  //           (c) => RecipeComponent(
-  //             coll: c.coll,
-  //             itemId: c.itemId,
-  //             name: c.name,
-  //             variant: c.variant,
-  //             percent: (c.percent / sum) * 100.0,
-  //           ),
-  //         )
-  //         .toList();
-  //   });
-  // }
-
-  // void _equalSplit() {
-  //   if (_comps.isEmpty) return;
-  //   final p = 100.0 / _comps.length;
-  //   setState(() {
-  //     _comps = _comps
-  //         .map(
-  //           (c) => RecipeComponent(
-  //             coll: c.coll,
-  //             itemId: c.itemId,
-  //             name: c.name,
-  //             variant: c.variant,
-  //             percent: p,
-  //           ),
-  //         )
-  //         .toList();
-  //   });
-  // }
-
   Future<void> _save() async {
+    if (_busy) return;
     if (!_validToSave) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('اكمل البيانات (الاسم + 100%)')),
+        const SnackBar(content: Text('أكمل البيانات: الاسم + التحميص + 100%')),
       );
       return;
     }
@@ -109,15 +75,11 @@ class _RecipeEditSheetState extends ConsumerState<RecipeEditSheet> {
     setState(() => _busy = true);
     try {
       final now = FieldValue.serverTimestamp();
-
-      // لو عندك Auth فعّل السطر ده وخانة الـ uid تحت في payload + rules
-      // final uid = FirebaseAuth.instance.currentUser?.uid;
-
       final payload = {
         'name': _name.text.trim(),
+        'variant': _variant.text.trim(), // جديد
         'components': _comps.map((c) => c.toMap()).toList(),
         'updated_at': now,
-        // 'owner_uid': uid, // ← لو فعلت الـ rules المعتمدة على uid
         if (widget.recipeId == null) 'created_at': now,
       };
 
@@ -178,12 +140,12 @@ class _RecipeEditSheetState extends ConsumerState<RecipeEditSheet> {
                         const Center(child: CircularProgressIndicator()),
                     error: (e, _) => Center(child: Text('تعذر التحميل: $e')),
                     data: (rows) {
-                      final q = search.text.trim();
+                      final q = search.text.trim().toLowerCase();
                       final filtered = q.isEmpty
                           ? rows
                           : rows.where((r) {
                               final t = '${r.name} ${r.variant}'.toLowerCase();
-                              return t.contains(q.toLowerCase());
+                              return t.contains(q);
                             }).toList();
                       if (filtered.isEmpty) {
                         return const Center(child: Text('لا نتائج'));
@@ -203,7 +165,6 @@ class _RecipeEditSheetState extends ConsumerState<RecipeEditSheet> {
                               spacing: 8,
                               children: [
                                 Text('مخزون: ${r.stockG.toStringAsFixed(0)}جم'),
-                                // عرض سعر/كجم (في موديلك اسمه sellPerKg)
                                 Text(
                                   'سعر/كجم: ${r.sellPerKg.toStringAsFixed(2)}',
                                 ),
@@ -274,15 +235,37 @@ class _RecipeEditSheetState extends ConsumerState<RecipeEditSheet> {
           ),
           const SizedBox(height: 12),
 
-          TextField(
-            controller: _name,
-            textAlign: TextAlign.center,
-            decoration: const InputDecoration(
-              labelText: 'اسم التوليفة',
-              border: OutlineInputBorder(),
-              isDense: true,
-            ),
-            onChanged: (_) => setState(() {}),
+          // الاسم + التحميص
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _name,
+                  textAlign: TextAlign.center,
+                  decoration: const InputDecoration(
+                    labelText: 'اسم التوليفة',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 140,
+                child: TextField(
+                  controller: _variant,
+                  textAlign: TextAlign.center,
+                  decoration: const InputDecoration(
+                    labelText: 'التحميص',
+                    hintText: 'مثال: وسط',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+            ],
           ),
 
           const SizedBox(height: 12),
@@ -307,38 +290,27 @@ class _RecipeEditSheetState extends ConsumerState<RecipeEditSheet> {
           ),
 
           const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 8,
-                    horizontal: 12,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.brown.shade50,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.brown.shade100),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.percent),
-                      const SizedBox(width: 8),
-                      Text(
-                        'المجموع: ${_sumPercentInt}%   •   المتبقي: ${_remainingInt}%',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w800,
-                          color: (_sumPercentInt == 100)
-                              ? Colors.green
-                              : Colors.red,
-                        ),
-                      ),
-                    ],
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+            decoration: BoxDecoration(
+              color: Colors.brown.shade50,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.brown.shade100),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.percent),
+                const SizedBox(width: 8),
+                Text(
+                  'المجموع: ${_sumPercentInt}%   •   المتبقي: ${_remainingInt}%',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: (_sumPercentInt == 100) ? Colors.green : Colors.red,
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
-            ],
+              ],
+            ),
           ),
 
           const SizedBox(height: 10),
@@ -414,8 +386,6 @@ class _RecipeEditSheetState extends ConsumerState<RecipeEditSheet> {
                           ),
                         ],
                       ),
-
-                      // Slider + numeric field
                       Row(
                         children: [
                           Expanded(
