@@ -215,22 +215,12 @@ class _RecipesListPageState extends State<RecipesListPage> {
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                    subtitle: Row(
-                      children: [
-                        const Icon(
-                          Icons.percent,
-                          size: 16,
-                          color: Colors.brown,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          'المجموع: $sum% • المكوّنات: ${comps.length}',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            color: sum == 100 ? Colors.green : Colors.red,
-                          ),
-                        ),
-                      ],
+                    subtitle: Text(
+                      'المكوّنات: ${comps.length}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: sum == 100 ? Colors.green : Colors.red,
+                      ),
                     ),
                     children: [
                       // تفاصيل المكونات

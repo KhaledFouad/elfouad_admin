@@ -18,8 +18,11 @@ class AppShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final ctrl = ref.watch(drawerControllerProvider);
-    final tab = ref.watch(navIndexProvider);
+    final tab = ref.watch(
+      navIndexProvider,
+    ); // AppTab enum (from nav_state.dart)
 
+    // Keep as-is for compatibility; not used in lazy build (no design change).
     final screens = const <Widget>[
       SalesHistoryPage(),
       StatsPage(),
@@ -34,7 +37,7 @@ class AppShell extends ConsumerWidget {
       textDirection: TextDirection.rtl,
       child: AwesomeDrawerBar(
         controller: ctrl,
-        menuScreen: SideMenu(), // القائمة,
+        menuScreen: SideMenu(), // القائمة
         mainScreen: _MainStack(current: tab, screens: screens),
         angle: -10,
         backgroundColor: const Color(0xFFF0E7DC),
@@ -48,20 +51,68 @@ class AppShell extends ConsumerWidget {
   }
 }
 
-class _MainStack extends StatelessWidget {
-  final AppTab current;
-  final List<Widget> screens;
+/// ملاحظة:
+/// - بنستخدم AppTab (الموجود عندك) وخلصنا تضارب NavTab.
+/// - بنبني الصفحة الحالية فقط أول مرة، ونكاشيها لباقي الجلسة.
+/// - IndexedStack يحافظ على حالة كل تبّة بعد ما تتفتح مرة.
+class _MainStack extends StatefulWidget {
+  final AppTab current; // ✅ استخدم Enum المشروع الحالي
   const _MainStack({required this.current, required this.screens});
+
+  // موجود للتماثل فقط، لا نستخدمه في البناء الكسول (لا تغيير ديزاين).
+  final List<Widget> screens;
+
+  @override
+  State<_MainStack> createState() => _MainStackState();
+}
+
+class _MainStackState extends State<_MainStack> {
+  // هنكاشي كل تبّة بعد أول زيارة لها
+  late final List<Widget?> _tabs = List<Widget?>.filled(
+    7,
+    null,
+    growable: false,
+  );
+
+  Widget _buildRealPage(int i) {
+    switch (i) {
+      case 0:
+        return const SalesHistoryPage();
+      case 1:
+        return const StatsPage();
+      case 2:
+        return const InventoryPage();
+      case 3:
+        return const ManagePage();
+      case 4:
+        return const ExpensesPage();
+      case 5:
+        return const GrindPage();
+      case 6:
+        return const RecipesListPage();
+      default:
+        return const SizedBox.shrink();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final index = current.index;
+    final index = widget.current.index;
+
+    // ابني التبّة الحالية فقط أول مرة
+    _tabs[index] ??= _buildRealPage(index);
+
+    // باقي التبّات Placeholder لحد أول زيارة
+    final children = List<Widget>.generate(_tabs.length, (i) {
+      return _tabs[i] ?? const SizedBox.shrink();
+    });
+
     return ClipRRect(
       borderRadius: const BorderRadius.only(
         topRight: Radius.circular(24),
         bottomRight: Radius.circular(24),
       ),
-      child: IndexedStack(index: index, children: screens),
+      child: IndexedStack(index: index, children: children),
     );
   }
 }

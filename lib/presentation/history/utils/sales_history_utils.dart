@@ -301,10 +301,8 @@ Future<void> settleDeferredSale(String docId) async {
       'paid': true,
       'due_amount': 0,
       'profit_total': newProfit,
-      // احفظ التاريخ الأصلي لو مش محفوظ
       if (!data.containsKey('original_created_at'))
         'original_created_at': oldCreated,
-      // انقل العملية لليوم الحالي فعليًا
       'created_at': FieldValue.serverTimestamp(),
       'updated_at': FieldValue.serverTimestamp(),
     });

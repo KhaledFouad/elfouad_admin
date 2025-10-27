@@ -86,7 +86,7 @@ class _RecipePrepareSheetState extends State<RecipePrepareSheet> {
       final totalKg = _parseKg();
       final totalGrams = (totalKg * 1000).round();
 
-      // ابحث/أنشئ دوك المنتج النهائي في blends بالاسم + النسخة
+      // ابحث عن توليفة جاهزة بالاسم + التحميص
       final blendsQuery = await FirebaseFirestore.instance
           .collection('blends')
           .where('name', isEqualTo: _name)
@@ -94,51 +94,45 @@ class _RecipePrepareSheetState extends State<RecipePrepareSheet> {
           .limit(1)
           .get();
 
-      final destBlendRef = blendsQuery.docs.isNotEmpty
-          ? blendsQuery.docs.first.reference
-          : FirebaseFirestore.instance.collection('blends').doc();
+      // 🔔 جديد: لو مش موجودة، اعرض تأكيد قبل الإنشاء
+      DocumentReference<Map<String, dynamic>> destBlendRef;
+      if (blendsQuery.docs.isNotEmpty) {
+        // موجودة: هنزوّد مخزونها
+        destBlendRef = blendsQuery.docs.first.reference;
+      } else {
+        final ok = await showDialog<bool>(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: const Text('إنشاء توليفة جديدة؟'),
+            content: Text(
+              'لا توجد توليفة جاهزة باسم "$_name" وتحميص "$_variant".\n'
+              'سيتم إنشاء توليفة جديدة وإضافة ${totalKg.toStringAsFixed(2)} كجم إلى مخزونها.\n'
+              'هل تريد المتابعة؟',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('إلغاء'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('إنشاء'),
+              ),
+            ],
+          ),
+        );
+
+        if (ok != true) {
+          if (mounted) setState(() => _busy = false);
+          return; // المستخدم ألغى
+        }
+        // موافق: هننشئ Doc جديد (هيتكتب فعليًا داخل الترانزاكشن)
+        destBlendRef = FirebaseFirestore.instance.collection('blends').doc();
+      }
 
       await FirebaseFirestore.instance.runTransaction((tx) async {
-        final updates = <DocumentReference<Map<String, dynamic>>, int>{};
-
-        // فحص المخزون أولًا
-        for (final c in _comps) {
-          final grams = ((c.percent / 100.0) * totalGrams).round();
-          final ref = FirebaseFirestore.instance
-              .collection(c.coll)
-              .doc(c.itemId);
-          final snap = await tx.get(ref);
-          if (!snap.exists) throw 'مكوّن غير موجود: ${c.name}';
-          final m = snap.data() ?? {};
-          final currentStock = _numOf(m, [
-            'stock',
-            'stockGrams',
-            'grams',
-            'qty',
-          ]);
-          if (currentStock - grams < -0.0001) {
-            throw 'مخزون غير كافٍ في "${c.name}${c.variant.isEmpty ? '' : ' — ${c.variant}'}": '
-                'متاح ${currentStock.toStringAsFixed(0)} جم';
-          }
-          updates[ref] = grams;
-        }
-
-        // خصم المكونات
-        for (final entry in updates.entries) {
-          final ref = entry.key;
-          final grams = entry.value;
-          final snap = await tx.get(ref);
-          final m = snap.data() ?? {};
-          final currentStock = _numOf(m, [
-            'stock',
-            'stockGrams',
-            'grams',
-            'qty',
-          ]);
-          tx.update(ref, {'stock': currentStock - grams});
-        }
-
-        // زيادة مخزون المنتج النهائي
+        // -------- 1) READS FIRST (no writes here) --------
+        // اقرأ مستند المنتج النهائي (حتى لو مش موجود)
         final destSnap = await tx.get(destBlendRef);
         final destData =
             destSnap.data() ?? {'name': _name, 'variant': _variant, 'stock': 0};
@@ -148,13 +142,50 @@ class _RecipePrepareSheetState extends State<RecipePrepareSheet> {
           'grams',
           'qty',
         ]);
+
+        // اقرأ كل المكونات واحسب الرصيد الجديد واحفظه مؤقتًا
+        final Map<DocumentReference<Map<String, dynamic>>, double> newStocks =
+            {};
+        for (final c in _comps) {
+          final grams = ((c.percent / 100.0) * totalGrams).round();
+          final ref = FirebaseFirestore.instance
+              .collection(c.coll)
+              .doc(c.itemId);
+
+          final snap = await tx.get(ref);
+          if (!snap.exists) throw 'مكوّن غير موجود: ${c.name}';
+          final m = snap.data() ?? {};
+          final currentStock = _numOf(m, [
+            'stock',
+            'stockGrams',
+            'grams',
+            'qty',
+          ]);
+
+          if (currentStock - grams < -0.0001) {
+            throw 'مخزون غير كافٍ في "${c.name}${c.variant.isEmpty ? '' : ' — ${c.variant}'}": '
+                'متاح ${currentStock.toStringAsFixed(0)} جم';
+          }
+          newStocks[ref] = currentStock - grams; // احفظ الرصيد الجديد
+        }
+
+        final double destNewStock = destStock + totalGrams;
+
+        // -------- 2) WRITES AFTER ALL READS --------
+        // خصم المكونات
+        for (final entry in newStocks.entries) {
+          tx.update(entry.key, {'stock': entry.value});
+          // (لا نعمل أي tx.get بعد أول كتابة)
+        }
+
+        // زيادة مخزون التوليفة النهائية (البلند)
         tx.set(destBlendRef, {
           'name': _name,
           'variant': _variant,
-          'stock': destStock + totalGrams,
+          'stock': destNewStock,
         }, SetOptions(merge: true));
 
-        // تسجيل العملية
+        // تسجيل العملية (log)
         final prepRef = FirebaseFirestore.instance
             .collection('recipe_preps')
             .doc();
