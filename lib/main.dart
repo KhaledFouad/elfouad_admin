@@ -1,4 +1,8 @@
+import 'dart:async' show unawaited;
+
 import 'package:elfouad_admin/presentation/home/app_shell.dart';
+import 'package:elfouad_admin/services/archive/auto_archiver.dart.dart'
+    show runAutoArchiveIfNeeded;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -16,7 +20,16 @@ Future<void> _initFirebase() async {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await _initFirebase();
+
   runApp(const ProviderScope(child: MyApp()));
+  unawaited(
+    runAutoArchiveIfNeeded(
+      adminUid: 'system', // أو UID الأدمن لو عندك Auth
+      everyNDays: 5,
+      daysThreshold: 30,
+      batchSize: 200,
+    ),
+  );
 }
 
 ThemeData _lightTheme() {
@@ -38,7 +51,7 @@ ThemeData _lightTheme() {
     // ),
     appBarTheme: const AppBarTheme(
       backgroundColor: Colors.transparent,
-      surfaceTintColor: Colors.transparent, // يمنع التينت الأبيض
+      surfaceTintColor: Colors.transparent,
       foregroundColor: Colors.white,
       iconTheme: IconThemeData(color: Colors.white),
       titleTextStyle: TextStyle(

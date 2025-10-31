@@ -11,40 +11,34 @@ final unpaidDeferredStreamProvider =
           .collection('sales')
           .where('is_deferred', isEqualTo: true)
           .where('paid', isEqualTo: false)
-          .orderBy('created_at', descending: true)
-          .limit(200) // safety cap
-          .snapshots(includeMetadataChanges: false);
+          .snapshots(includeMetadataChanges: true);
     });
 
 /// Count provider using server aggregate (lighter than streaming all docs).
 /// مزوّد العداد المعتمد على Aggregate Query (أخف بكتير من ستريم كامل).
-final deferredUnpaidCountProvider = StreamProvider<int>((ref) {
-  final q = FirebaseFirestore.instance
+///
+final deferredCountStreamProvider = StreamProvider<int>((ref) {
+  return FirebaseFirestore.instance
+      /// Count provider using server aggregate (lighter than streaming all docs).
+      /// مزوّد العداد المعتمد على Aggregate Query (أخف بكتير من ستريم كامل).
       .collection('sales')
       .where('is_deferred', isEqualTo: true)
-      .where('paid', isEqualTo: false);
-
-  // poll every 20s; avoids a permanent stream of all docs
-  return Stream.periodic(const Duration(seconds: 20)).asyncMap((_) async {
-    final agg = await q.count().get(source: AggregateSource.server);
-    return agg.count ?? 0;
-  });
+      .snapshots(includeMetadataChanges: true)
+      .map(
+        (s) => s.docs.where((d) => (d.data()['paid'] ?? false) == false).length,
+      );
 });
 
 /// ========= History stream (bounded) =========
 /// We strictly bound by start & end to avoid wide reads.
 /// بنقيّد الاستعلام ببداية ونهاية المدى لتقليل القراءات.
 const int kHistoryStreamLimit = 500;
-
 final salesQueryProvider = Provider<Query<Map<String, dynamic>>>((ref) {
-  final range = ref.watch(dateRangeProvider) ?? DateRangeController.today();
-  final startUtc = range.start.toUtc();
-  final endUtc = range.end.toUtc();
+  final r = ref.watch(dateRangeProvider) ?? DateRangeController.today();
 
   return FirebaseFirestore.instance
       .collection('sales')
-      .where('created_at', isGreaterThanOrEqualTo: startUtc)
-      .where('created_at', isLessThan: endUtc)
+      .where('created_at', isLessThan: r.end.toUtc())
       .orderBy('created_at', descending: true)
       .limit(kHistoryStreamLimit);
 });
@@ -57,4 +51,3 @@ final salesStreamProvider = StreamProvider<QuerySnapshot<Map<String, dynamic>>>(
 );
 
 /// Backward-compat name to avoid touching old imports.
-final deferredCountStreamProvider = deferredUnpaidCountProvider;
