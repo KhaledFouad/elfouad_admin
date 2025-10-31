@@ -8,7 +8,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 Future<void> runAutoArchiveIfNeeded({
   String? adminUid, // ممكن تسيبه null -> يكتب 'system'
   int everyNDays = 5, // كل كام يوم يشتغل تلقائي
-  int daysThreshold = 30, // الأقدم من كام يوم يتأرشف
+  int daysThreshold = 32, // الأقدم من كام يوم يتأرشف
   int batchSize = 200, // حجم الدُفعة
   Duration pause = const Duration(milliseconds: 120),
 }) async {
