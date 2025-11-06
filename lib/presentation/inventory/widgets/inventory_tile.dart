@@ -63,42 +63,35 @@ class InventoryTile extends StatelessWidget {
   }
 
   factory InventoryTile.extra({Key? key, required ExtraInventoryRow row}) {
-    final chips = <_InventoryChipData>[
-      if (row.category.trim().isNotEmpty)
-        _InventoryChipData(
-          icon: Icons.category,
-          label: 'التصنيف',
-          value: row.category.trim(),
-        ),
-      _InventoryChipData(
-        icon: Icons.inventory_2,
-        label: 'المخزون',
-        value: _formatStock(row.stockUnits, row.unit),
-      ),
-      _InventoryChipData(
-        icon: Icons.attach_money,
-        label: 'سعر البيع',
-        value: _formatNumber(row.priceSell),
-      ),
-      _InventoryChipData(
-        icon: Icons.money_off,
-        label: 'التكلفة',
-        value: _formatNumber(row.costUnit),
-      ),
-      if (!row.active)
-        _InventoryChipData(
-          icon: Icons.pause_circle_filled,
-          label: 'الحالة',
-          value: 'غير مفعّل',
-        ),
-    ];
+    final subtitle = row.category.trim();
+    final title = subtitle.isEmpty ? row.name : '${row.name} — $subtitle';
 
     return InventoryTile._(
       key: key,
-      title: row.name,
-      chips: chips,
-      progressValue: null,
-      progressColor: null,
+      title: title,
+      chips: [
+        _InventoryChipData(
+          icon: Icons.scale,
+          label: 'مخزون',
+          value: _formatStock(row.stockUnits, row.unit),
+        ),
+        _InventoryChipData(
+          icon: Icons.sell,
+          label: 'سعر/وحدة',
+          value: _formatNumber(row.priceSell),
+        ),
+        _InventoryChipData(
+          icon: Icons.money_off,
+          label: 'التكلفة/وحدة',
+          value: _formatNumber(row.costUnit),
+        ),
+        if (!row.active)
+          _InventoryChipData(
+            icon: Icons.pause_circle_filled,
+            label: 'الحالة',
+            value: 'غير مفعّل',
+          ),
+      ],
     );
   }
 
