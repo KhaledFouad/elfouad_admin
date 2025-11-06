@@ -9,7 +9,7 @@ import 'stats_period.dart';
 
 class Kpis {
   final double sales, cost, profit, grams;
-  final int cups;
+  final int cups, units;
   final double expenses;
   const Kpis({
     required this.sales,
@@ -18,6 +18,7 @@ class Kpis {
     required this.cups,
     required this.grams,
     required this.expenses,
+    required this.units,
   });
 }
 
@@ -139,6 +140,7 @@ final statsThirdsPreviewProvider =
       Kpis kpisForRange(DateTime start, DateTime end) {
         double sales = 0, cost = 0, profit = 0, grams = 0;
         int cups = 0;
+        int units = 0;
         for (final m in rawMonth) {
           final ts = _asUtc(m['created_at']);
           if (!_inRangeUtc(ts, start, end)) continue;
@@ -181,6 +183,7 @@ final statsThirdsPreviewProvider =
           cups: cups,
           grams: grams,
           expenses: 0,
+          units: units,
         );
       }
 
@@ -204,20 +207,21 @@ final statsKpisProvider = FutureProvider<Kpis>((ref) async {
 
   double sales = 0, cost = 0, profit = 0, grams = 0;
   int cups = 0;
+  int units = 0;
 
   for (final m in data) {
     final isDeferred = (m['is_deferred'] ?? false) == true;
     final paid = (m['paid'] ?? (!isDeferred)) == true;
-    if (isDeferred && !paid) continue; // استبعاد الأجل غير المدفوع
+    if (isDeferred && !paid) continue;
 
     final type = '${m['type'] ?? ''}';
 
-    // الإجمالي والتكلفة والربح — كلهم من الداتا
+    // إجمالي/تكلفة/ربح
     sales += _d(m['total_price']);
     cost += _d(m['total_cost']);
-    profit += _d(m['profit_total']); // ← الربح من الداتا بيز
+    profit += _d(m['profit_total']);
 
-    // أكواب/جرامات زي ما هي
+    // أكواب / جرامات / وحدات سناكس
     if (type == 'drink') {
       final q = (m['quantity'] is num)
           ? (m['quantity'] as num).toDouble()
@@ -231,6 +235,12 @@ final statsKpisProvider = FutureProvider<Kpis>((ref) async {
       grams += (m['total_grams'] is num)
           ? (m['total_grams'] as num).toDouble()
           : _d(m['total_grams']);
+    } else if (type == 'extra') {
+      // 👈 جديد
+      final q = (m['quantity'] is num)
+          ? (m['quantity'] as num).toDouble()
+          : _d(m['quantity']);
+      units += (q > 0 ? q.round() : 1); // عدد قطع السناكس
     }
   }
 
@@ -246,7 +256,44 @@ final statsKpisProvider = FutureProvider<Kpis>((ref) async {
     cups: cups,
     grams: grams,
     expenses: expensesSum,
+    units: units,
   );
+});
+
+/// ============ Extras (Snacks: معمول/تمر) by name ============
+final extrasByNameProvider = FutureProvider<List<GroupRow>>((ref) async {
+  final data = await ref.watch(statsSalesProvider.future);
+  final map = <String, GroupRow>{};
+
+  for (final m in data) {
+    if (_isUnpaidDeferred(m)) continue;
+
+    final type = '${m['type'] ?? ''}';
+    final isExtra = type == 'extra' || m.containsKey('extra_id');
+    if (!isExtra) continue; // بس السناكس
+
+    // الاسم + الاختيار (لو موجود)
+    final name = ('${m['name'] ?? m['extra_name'] ?? 'سناكس'}').trim();
+    final variant = ('${m['variant'] ?? ''}').trim();
+    final key = variant.isEmpty ? name : '$name - $variant';
+
+    // أرقام العملية
+    final price =
+        (m['total_price'] as num?)?.toDouble() ?? _d(m['total_price']);
+    final cost = (m['total_cost'] as num?)?.toDouble() ?? _d(m['total_cost']);
+    final profit =
+        (m['profit_total'] as num?)?.toDouble() ?? _d(m['profit_total']);
+    final qRaw = (m['quantity'] as num?)?.toDouble() ?? _d(m['quantity']);
+    final pieces = (qRaw > 0 ? qRaw.round() : 1); // عدد القطع
+
+    // تجميع
+    final prev = map[key] ?? const GroupRow(key: '');
+    final base = prev.key.isEmpty ? GroupRow(key: key) : prev;
+    map[key] = base.add(s: price, c: cost, p: profit, cu: pieces);
+  }
+
+  final list = map.values.toList()..sort((a, b) => b.sales.compareTo(a.sales));
+  return list;
 });
 
 /// ============ Drinks/Beans by name ============
@@ -484,6 +531,7 @@ Future<void> refreshStatsProviders(WidgetRef ref) async {
   ref.invalidate(drinksByNameProvider);
   ref.invalidate(beansByNameProvider);
   ref.invalidate(statsTrendsProvider);
+  ref.invalidate(extrasByNameProvider);
   // كمان بنعمل invalidate للكاش الخام الشهري (family)
   ref.invalidate(salesRawForMonthProvider);
   await Future.delayed(const Duration(milliseconds: 1));

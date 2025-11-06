@@ -61,6 +61,7 @@ class InventoryPage extends ConsumerWidget {
               spacing: 8,
               children: [
                 _chip(ref, 'الكل', InventoryTab.all, tab),
+                _chip(ref, "سناكس", InventoryTab.extras, tab),
                 // _chip(ref, 'المشروبات', InventoryTab.drinks, tab),
                 _chip(ref, 'الأصناف المنفردة', InventoryTab.singles, tab),
                 _chip(ref, 'التوليفات', InventoryTab.blends, tab),

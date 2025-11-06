@@ -263,7 +263,6 @@ class SalesHistoryPage extends ConsumerWidget {
                                 for (final id in b.ids)
                                   if (byId[id] != null) byId[id]!,
                               ];
-
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 12),
                             child: DaySection(

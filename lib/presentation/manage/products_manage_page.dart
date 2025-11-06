@@ -11,8 +11,9 @@ import 'state/drinks_provider.dart';
 // import 'widgets/drink_edit_sheet.dart';
 // import '../inventory/widgets/edit_inventory_sheet.dart';
 import 'widgets/add_item_sheet.dart';
+import 'state/extras_provider.dart';
 
-enum ManageTab { all, drinks, singles, blends }
+enum ManageTab { all, drinks, singles, blends, extras }
 
 final manageTabProvider = StateProvider<ManageTab>((_) => ManageTab.all);
 
@@ -27,6 +28,7 @@ class ManagePage extends ConsumerWidget {
     final drinks = ref.watch(drinksStreamProvider);
     final singles = ref.watch(singlesStreamProvider);
     final blends = ref.watch(blendsStreamProvider);
+    final extras = ref.watch(extrasStreamProvider);
 
     Widget drinks0() => drinks.when(
       loading: _loading,
@@ -124,7 +126,7 @@ class ManagePage extends ConsumerWidget {
                         collection: collection,
                         // InventoryRow عندك غالبًا فيه ref/id.
                         // استخدم اللي موجود:
-                        id: r.id ?? r.ref.id,
+                        id: r.id,
                       ),
                     ),
                     IconButton(
@@ -151,7 +153,55 @@ class ManagePage extends ConsumerWidget {
       error: _err('التوليفات'),
       data: (rows) => invList('blends', rows),
     );
-
+    Widget extras0() => extras.when(
+      loading: _loading,
+      error: _err('الإضافات'),
+      data: (rows) => Column(
+        children: rows
+            .map(
+              (e) => Card(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: ListTile(
+                  title: Text(
+                    e.name,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  subtitle: Wrap(
+                    spacing: 10,
+                    runSpacing: 6,
+                    children: [
+                      if (e.category.isNotEmpty)
+                        _pill(Icons.category, 'التصنيف', e.category),
+                      _pill(
+                        Icons.inventory_2,
+                        'المخزون',
+                        '${_fmtNum(e.stockUnits)}${e.unit.isEmpty ? '' : ' ${e.unit}'}',
+                      ),
+                      _pill(
+                        Icons.attach_money,
+                        'سعر البيع',
+                        _fmtNum(e.priceSell),
+                      ),
+                      _pill(Icons.money_off, 'التكلفة', _fmtNum(e.costUnit)),
+                      if (!e.active)
+                        _pill(Icons.pause_circle_filled, 'الحالة', 'غير مفعّل'),
+                    ],
+                  ),
+                  trailing: Tooltip(
+                    message: 'عناصر extras غير قابلة للتعديل من هنا',
+                    child: Icon(
+                      Icons.lock_outline,
+                      color: Colors.brown.shade200,
+                    ),
+                  ),
+                ),
+              ),
+            )
+            .toList(),
+      ),
+    );
     Widget content() {
       switch (tab) {
         case ManageTab.drinks:
@@ -160,9 +210,14 @@ class ManagePage extends ConsumerWidget {
           return singles0();
         case ManageTab.blends:
           return blends0();
+        case ManageTab.extras:
+          return extras0();
         case ManageTab.all:
           return Column(
             children: [
+              _Section('الإضافات'),
+              extras0(),
+              const SizedBox(height: 8),
               _Section('التوليفات'),
               blends0(),
               const SizedBox(height: 8),
@@ -224,6 +279,7 @@ class ManagePage extends ConsumerWidget {
                 _mChip(ref, 'المشروبات', ManageTab.drinks, tab),
                 _mChip(ref, 'الأصناف المنفردة', ManageTab.singles, tab),
                 _mChip(ref, 'التوليفات', ManageTab.blends, tab),
+                _mChip(ref, 'الإضافات', ManageTab.extras, tab),
               ],
             ),
             const SizedBox(height: 8),
@@ -231,17 +287,24 @@ class ManagePage extends ConsumerWidget {
           ],
         ),
         floatingActionButton: FloatingActionButton.extended(
-          onPressed: () => showModalBottomSheet(
-            context: context,
-            useSafeArea: true,
-            isScrollControlled: true,
-            shape: const RoundedRectangleBorder(
-              borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
-            ),
-            builder: (_) => const AddItemSheet(),
-          ),
+          onPressed: tab == ManageTab.extras
+              ? null
+              : () => showModalBottomSheet(
+                  context: context,
+                  useSafeArea: true,
+                  isScrollControlled: true,
+                  shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(18),
+                    ),
+                  ),
+                  builder: (_) => const AddItemSheet(),
+                ),
           icon: const Icon(Icons.add),
           label: const Text('إضافة'),
+          tooltip: tab == ManageTab.extras
+              ? 'لا يمكن إضافة أو تعديل عناصر extras من هنا'
+              : 'إضافة عنصر جديد',
           backgroundColor: kDarkBrown,
           foregroundColor: Colors.white,
         ),
@@ -270,6 +333,14 @@ class ManagePage extends ConsumerWidget {
         fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
       ),
     );
+  }
+
+  static String _fmtNum(double value) {
+    if (value.isNaN || value.isInfinite) return '0';
+    if (value == value.roundToDouble()) {
+      return value.toStringAsFixed(0);
+    }
+    return value.toStringAsFixed(2);
   }
 
   static Widget _pill(IconData i, String k, String v) {

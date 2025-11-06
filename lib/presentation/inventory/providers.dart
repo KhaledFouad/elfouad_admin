@@ -2,10 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
-// شيل أي import لـ legacy.dart من أي ملف—مش محتاجينه هنا.
-
 // تبويب المخزون
-enum InventoryTab { all, singles, blends, drinks }
+enum InventoryTab { all, singles, blends, extras, drinks }
 
 // تحويل آمن لأرقام
 double _d(dynamic v) {
@@ -13,16 +11,16 @@ double _d(dynamic v) {
   return double.tryParse('${v ?? ''}'.replaceAll(',', '.')) ?? 0.0;
 }
 
-// صف موحّد للأصناف المنفردة والتوليفات
+// صف موحّد للأصناف
 class InventoryRow {
   final String id;
   final String name;
-  final String variant; // درجة التحميص
-  final double stockG; // جرامات
-  final double minLevelG; // حد أدنى تحذيري
-  final double sellPerKg; // سعر/كجم
-  final double costPerKg; // تكلفة/كجم
-  final String coll; // 'singles' | 'blends'
+  final String variant; // درجة التحميص/الاختيار
+  final double stockG; // جرامات أو "قطع" للسناكس
+  final double minLevelG; // حد أدنى تحذيري (للجرامات أو قطع)
+  final double sellPerKg; // سعر/كجم (أو 0 للسناكس)
+  final double costPerKg; // تكلفة/كجم (أو 0 للسناكس)
+  final String coll; // 'singles' | 'blends' | 'extras'
   final DocumentReference<Map<String, dynamic>> ref;
 
   const InventoryRow({
@@ -39,6 +37,7 @@ class InventoryRow {
 
   bool get isSingle => coll == 'singles';
   bool get isBlend => coll == 'blends';
+  bool get isExtra => coll == 'extras';
 }
 
 double _stockGFrom(Map<String, dynamic> m) {
@@ -73,7 +72,7 @@ InventoryRow _fromDoc(DocumentSnapshot<Map<String, dynamic>> d) {
     id: d.id,
     name: '${m['name'] ?? ''}',
     variant: '${m['variant'] ?? ''}',
-    stockG: _stockGFrom(m), // ← هنا التعديل
+    stockG: _stockGFrom(m),
     minLevelG: _d(m['minLevel']),
     sellPerKg: sell,
     costPerKg: cost,
@@ -82,7 +81,26 @@ InventoryRow _fromDoc(DocumentSnapshot<Map<String, dynamic>> d) {
   );
 }
 
-// helper: sort محليًا (الاسم ثم التحميص)
+// تحويل خاص بالسناكس (stock_units → stockG)
+InventoryRow _fromExtraDoc(DocumentSnapshot<Map<String, dynamic>> d) {
+  final m = d.data() ?? <String, dynamic>{};
+  final units = (m['stock_units'] is num)
+      ? (m['stock_units'] as num).toDouble()
+      : _d(m['stock_units']);
+  return InventoryRow(
+    id: d.id,
+    name: '${m['name'] ?? ''}',
+    variant: '${m['variant'] ?? ''}',
+    stockG: units, // ← هنا بنخزن "القطع" كـ stockG
+    minLevelG: _d(m['min_units'] ?? m['minLevel']),
+    sellPerKg: 0.0, // مش مستخدم للسناكس
+    costPerKg: 0.0, // مش مستخدم للسناكس
+    coll: d.reference.parent.id, // 'extras'
+    ref: d.reference,
+  );
+}
+
+// helper: sort محليًا (الاسم ثم التحميص/الاختيار)
 List<InventoryRow> _sortByNameVariant(Iterable<InventoryRow> it) {
   final list = it.toList();
   list.sort((a, b) {
@@ -93,7 +111,7 @@ List<InventoryRow> _sortByNameVariant(Iterable<InventoryRow> it) {
   return list;
 }
 
-// Streams للأصناف المنفردة — (ترتيب من الذاكرة)
+// Streams للأصناف المنفردة
 final singlesStreamProvider = StreamProvider<List<InventoryRow>>((ref) {
   return FirebaseFirestore.instance
       .collection('singles')
@@ -102,7 +120,7 @@ final singlesStreamProvider = StreamProvider<List<InventoryRow>>((ref) {
       .map((s) => _sortByNameVariant(s.docs.map(_fromDoc)));
 });
 
-// Streams للتوليفات — (ترتيب من الذاكرة)
+// Streams للتوليفات
 final blendsStreamProvider = StreamProvider<List<InventoryRow>>((ref) {
   return FirebaseFirestore.instance
       .collection('blends')
@@ -110,6 +128,8 @@ final blendsStreamProvider = StreamProvider<List<InventoryRow>>((ref) {
       .snapshots()
       .map((s) => _sortByNameVariant(s.docs.map(_fromDoc)));
 });
+
+// Streams للسناكس (معمول/تمر)
 
 // تبويب الصفحة الحالي
 final inventoryTabProvider = StateProvider<InventoryTab>(
@@ -122,17 +142,16 @@ List<InventoryRow> _safe(AsyncValue<List<InventoryRow>> a) =>
 // القائمة حسب التبويب (Blends أولًا في "الكل")
 final inventoryListForTabProvider = Provider<List<InventoryRow>>((ref) {
   final tab = ref.watch(inventoryTabProvider);
-  final singlesA = ref.watch(singlesStreamProvider);
-  final blendsA = ref.watch(blendsStreamProvider);
-
-  final singles = _safe(singlesA);
-  final blends = _safe(blendsA);
+  final singles = _safe(ref.watch(singlesStreamProvider));
+  final blends = _safe(ref.watch(blendsStreamProvider));
 
   switch (tab) {
     case InventoryTab.singles:
       return singles;
     case InventoryTab.blends:
       return blends;
+    case InventoryTab.extras:
+      return const <InventoryRow>[];
     case InventoryTab.drinks:
       return const <InventoryRow>[]; // المشروبات خارج إدارة الجرامات
     case InventoryTab.all:
@@ -140,18 +159,17 @@ final inventoryListForTabProvider = Provider<List<InventoryRow>>((ref) {
   }
 });
 
-// أكبر مخزون (للـ progress bar)
+// أكبر مخزون بناءً على "القائمة المعروضة حاليًا" (عشان progress يبقى مضبوط)
 final inventoryMaxStockProvider = Provider<double>((ref) {
-  final singles = _safe(ref.watch(singlesStreamProvider));
-  final blends = _safe(ref.watch(blendsStreamProvider));
+  final list = ref.watch(inventoryListForTabProvider);
   double max = 0;
-  for (final r in [...singles, ...blends]) {
+  for (final r in list) {
     if (r.stockG > max) max = r.stockG;
   }
   return max <= 0 ? 1 : max;
 });
 
-// CRUD
+// CRUD (تخصّص أصلي للـ singles/blends — السناكس عادة مش هنعدّلها من هنا)
 Future<void> updateInventoryRow(
   InventoryRow r, {
   String? name,
@@ -164,10 +182,23 @@ Future<void> updateInventoryRow(
   final data = <String, dynamic>{};
   if (name != null) data['name'] = name;
   if (variant != null) data['variant'] = variant;
-  if (stockG != null) data['stock'] = stockG;
-  if (sellPerKg != null) data['sellPricePerKg'] = sellPerKg;
-  if (costPerKg != null) data['costPricePerKg'] = costPerKg;
-  if (minLevelG != null) data['minLevel'] = minLevelG;
+
+  if (stockG != null) {
+    if (r.isExtra) {
+      data['stock_units'] = stockG; // لو Extra نكتب في stock_units
+    } else {
+      data['stock'] = stockG; // وإلا نكتب في stock (جرامات)
+    }
+  }
+
+  if (!r.isExtra) {
+    if (sellPerKg != null) data['sellPricePerKg'] = sellPerKg;
+    if (costPerKg != null) data['costPricePerKg'] = costPerKg;
+    if (minLevelG != null) data['minLevel'] = minLevelG;
+  } else {
+    if (minLevelG != null) data['min_units'] = minLevelG; // حد أدنى للقطع
+  }
+
   await r.ref.update(data);
 }
 

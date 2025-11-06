@@ -1,5 +1,4 @@
 import 'dart:async' show unawaited;
-
 import 'package:elfouad_admin/presentation/home/app_shell.dart';
 import 'package:elfouad_admin/services/archive/auto_archiver.dart.dart'
     show runAutoArchiveIfNeeded;
@@ -11,7 +10,7 @@ import 'services/firebase_options.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 const _primaryHex = 0xFF543824; // بني غامق
-const _accentHex = 0xFFC49A6C; // بيج فاتح
+const _accentHex = 0xFFC49A6C; // بيج  اتح
 
 Future<void> _initFirebase() async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
@@ -20,11 +19,10 @@ Future<void> _initFirebase() async {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await _initFirebase();
-
   runApp(const ProviderScope(child: MyApp()));
   unawaited(
     runAutoArchiveIfNeeded(
-      adminUid: 'system', // أو UID الأدمن لو عندك Auth
+      adminUid: 'system',
       everyNDays: 5,
       daysThreshold: 30,
       batchSize: 200,

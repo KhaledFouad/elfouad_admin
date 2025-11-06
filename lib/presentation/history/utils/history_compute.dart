@@ -59,7 +59,7 @@ Future<List<DayBucket>> buildBuckets(Map payload) async {
 
     if (!(inRange(createdAt) ||
         (isDeferred && !paid) ||
-        (paid && settledAt != null && inRange(settledAt!)))) {
+        (paid && settledAt != null && inRange(settledAt)))) {
       continue;
     }
 

@@ -23,10 +23,28 @@ class DaySection extends StatelessWidget {
     required this.onEdit,
     required this.onDelete,
   });
-  bool get wantKeepAlive => true;
+
+  // اجمع عدد قطع المعمول/التمر من نفس لستة اليوم
+  int _extrasPieces() {
+    var total = 0;
+    for (final e in entries) {
+      final m = e.data();
+      final t = (m['type'] ?? '').toString();
+      if (t == 'extra' ||
+          ((m['unit'] ?? '').toString() == 'piece' &&
+              m.containsKey('extra_id'))) {
+        final q = m['quantity'];
+        final qi = (q is num) ? q.toInt() : int.tryParse('${q ?? 0}') ?? 0;
+        total += qi;
+      }
+    }
+    return total;
+  }
 
   @override
   Widget build(BuildContext context) {
+    final extrasPieces = _extrasPieces();
+
     return RepaintBoundary(
       child: Card(
         elevation: 3,
@@ -54,8 +72,10 @@ class DaySection extends StatelessWidget {
                   _pill(Icons.attach_money, 'مبيعات', sumPrice),
                   _pill(Icons.factory, 'تكلفة', sumCost),
                   _pill(Icons.trending_up, 'ربح', sumProfit),
-                  _pill(Icons.local_cafe, 'مشروبات', cups.toDouble()),
+                  _pill(Icons.local_cafe, 'مشروبات', cups),
                   _pill(Icons.scale, 'جرام بن', grams),
+                  if (extrasPieces > 0)
+                    _pill(Icons.cookie_outlined, 'سناكس', extrasPieces),
                 ],
               ),
               const Divider(height: 18),
@@ -73,9 +93,14 @@ class DaySection extends StatelessWidget {
     );
   }
 
-  static Widget _pill(IconData icon, String label, double v) {
+  static Widget _pill(IconData icon, String label, dynamic v) {
     final isGrams = label.contains('جرام');
-    final text = isGrams ? '${v.toStringAsFixed(0)} جم' : v.toStringAsFixed(2);
+    final isPieces = label.contains('معمول') || label.contains('تمر');
+    final text = isGrams
+        ? '${v.toStringAsFixed(0)} جم'
+        : isPieces
+        ? '${v.toStringAsFixed(0)} قطعة'
+        : v.toStringAsFixed(2);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(

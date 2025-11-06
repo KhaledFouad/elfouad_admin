@@ -2,8 +2,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../utils/sales_history_utils.dart';
-import '../utils/sales_history_utils.dart' show fmtTime;
-import '../utils/sales_history_utils.dart' as U; // لو حابب تميّز الأسماء
 
 class SaleTile extends StatelessWidget {
   final QueryDocumentSnapshot<Map<String, dynamic>> doc;
@@ -37,27 +35,47 @@ class SaleTile extends StatelessWidget {
     final profit = numD(m['profit_total']);
 
     final components = extractComponents(m, type);
-
-    // ✅ الوقت الفعّال (ترحيل الأجل لليوم 05:00 / أو settled_at / أو created_at)
     final eff = effectiveTimeLocal(m);
 
-    // ✅ الملاحظة (حقل note أو notes)
+    // الملاحظة (note/notes)
     final String note = ((m['note'] ?? m['notes'] ?? '') as Object)
         .toString()
         .trim();
 
+    // أيقونة محلية لو النوع extra، وإلا استخدم الموجودة في utils
+    final icon = type == 'extra' ? Icons.cookie_outlined : iconForType(type);
+
+    // 👇 تفاصيل افتراضية لعمليات المعمول/التمر لو مفيش components
+    List<Map<String, dynamic>> componentsToShow = components;
+    if (componentsToShow.isEmpty && type == 'extra') {
+      final name = (m['name'] ?? '').toString();
+      final variant = (m['variant'] ?? '').toString();
+      final unit = (m['unit'] ?? 'piece').toString();
+      final qty = (m['quantity'] is num)
+          ? (m['quantity'] as num).toInt()
+          : int.tryParse('${m['quantity'] ?? 0}') ?? 0;
+
+      componentsToShow = [
+        {
+          'name': name,
+          'variant': variant,
+          'unit': unit,
+          'qty': qty,
+          'grams': 0, // مش بنستخدم جرامات هنا
+          'line_total_price': totalPrice, // إجمالي العملية
+          'line_total_cost': totalCost, // إجمالي العملية
+        },
+      ];
+    }
+
     return ExpansionTile(
       key: PageStorageKey(doc.id),
-      maintainState: true, // يثبت الفتح/الغلق أثناء السحب
+      maintainState: true,
       tilePadding: const EdgeInsets.symmetric(horizontal: 8),
       leading: CircleAvatar(
         radius: 18,
         backgroundColor: Colors.brown.shade100,
-        child: Icon(
-          iconForType(type),
-          color: const Color.fromRGBO(93, 64, 55, 1),
-          size: 18,
-        ),
+        child: Icon(icon, color: const Color.fromRGBO(93, 64, 55, 1), size: 18),
       ),
       title: Row(
         children: [
@@ -113,15 +131,16 @@ class SaleTile extends StatelessWidget {
         ],
       ),
       children: [
-        if (components.isEmpty)
+        if (componentsToShow.isEmpty)
           const ListTile(title: Text('— لا توجد تفاصيل مكونات —'))
         else
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
-            child: Column(children: components.map(componentRow).toList()),
+            child: Column(
+              children: componentsToShow.map(componentRow).toList(),
+            ),
           ),
 
-        // ✅ عرض الملاحظة إن وُجدت
         if (note.isNotEmpty)
           Padding(
             padding: const EdgeInsetsDirectional.only(
@@ -152,7 +171,6 @@ class SaleTile extends StatelessWidget {
             ),
           ),
 
-        // ✅ التاريخ الأصلي لو اختلف وقت العرض
         if (!_sameMinute(eff, createdAt))
           Padding(
             padding: const EdgeInsetsDirectional.only(
@@ -184,7 +202,6 @@ class SaleTile extends StatelessWidget {
             ),
           ),
 
-        // ✅ زر تم الدفع فقط مرّة واحدة (لو أجل وغير مدفوع)
         if (isDeferred && !paid && dueAmount > 0)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
@@ -244,7 +261,6 @@ class SaleTile extends StatelessWidget {
     );
   }
 
-  // === Helpers UI قصيرة ===
   static Widget _chip(String label, Color border, Color fill) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -287,38 +303,49 @@ Widget _kv(String k, double v) {
   );
 }
 
-// نفس titleLine اللى عندك
+/// عنوان السطر – حالة extras مخصّصة للمعمول/التمر
 String titleLine(Map<String, dynamic> m, String type) {
   String name = (m['name'] ?? '').toString();
   String variant = (m['variant'] ?? m['roast'] ?? '').toString();
   String labelNV = variant.isNotEmpty ? '$name $variant' : name;
 
   switch (type) {
+    case 'extra':
+      final q = (m['quantity'] is num)
+          ? (m['quantity'] as num).toInt()
+          : int.tryParse('${m['quantity'] ?? 0}') ?? 0;
+      final lbl = labelNV.isNotEmpty ? labelNV : name;
+      return 'سناكس - $q ${lbl.isNotEmpty ? lbl : ''}'.trim();
+
     case 'drink':
-      final q = numD(m['quantity']) > 0
+      final qd = numD(m['quantity']) > 0
           ? numD(m['quantity']).toStringAsFixed(0)
           : '1';
       final dn = (m['drink_name'] ?? '').toString();
       final finalName = labelNV.isNotEmpty
           ? labelNV
           : (dn.isNotEmpty ? dn : 'مشروب');
-      return 'مشروب - $q $finalName';
+      return 'مشروب - $qd $finalName';
+
     case 'single':
       {
         final g = numD(m['grams']).toStringAsFixed(0);
         final lbl = labelNV.isNotEmpty ? labelNV : name;
         return 'صنف منفرد - $g جم ${lbl.isNotEmpty ? lbl : ''}'.trim();
       }
+
     case 'ready_blend':
       {
         final g = numD(m['grams']).toStringAsFixed(0);
         final lbl = labelNV.isNotEmpty ? labelNV : name;
         return 'توليفة جاهزة - $g جم ${lbl.isNotEmpty ? lbl : ''}'.trim();
       }
+
     case 'custom_blend':
       return 'توليفة العميل';
+
     default:
-      return 'عملية';
+      return labelNV.isNotEmpty ? labelNV : 'عملية';
   }
 }
 

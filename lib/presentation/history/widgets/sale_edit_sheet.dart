@@ -18,10 +18,23 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
   final TextEditingController _totalPriceCtrl = TextEditingController();
   final TextEditingController _qtyCtrl = TextEditingController();
   final TextEditingController _gramsCtrl = TextEditingController();
-  final TextEditingController _noteCtrl = TextEditingController(); // ملاحظة
+  final TextEditingController _noteCtrl = TextEditingController();
+
   bool _isComplimentary = false;
   bool _isSpiced = false;
   bool _busy = false;
+
+  // ==== helpers ====
+  double _numOf(dynamic v, [double def = 0.0]) =>
+      (v is num) ? v.toDouble() : (double.tryParse('${v ?? ''}') ?? def);
+  int _intOf(dynamic v, [int def = 0]) =>
+      (v is num) ? v.toInt() : (int.tryParse('${v ?? ''}') ?? def);
+
+  // ==== Extras auto-recalc state ====
+  double _unitPriceCache = 0.0; // سعر الوحدة (extra)
+  double _unitCostCache = 0.0; // تكلفة الوحدة (extra)
+  bool _userEditedTotal = false; // لو المستخدم عدّل السعر يدويًا
+  double? _lastNonComplPrice; // آخر إجمالي قبل الضيافة
 
   @override
   void initState() {
@@ -29,20 +42,49 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
     _m = widget.snap.data() ?? {};
     _type = (_m['type'] ?? 'unknown').toString();
 
-    _totalPriceCtrl.text = numD(_m['total_price']).toStringAsFixed(2);
+    _totalPriceCtrl.text = _numOf(_m['total_price']).toStringAsFixed(2);
     _noteCtrl.text = ((_m['note'] ?? _m['notes'] ?? '') as Object).toString();
-
-    if (_type == 'drink') {
-      final qRaw = _m['quantity'];
-      final q = (qRaw is num) ? qRaw.toDouble() : double.tryParse('$qRaw') ?? 1;
-      _qtyCtrl.text = q.toStringAsFixed(q == q.roundToDouble() ? 0 : 2);
-    } else {
-      final g = numD(_m['grams']);
-      if (g > 0) _gramsCtrl.text = g.toStringAsFixed(0);
-    }
 
     _isComplimentary = (_m['is_complimentary'] ?? false) == true;
     _isSpiced = (_m['is_spiced'] ?? false) == true;
+
+    if (_type == 'drink') {
+      final q = _numOf(_m['quantity'], 1);
+      _qtyCtrl.text = (q == q.roundToDouble())
+          ? q.toStringAsFixed(0)
+          : q.toStringAsFixed(2);
+    } else if (_type == 'single' || _type == 'ready_blend') {
+      final g = _numOf(_m['grams']);
+      if (g > 0) _gramsCtrl.text = g.toStringAsFixed(0);
+    } else if (_type == 'extra') {
+      // حضّر بيانات الـ Extras
+      final oldQty = _intOf(_m['quantity'], 1);
+      _qtyCtrl.text = oldQty.toString();
+
+      // حاول نستخرج سعر وتكلفة الوحدة (fallback على الإجمالي/الكمية)
+      final unitPrice = _numOf(_m['unit_price']);
+      final unitCost = _numOf(_m['unit_cost']);
+      _unitPriceCache = unitPrice > 0
+          ? unitPrice
+          : (_numOf(_m['total_price']) / (oldQty > 0 ? oldQty : 1));
+      _unitCostCache = unitCost > 0
+          ? unitCost
+          : (_numOf(_m['total_cost']) / (oldQty > 0 ? oldQty : 1));
+
+      // لو المستخدم هيعدّل الإجمالي بإيده نِفك التزامنا بإعادة الحساب
+      _totalPriceCtrl.addListener(() {
+        _userEditedTotal = true;
+      });
+
+      // عند تغيير العدد نحدّث الإجمالي تلقائيًا (إلا لو عدّل السعر يدويًا)
+      _qtyCtrl.addListener(() {
+        if (_isComplimentary) return; // الضيافة = صفر، بلاش نعدّل
+        if (_userEditedTotal) return; // المستخدم كتب السعر بنفسه
+        final q = _intOf(_qtyCtrl.text, 1).clamp(1, 100000);
+        final newTotal = _unitPriceCache * q;
+        _setTotalPriceText(newTotal);
+      });
+    }
   }
 
   @override
@@ -54,7 +96,16 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
     super.dispose();
   }
 
-  // ======= استخراج عمليات الخصم من المخزون من عملية البيع =======
+  // == UI helpers ==
+  void _setTotalPriceText(double v) {
+    final s = v.toStringAsFixed(2);
+    if (_totalPriceCtrl.text != s) {
+      _totalPriceCtrl.text = s;
+      _totalPriceCtrl.selection = TextSelection.collapsed(offset: s.length);
+    }
+  }
+
+  // ======= استخراج عمليات الخصم من المخزون من عملية البيع (للبن) =======
   Map<DocumentReference<Map<String, dynamic>>, double> _opsFromSale(
     Map<String, dynamic> m,
   ) {
@@ -116,11 +167,10 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
       return out;
     }
 
-    // drinks/unknown → لا تأثير على المخزون
-    return out;
+    return out; // drinks/extra/unknown → لا تأثير هنا
   }
 
-  /// ترانزاكشن: عدّل المخزون بالفرق + اكتب التعديلات مرة واحدة
+  /// عدّل مخزون البن بالفرق + اكتب التعديلات (لغير extras)
   Future<void> _applyStockDeltaAndUpdate(Map<String, dynamic> updates) async {
     final saleRef = widget.snap.reference;
     await FirebaseFirestore.instance.runTransaction((tx) async {
@@ -146,82 +196,176 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
     });
   }
 
+  /// نسخة خاصة بالـ extras: تعدّل stock_units بالـ delta + تحدّث العملية
+  Future<void> _applyExtrasDeltaAndUpdate(
+    Map<String, dynamic> updates,
+    int newQty,
+  ) async {
+    final saleRef = widget.snap.reference;
+    final db = FirebaseFirestore.instance;
+
+    await db.runTransaction((tx) async {
+      final oldSnap = await tx.get(saleRef);
+      final oldSale = oldSnap.data() ?? <String, dynamic>{};
+
+      final oldQty = _intOf(oldSale['quantity'], 0);
+      final delta = newQty - oldQty;
+
+      final extraId = (oldSale['extra_id'] ?? '').toString();
+      if (extraId.isNotEmpty) {
+        final extraRef = db.collection('extras').doc(extraId);
+        final exSnap = await tx.get(extraRef);
+        if (!exSnap.exists) {
+          throw Exception('الصنف غير موجود في extras.');
+        }
+        final ex = exSnap.data() as Map<String, dynamic>;
+        final cur = _intOf(ex['stock_units'], 0);
+
+        if (delta > 0 && cur < delta) {
+          throw Exception('المخزون غير كافٍ (${cur} قطعة متاحة).');
+        }
+
+        tx.update(extraRef, {
+          'stock_units': cur - delta,
+          'updated_at': FieldValue.serverTimestamp(),
+        });
+      }
+
+      tx.update(saleRef, updates);
+    });
+  }
+
   Future<void> _save() async {
     setState(() => _busy = true);
     try {
       final updates = <String, dynamic>{};
+      final type = _type;
 
-      String type = _type; // drink | single | ready_blend | custom_blend
-      bool isCompl = _isComplimentary;
-      bool isSpiced = _isSpiced;
+      final oldTotalPrice = _numOf(_m['total_price']);
+      final oldTotalCost = _numOf(_m['total_cost']);
 
-      double numOf(dynamic v) =>
-          (v is num) ? v.toDouble() : double.tryParse('${v ?? ''}') ?? 0.0;
+      // Deferred logic
+      final bool isDeferred = (_m['is_deferred'] ?? false) == true;
+      final bool paid = (_m['paid'] ?? (!isDeferred)) == true;
+      bool freezeProfit = isDeferred && !paid;
 
-      final oldTotalPrice = numOf(_m['total_price']);
-      final oldTotalCost = numOf(_m['total_cost']);
+      // always write note/flags
+      updates['note'] = _noteCtrl.text.trim();
+      updates['is_complimentary'] = _isComplimentary;
+      updates['is_spiced'] = _isSpiced;
 
-      final listPrice = numOf(_m['list_price']);
-      final unitPrice = numOf(_m['unit_price']);
-      final unitCost = numOf(_m['unit_cost']) > 0
-          ? numOf(_m['unit_cost'])
-          : numOf(_m['list_cost']);
+      if (_isComplimentary) freezeProfit = false;
 
-      final pricePerKg = numOf(_m['price_per_kg']);
-      final costPerKg = numOf(_m['cost_per_kg']);
+      // ========= EXTRA (معمول/تمر) =========
+      if (type == 'extra') {
+        final int newQty = _intOf(
+          _qtyCtrl.text.isEmpty ? null : _qtyCtrl.text,
+          1,
+        ).clamp(1, 100000);
+        final double uiTotal =
+            double.tryParse(_totalPriceCtrl.text.replaceAll(',', '.')) ??
+            oldTotalPrice;
+
+        final bool manualOverride = !_isComplimentary && _userEditedTotal;
+
+        double newTotalPrice, newTotalCost, newUnitPrice, newUnitCost;
+
+        newUnitPrice = _unitPriceCache;
+        newUnitCost = _unitCostCache;
+
+        if (_isComplimentary) {
+          newTotalPrice = 0.0;
+          newTotalCost = newUnitCost * newQty;
+          updates['unit_price'] = 0.0;
+          updates['unit_cost'] = newUnitCost;
+          updates['profit_total'] = 0.0;
+        } else if (manualOverride) {
+          newTotalPrice = uiTotal;
+          newTotalCost = newUnitCost * newQty;
+          newUnitPrice = (newQty > 0)
+              ? (newTotalPrice / newQty)
+              : newTotalPrice;
+          updates['unit_price'] = newUnitPrice;
+          updates['unit_cost'] = newUnitCost;
+          updates['manual_override'] = true;
+          updates['discount_amount'] =
+              (_unitPriceCache * newQty) - newTotalPrice;
+          if (!freezeProfit) {
+            updates['profit_total'] = newTotalPrice - newTotalCost;
+          }
+        } else {
+          newTotalPrice = _unitPriceCache * newQty;
+          newTotalCost = newUnitCost * newQty;
+          updates['unit_price'] = _unitPriceCache;
+          updates['unit_cost'] = newUnitCost;
+          if (!freezeProfit) {
+            updates['profit_total'] = newTotalPrice - newTotalCost;
+          }
+        }
+
+        updates['quantity'] = newQty;
+        updates['total_price'] = newTotalPrice;
+        updates['total_cost'] = newTotalCost;
+        updates['updated_at'] = FieldValue.serverTimestamp();
+
+        // ترانزاكشن خاصة بالـ extras (stock_units)
+        await _applyExtrasDeltaAndUpdate(updates, newQty);
+
+        if (!mounted) return;
+        Navigator.pop(context);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('تم حفظ التعديل')));
+        return;
+      }
+
+      // ========= DRINK =========
+      final listPrice = _numOf(_m['list_price']);
+      final unitPrice = _numOf(_m['unit_price']);
+      final unitCost = _numOf(_m['unit_cost']) > 0
+          ? _numOf(_m['unit_cost'])
+          : _numOf(_m['list_cost']);
+
+      final pricePerKg = _numOf(_m['price_per_kg']);
+      final costPerKg = _numOf(_m['cost_per_kg']);
       final pricePerG = pricePerKg > 0
           ? pricePerKg / 1000.0
-          : numOf(_m['price_per_g']);
+          : _numOf(_m['price_per_g']);
       final costPerG = costPerKg > 0
           ? costPerKg / 1000.0
-          : numOf(_m['cost_per_g']);
+          : _numOf(_m['cost_per_g']);
 
-      final linesAmount = numOf(_m['lines_amount']);
-      final totalGramsSaved = numOf(_m['total_grams']);
+      final linesAmount = _numOf(_m['lines_amount']);
+      final totalGramsSaved = _numOf(_m['total_grams']);
 
       final uiTotalPrice =
           double.tryParse(_totalPriceCtrl.text.replaceAll(',', '.')) ??
           oldTotalPrice;
       double qty =
           double.tryParse(_qtyCtrl.text.replaceAll(',', '.')) ??
-          numOf(_m['quantity']);
+          _numOf(_m['quantity']);
       double grams =
           double.tryParse(_gramsCtrl.text.replaceAll(',', '.')) ??
-          numOf(_m['grams']);
-
-      // هل أجل غير مدفوع؟
-      final bool isDeferred = (_m['is_deferred'] ?? false) == true;
-      final bool paid = (_m['paid'] ?? (!isDeferred)) == true;
-      bool freezeProfit = isDeferred && !paid;
-
-      // دايمًا خزّن الملاحظة و أعلام الحالة
-      updates['note'] = _noteCtrl.text.trim();
-      updates['is_complimentary'] = isCompl;
-      updates['is_spiced'] = isSpiced;
-
-      // لو ضيافة → نجبر الربح على صفر حتى لو العملية أجل غير مدفوع
-      if (isCompl) freezeProfit = false;
-
-      final bool manualOverride =
-          !isCompl && (uiTotalPrice - oldTotalPrice).abs() > 0.0005;
+          _numOf(_m['grams']);
 
       double newTotalPrice = oldTotalPrice;
       double newTotalCost = oldTotalCost;
+
+      final bool manualOverride =
+          !_isComplimentary && (uiTotalPrice - oldTotalPrice).abs() > 0.0005;
 
       if (type == 'drink') {
         qty = qty <= 0 ? 1 : qty;
         updates['quantity'] = qty;
 
-        if (isCompl) {
-          // ضيافة: مبيعات=0، ربح=0، تكلفة الخامات فقط
+        if (_isComplimentary) {
           newTotalPrice = 0.0;
           newTotalCost = unitCost * qty;
           updates['unit_price'] = 0.0;
           updates['unit_cost'] = unitCost;
-
           updates['total_price'] = newTotalPrice;
           updates['total_cost'] = newTotalCost;
-          updates['profit_total'] = 0.0; // إجبار الربح صفر
+          updates['profit_total'] = 0.0;
         } else if (manualOverride) {
           final u = (qty > 0) ? (uiTotalPrice / qty) : uiTotalPrice;
           updates['unit_price'] = u;
@@ -230,7 +374,6 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
           newTotalCost = unitCost * qty;
           updates['manual_override'] = true;
           updates['discount_amount'] = (listPrice * qty) - newTotalPrice;
-
           updates['total_price'] = newTotalPrice;
           updates['total_cost'] = newTotalCost;
           if (!freezeProfit)
@@ -241,25 +384,34 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
           updates['unit_cost'] = unitCost;
           newTotalPrice = unitPriceEffective * qty;
           newTotalCost = unitCost * qty;
-
           updates['total_price'] = newTotalPrice;
           updates['total_cost'] = newTotalCost;
           if (!freezeProfit)
             updates['profit_total'] = newTotalPrice - newTotalCost;
         }
-      } else if (type == 'single' || type == 'ready_blend') {
-        grams = grams > 0 ? grams : numOf(_m['grams']);
+
+        await _applyStockDeltaAndUpdate(updates);
+        if (!mounted) return;
+        Navigator.pop(context);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('تم حفظ التعديل')));
+        return;
+      }
+
+      // ========= WEIGHTED (single/ready_blend) =========
+      if (type == 'single' || type == 'ready_blend') {
+        grams = grams > 0 ? grams : _numOf(_m['grams']);
         updates['grams'] = grams;
 
-        // أساس البن
         final beansAmount = pricePerG * grams;
         final beansCost = costPerG * grams;
 
-        // معدلات التحويج + Fallback
         final saleForRates = {..._m, 'type': type};
         final rates = await fetchSpiceRatesForSale(saleForRates);
         double spicePricePerKg = rates.pricePerKg;
         double spiceCostPerKg = rates.costPerKg;
+
         if (spicePricePerKg <= 0) {
           final name =
               (_m['name'] ?? _m['single_name'] ?? _m['blend_name'] ?? '')
@@ -273,22 +425,19 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
         double spiceAmount = 0.0;
         double spiceCostAmount = 0.0;
 
-        if (isCompl) {
-          // ضيافة: صفر مبيعات/ربح، صِفر تحويج، تكلفة = تكلفة البن فقط
+        if (_isComplimentary) {
           newTotalPrice = 0.0;
           newTotalCost = beansCost;
-
           updates['beans_amount'] = 0.0;
           updates['spice_rate_per_kg'] = 0.0;
           updates['spice_cost_per_kg'] = 0.0;
           updates['spice_amount'] = 0.0;
           updates['spice_cost_amount'] = 0.0;
-
           updates['total_price'] = newTotalPrice;
           updates['total_cost'] = newTotalCost;
-          updates['profit_total'] = 0.0; // إجبار الربح صفر
+          updates['profit_total'] = 0.0;
         } else if (manualOverride) {
-          if (isSpiced) {
+          if (_isSpiced) {
             spiceAmount = (grams / 1000.0) * spicePricePerKg;
             spiceCostAmount = (grams / 1000.0) * spiceCostPerKg;
           }
@@ -300,12 +449,12 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
           newTotalCost = beansCost + spiceCostAmount;
 
           updates['beans_amount'] = beansAmountFromUi;
-          updates['spice_rate_per_kg'] = isSpiced ? spicePricePerKg : 0.0;
-          updates['spice_cost_per_kg'] = isSpiced ? spiceCostPerKg : 0.0;
+          updates['spice_rate_per_kg'] = _isSpiced ? spicePricePerKg : 0.0;
+          updates['spice_cost_per_kg'] = _isSpiced ? spiceCostPerKg : 0.0;
           updates['spice_amount'] = spiceAmount;
           updates['spice_cost_amount'] = spiceCostAmount;
 
-          final autoPrice = beansAmount + (isSpiced ? spiceAmount : 0.0);
+          final autoPrice = beansAmount + (_isSpiced ? spiceAmount : 0.0);
           updates['manual_override'] = true;
           updates['discount_amount'] = (autoPrice - newTotalPrice);
 
@@ -314,17 +463,16 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
           if (!freezeProfit)
             updates['profit_total'] = newTotalPrice - newTotalCost;
         } else {
-          if (isSpiced) {
+          if (_isSpiced) {
             spiceAmount = (grams / 1000.0) * spicePricePerKg;
             spiceCostAmount = (grams / 1000.0) * spiceCostPerKg;
           }
-
           newTotalPrice = beansAmount + spiceAmount;
           newTotalCost = beansCost + spiceCostAmount;
 
           updates['beans_amount'] = beansAmount;
-          updates['spice_rate_per_kg'] = isSpiced ? spicePricePerKg : 0.0;
-          updates['spice_cost_per_kg'] = isSpiced ? spiceCostPerKg : 0.0;
+          updates['spice_rate_per_kg'] = _isSpiced ? spicePricePerKg : 0.0;
+          updates['spice_cost_per_kg'] = _isSpiced ? spiceCostPerKg : 0.0;
           updates['spice_amount'] = spiceAmount;
           updates['spice_cost_amount'] = spiceCostAmount;
 
@@ -339,13 +487,25 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
         updates['price_per_g'] = pricePerG;
         updates['cost_per_kg'] = costPerKg;
         updates['cost_per_g'] = costPerG;
-      } else if (type == 'custom_blend') {
-        final gramsAll = totalGramsSaved > 0
-            ? totalGramsSaved
-            : numOf(_m['total_grams']);
+
+        await _applyStockDeltaAndUpdate(updates);
+        if (!mounted) return;
+        Navigator.pop(context);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('تم حفظ التعديل')));
+        return;
+      }
+
+      // ========= CUSTOM BLEND =========
+      if (type == 'custom_blend') {
+        final linesAmount = _numOf(_m['lines_amount']);
+        final gramsAll = (_numOf(_m['total_grams']) > 0)
+            ? _numOf(_m['total_grams'])
+            : _numOf(_m['total_grams']);
 
         double spiceAmount = 0.0;
-        if (isSpiced && !isCompl) {
+        if (_isSpiced && !_isComplimentary) {
           final rates = await fetchSpiceRatesForSale({..._m, 'type': type});
           final spiceRatePerKg = (rates.pricePerKg > 0)
               ? rates.pricePerKg
@@ -358,10 +518,17 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
           updates['spice_amount'] = 0.0;
         }
 
+        final uiTotalPrice =
+            double.tryParse(_totalPriceCtrl.text.replaceAll(',', '.')) ??
+            oldTotalPrice;
+
         final autoPrice = linesAmount + spiceAmount;
-        if (isCompl) {
+        double newTotalPrice;
+        if (_isComplimentary) {
           newTotalPrice = 0.0;
-        } else if (manualOverride) {
+          updates['profit_total'] = 0.0;
+        } else if (!_isComplimentary &&
+            (uiTotalPrice - oldTotalPrice).abs() > 0.0005) {
           newTotalPrice = uiTotalPrice;
           updates['manual_override'] = true;
           updates['discount_amount'] = (autoPrice - newTotalPrice);
@@ -369,42 +536,51 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
           newTotalPrice = autoPrice;
         }
 
-        newTotalCost = numOf(_m['total_cost']); // محفوظ مسبقًا
+        final newTotalCost = _numOf(_m['total_cost']);
 
         updates['total_price'] = newTotalPrice;
         updates['total_cost'] = newTotalCost;
-        if (isCompl) {
-          updates['profit_total'] = 0.0; // إجبار الربح صفر
-        } else if (!freezeProfit) {
+        if (!_isComplimentary && !freezeProfit) {
           updates['profit_total'] = newTotalPrice - newTotalCost;
         }
-      } else {
-        // unknown
-        if (isCompl) {
+
+        await _applyStockDeltaAndUpdate(updates);
+        if (!mounted) return;
+        Navigator.pop(context);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('تم حفظ التعديل')));
+        return;
+      }
+
+      // ========= UNKNOWN =========
+      {
+        final uiTotalPrice =
+            double.tryParse(_totalPriceCtrl.text.replaceAll(',', '.')) ??
+            oldTotalPrice;
+
+        double newTotalPrice, newTotalCost;
+        if (_isComplimentary) {
           newTotalPrice = 0.0;
           newTotalCost = oldTotalCost;
-          updates['total_price'] = newTotalPrice;
-          updates['total_cost'] = newTotalCost;
-          updates['profit_total'] = 0.0; // إجبار الربح صفر
+          updates['profit_total'] = 0.0;
         } else {
           newTotalPrice = uiTotalPrice;
           newTotalCost = oldTotalCost;
-          updates['total_price'] = newTotalPrice;
-          updates['total_cost'] = newTotalCost;
+          updates['manual_override'] = true;
           if (!freezeProfit)
             updates['profit_total'] = newTotalPrice - newTotalCost;
-          updates['manual_override'] = true;
         }
+        updates['total_price'] = newTotalPrice;
+        updates['total_cost'] = newTotalCost;
+
+        await _applyStockDeltaAndUpdate(updates);
+        if (!mounted) return;
+        Navigator.pop(context);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('تم حفظ التعديل')));
       }
-
-      // كتابة كل شيء + تسوية المخزون داخل ترانزاكشن واحدة
-      await _applyStockDeltaAndUpdate(updates);
-
-      if (!mounted) return;
-      Navigator.pop(context);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('تم حفظ التعديل')));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -417,7 +593,7 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final name = (_m['name'] ?? 'عملية بيع').toString();
+    final name = (_m['name'] ?? _m['drink_name'] ?? 'عملية بيع').toString();
     final createdAt = (_m['created_at'] as Timestamp?)?.toDate();
     final when = createdAt != null
         ? '${createdAt.year}-${createdAt.month.toString().padLeft(2, '0')}-${createdAt.day.toString().padLeft(2, '0')}  '
@@ -426,6 +602,7 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
 
     final isDrink = _type == 'drink';
     final isWeighted = _type == 'single' || _type == 'ready_blend';
+    final isExtras = _type == 'extra';
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
     return LayoutBuilder(
@@ -464,8 +641,10 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
                   Text(when, style: const TextStyle(color: Colors.black54)),
                 const SizedBox(height: 16),
 
+                // ===== السعر الإجمالي =====
                 TextFormField(
                   controller: _totalPriceCtrl,
+                  enabled: !_isComplimentary, // لو ضيافة نقفله
                   textAlign: TextAlign.center,
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
@@ -478,6 +657,7 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
                 ),
                 const SizedBox(height: 10),
 
+                // ===== العدد حسب النوع =====
                 if (isDrink) ...[
                   TextFormField(
                     controller: _qtyCtrl,
@@ -493,7 +673,6 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
                   ),
                   const SizedBox(height: 10),
                 ],
-
                 if (isWeighted) ...[
                   TextFormField(
                     controller: _gramsCtrl,
@@ -507,8 +686,55 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
                   ),
                   const SizedBox(height: 10),
                 ],
+                if (isExtras) ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: _qtyCtrl,
+                          textAlign: TextAlign.center,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'العدد (quantity)',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Column(
+                        children: [
+                          IconButton(
+                            tooltip: 'زيادة',
+                            onPressed: () {
+                              final q = _intOf(_qtyCtrl.text, 1) + 1;
+                              _qtyCtrl.text = q.toString();
+                              if (!_isComplimentary && !_userEditedTotal) {
+                                _setTotalPriceText(_unitPriceCache * q);
+                              }
+                            },
+                            icon: const Icon(Icons.add_circle_outline),
+                          ),
+                          IconButton(
+                            tooltip: 'نقصان',
+                            onPressed: () {
+                              var q = _intOf(_qtyCtrl.text, 1);
+                              q = (q > 1) ? q - 1 : 1;
+                              _qtyCtrl.text = q.toString();
+                              if (!_isComplimentary && !_userEditedTotal) {
+                                _setTotalPriceText(_unitPriceCache * q);
+                              }
+                            },
+                            icon: const Icon(Icons.remove_circle_outline),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                ],
 
-                // حقل الملاحظة
+                // ===== الملاحظة =====
                 TextFormField(
                   controller: _noteCtrl,
                   textAlign: TextAlign.center,
@@ -521,18 +747,40 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
                 ),
 
                 const SizedBox(height: 10),
+                // ضيافة: تصفير/استرجاع السعر
                 CheckboxListTile(
                   value: _isComplimentary,
-                  onChanged: (v) =>
-                      setState(() => _isComplimentary = v ?? false),
+                  onChanged: (v) {
+                    setState(() {
+                      final nv = v ?? false;
+                      _isComplimentary = nv;
+                      if (isExtras) {
+                        if (nv) {
+                          // حفظ آخر إجمالي و تصفير
+                          _lastNonComplPrice = double.tryParse(
+                            _totalPriceCtrl.text.replaceAll(',', '.'),
+                          );
+                          _setTotalPriceText(0.0);
+                        } else {
+                          // رجّع آخر قيمة كتبها المستخدم لو فيه، وإلا احسب من العدد
+                          final q = _intOf(_qtyCtrl.text, 1).clamp(1, 100000);
+                          final back =
+                              _userEditedTotal && _lastNonComplPrice != null
+                              ? _lastNonComplPrice!
+                              : (_unitPriceCache * q);
+                          _setTotalPriceText(back);
+                        }
+                      }
+                    });
+                  },
                   contentPadding: EdgeInsets.zero,
                   controlAffinity: ListTileControlAffinity.leading,
                   title: const Text('ضيافة'),
                 ),
 
-                if (_type == 'single' ||
-                    _type == 'ready_blend' ||
-                    _m.containsKey('is_spiced'))
+                // محوّج لأنواع البن فقط (مش للمعمول/التمر)
+                if ((_type == 'single' || _type == 'ready_blend') ||
+                    (_m.containsKey('is_spiced') && !isExtras))
                   CheckboxListTile(
                     value: _isSpiced,
                     onChanged: (v) => setState(() => _isSpiced = v ?? false),

@@ -282,7 +282,7 @@ Future<void> settleDeferredSale(String docId) async {
   final ref = FirebaseFirestore.instance.collection('sales').doc(docId);
   await FirebaseFirestore.instance.runTransaction((trx) async {
     final snap = await trx.get(ref);
-    final data = snap.data() as Map<String, dynamic>? ?? {};
+    final data = snap.data() ?? {};
 
     double _n(dynamic v) =>
         (v is num) ? v.toDouble() : double.tryParse(v?.toString() ?? '0') ?? 0;
@@ -625,14 +625,6 @@ Future<void> exportSalesExcelFromFilter(
       ),
     );
   }
-}
-
-// إعادة استخدام: تاريخ/وقت من أي نوع
-DateTime _asLocal(dynamic v) {
-  if (v is Timestamp) return v.toDate();
-  if (v is DateTime) return v;
-  return DateTime.tryParse(v?.toString() ?? '') ??
-      DateTime.fromMillisecondsSinceEpoch(0);
 }
 
 /// وقت العرض الفعّال:

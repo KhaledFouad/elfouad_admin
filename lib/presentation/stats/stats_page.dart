@@ -30,7 +30,8 @@ class _StatsPageState extends ConsumerState<StatsPage> {
     final kpis = ref.watch(statsKpisProvider);
     final trends = ref.watch(statsTrendsProvider);
     final beans = ref.watch(beansByNameProvider);
-    final drinks = ref.watch(drinksByNameProvider); // NEW
+    final drinks = ref.watch(drinksByNameProvider);
+    final extras = ref.watch(extrasByNameProvider);
 
     return Scaffold(
       appBar: _brandedMonthAppBar(context, month),
@@ -76,6 +77,11 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                   Kpi('التكلفة', v.cost.toStringAsFixed(2), Icons.factory),
                   Kpi('الربح', v.profit.toStringAsFixed(2), Icons.trending_up),
                   Kpi('الأكواب', v.cups.toStringAsFixed(0), Icons.local_cafe),
+                  Kpi(
+                    'سناكس',
+                    v.units.toStringAsFixed(0),
+                    Icons.cookie_rounded,
+                  ),
                   Kpi('جرامات البن', v.grams.toStringAsFixed(0), Icons.scale),
                   Kpi(
                     'المصروفات',
