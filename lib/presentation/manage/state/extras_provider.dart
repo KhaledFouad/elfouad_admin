@@ -47,3 +47,6 @@ final extrasStreamProvider = StreamProvider<List<ExtraRow>>((ref) async* {
   final q = FirebaseFirestore.instance.collection('extras').orderBy('name');
   yield* q.snapshots().map((s) => s.docs.map(_fromDoc).toList());
 });
+
+Future<void> deleteExtra(String id) =>
+    FirebaseFirestore.instance.collection('extras').doc(id).delete();

@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart' show FirebaseFirestore;
 import 'package:elfouad_admin/presentation/inventory/providers.dart';
 import 'package:elfouad_admin/presentation/manage/product_edit_sheet.dart'
     show ProductEditSheet;
+import 'package:elfouad_admin/presentation/manage/widgets/extra_edit_sheet.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart' show StateProvider;
@@ -189,12 +190,20 @@ class ManagePage extends ConsumerWidget {
                         _pill(Icons.pause_circle_filled, 'الحالة', 'غير مفعّل'),
                     ],
                   ),
-                  trailing: Tooltip(
-                    message: 'عناصر extras غير قابلة للتعديل من هنا',
-                    child: Icon(
-                      Icons.lock_outline,
-                      color: Colors.brown.shade200,
-                    ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.edit),
+                        tooltip: 'تعديل',
+                        onPressed: () => _openExtraEditor(context, e.id),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline),
+                        tooltip: 'حذف',
+                        onPressed: () => _confirmDeleteExtra(context, e),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -202,6 +211,7 @@ class ManagePage extends ConsumerWidget {
             .toList(),
       ),
     );
+
     Widget content() {
       switch (tab) {
         case ManageTab.drinks:
@@ -215,7 +225,7 @@ class ManagePage extends ConsumerWidget {
         case ManageTab.all:
           return Column(
             children: [
-              _Section('الإضافات'),
+              _Section('سناكس'),
               extras0(),
               const SizedBox(height: 8),
               _Section('التوليفات'),
@@ -279,7 +289,7 @@ class ManagePage extends ConsumerWidget {
                 _mChip(ref, 'المشروبات', ManageTab.drinks, tab),
                 _mChip(ref, 'الأصناف المنفردة', ManageTab.singles, tab),
                 _mChip(ref, 'التوليفات', ManageTab.blends, tab),
-                _mChip(ref, 'الإضافات', ManageTab.extras, tab),
+                _mChip(ref, 'سناكس', ManageTab.extras, tab),
               ],
             ),
             const SizedBox(height: 8),
@@ -298,13 +308,13 @@ class ManagePage extends ConsumerWidget {
                       top: Radius.circular(18),
                     ),
                   ),
-                  builder: (_) => const AddItemSheet(),
+                  builder: (_) =>
+                      AddItemSheet(initialType: _newTypeForTab(tab)),
                 ),
           icon: const Icon(Icons.add),
           label: const Text('إضافة'),
-          tooltip: tab == ManageTab.extras
-              ? 'لا يمكن إضافة أو تعديل عناصر extras من هنا'
-              : 'إضافة عنصر جديد',
+          tooltip: 'إضافة عنصر جديد',
+
           backgroundColor: kDarkBrown,
           foregroundColor: Colors.white,
         ),
@@ -397,17 +407,12 @@ class ManagePage extends ConsumerWidget {
     }
   }
 
-  Future<void> _confirmDeleteInventory(
-    BuildContext context,
-    InventoryRow r,
-  ) async {
+  Future<void> _confirmDeleteExtra(BuildContext context, ExtraRow e) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('حذف العنصر'),
-        content: Text(
-          'هل تريد حذف "${r.name}${r.variant.isEmpty ? '' : ' — ${r.variant}'}"؟',
-        ),
+        title: const Text('حذف الإضافة'),
+        content: Text('هل تريد حذف "${e.name}"؟'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -421,12 +426,45 @@ class ManagePage extends ConsumerWidget {
       ),
     );
     if (ok == true) {
-      await deleteInventoryRow(r);
+      await deleteExtra(e.id);
       if (context.mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('تم الحذف')));
       }
+    }
+  }
+}
+
+Future<void> _confirmDeleteInventory(
+  BuildContext context,
+  InventoryRow r,
+) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (_) => AlertDialog(
+      title: const Text('حذف العنصر'),
+      content: Text(
+        'هل تريد حذف "${r.name}${r.variant.isEmpty ? '' : ' — ${r.variant}'}"؟',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('إلغاء'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('حذف'),
+        ),
+      ],
+    ),
+  );
+  if (ok == true) {
+    await deleteInventoryRow(r);
+    if (context.mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('تم الحذف')));
     }
   }
 }
@@ -467,4 +505,37 @@ Future<void> _openProductEditor(
     ),
     builder: (_) => ProductEditSheet(collection: collection, snap: snap),
   );
+}
+
+Future<void> _openExtraEditor(BuildContext context, String id) async {
+  final snap = await FirebaseFirestore.instance
+      .collection('extras')
+      .doc(id)
+      .get();
+
+  if (!context.mounted) return;
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+    ),
+    builder: (_) => ExtraEditSheet(snap: snap),
+  );
+}
+
+NewItemType _newTypeForTab(ManageTab tab) {
+  switch (tab) {
+    case ManageTab.drinks:
+      return NewItemType.drink;
+    case ManageTab.singles:
+      return NewItemType.single;
+    case ManageTab.blends:
+      return NewItemType.blend;
+    case ManageTab.extras:
+      return NewItemType.extra;
+    case ManageTab.all:
+      return NewItemType.blend;
+  }
 }

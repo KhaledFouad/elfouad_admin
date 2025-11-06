@@ -1,20 +1,23 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
-enum NewItemType { single, blend, drink }
+enum NewItemType { single, blend, drink, extra }
 
 class AddItemSheet extends StatefulWidget {
-  const AddItemSheet({super.key});
+  final NewItemType initialType;
+
+  const AddItemSheet({super.key, this.initialType = NewItemType.blend});
   @override
   State<AddItemSheet> createState() => _AddItemSheetState();
 }
 
 class _AddItemSheetState extends State<AddItemSheet> {
-  NewItemType _t = NewItemType.blend; // الافتراضي زي صورتك
+  late NewItemType _t;
   final _name = TextEditingController();
   final _variant = TextEditingController();
   final _stock = TextEditingController(text: '0');
-
+  final _category = TextEditingController();
+  final _extraUnit = TextEditingController(text: 'piece');
   // وزن/سعر/تكلفة
   final _sellPerKg = TextEditingController(text: '0.0'); // single/blend
   final _costPerKg = TextEditingController(text: '0.0'); // ✅
@@ -22,8 +25,16 @@ class _AddItemSheetState extends State<AddItemSheet> {
   // drinks
   final _sellCup = TextEditingController(text: '0.0');
   final _costCup = TextEditingController(text: '0.0'); // ✅
+  final _extraPrice = TextEditingController(text: '0.0');
+  final _extraCost = TextEditingController(text: '0.0');
+  bool _extraActive = true;
 
   bool _busy = false;
+  @override
+  void initState() {
+    super.initState();
+    _t = widget.initialType;
+  }
 
   @override
   void dispose() {
@@ -34,6 +45,10 @@ class _AddItemSheetState extends State<AddItemSheet> {
     _costPerKg.dispose();
     _sellCup.dispose();
     _costCup.dispose();
+    _category.dispose();
+    _extraUnit.dispose();
+    _extraPrice.dispose();
+    _extraCost.dispose();
     super.dispose();
   }
 
@@ -71,6 +86,7 @@ class _AddItemSheetState extends State<AddItemSheet> {
                 ButtonSegment(value: NewItemType.single, label: Text('منفرد')),
                 ButtonSegment(value: NewItemType.blend, label: Text('توليفة')),
                 ButtonSegment(value: NewItemType.drink, label: Text('مشروب')),
+                ButtonSegment(value: NewItemType.extra, label: Text('سناكس')),
               ],
               selected: {_t},
               onSelectionChanged: (s) => setState(() => _t = s.first),
@@ -80,10 +96,45 @@ class _AddItemSheetState extends State<AddItemSheet> {
             // 🟤 كيبورد نصي لاسم/تحميص
             _tf(_name, 'الاسم', TextInputType.text),
             const SizedBox(height: 8),
-            _tf(_variant, 'درجة التحميص (اختياري)', TextInputType.text),
-            const SizedBox(height: 8),
-
-            if (_t != NewItemType.drink) ...[
+            if (_t == NewItemType.extra) ...[
+              _tf(_category, 'التصنيف (اختياري)', TextInputType.text),
+              const SizedBox(height: 8),
+              _tf(_extraUnit, 'الوحدة (مثال: piece)', TextInputType.text),
+            ] else ...[
+              _tf(_variant, 'درجة التحميص (اختياري)', TextInputType.text),
+              const SizedBox(height: 8),
+            ],
+            if (_t == NewItemType.extra) ...[
+              _tf(
+                _stock,
+                'المخزون (وحدات)',
+                const TextInputType.numberWithOptions(decimal: true),
+              ),
+              const SizedBox(height: 8),
+              _tf(
+                _extraPrice,
+                'سعر البيع للوحدة',
+                const TextInputType.numberWithOptions(decimal: true),
+              ),
+              const SizedBox(height: 8),
+              _tf(
+                _extraCost,
+                'التكلفة للوحدة',
+                const TextInputType.numberWithOptions(decimal: true),
+              ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: SwitchListTile.adaptive(
+                  value: _extraActive,
+                  onChanged: (v) => setState(() => _extraActive = v),
+                  title: const Text('مفعل؟'),
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                ),
+              ),
+              const SizedBox(height: 12),
+            ] else if (_t != NewItemType.drink) ...[
               _tf(
                 _stock,
                 'المخزون (جرامات)',
@@ -114,8 +165,7 @@ class _AddItemSheetState extends State<AddItemSheet> {
                 const TextInputType.numberWithOptions(decimal: true),
               ), // ✅
             ],
-
-            const SizedBox(height: 12),
+            if (_t != NewItemType.extra) const SizedBox(height: 12),
             Row(
               children: [
                 Expanded(
@@ -174,6 +224,20 @@ class _AddItemSheetState extends State<AddItemSheet> {
           'image': 'assets/drinks.jpg',
           'roastLevels': <String>[],
           'createdAt': now,
+        });
+      } else if (_t == NewItemType.extra) {
+        await db.collection('extras').add({
+          'name': _name.text.trim(),
+          'category': _category.text.trim(),
+          'unit': _extraUnit.text.trim().isEmpty
+              ? 'piece'
+              : _extraUnit.text.trim(),
+          'stock_units': _num(_stock.text),
+          'price_sell': _num(_extraPrice.text),
+          'cost_unit': _num(_extraCost.text),
+          'active': _extraActive,
+          'created_at': now,
+          'updated_at': now,
         });
       } else {
         final col = _t == NewItemType.single ? 'singles' : 'blends';
