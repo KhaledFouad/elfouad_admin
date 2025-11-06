@@ -12,6 +12,7 @@ class InventoryPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final max = ref.watch(inventoryMaxStockProvider);
     final list = ref.watch(inventoryListForTabProvider);
+    final extras = ref.watch(extrasInventoryStreamProvider);
     final tab = ref.watch(inventoryTabProvider);
 
     return Directionality(
@@ -37,8 +38,6 @@ class InventoryPage extends ConsumerWidget {
                   color: Colors.white,
                 ),
               ),
-              centerTitle: true,
-              elevation: 8,
               backgroundColor: Colors.transparent,
 
               flexibleSpace: Container(
@@ -61,10 +60,10 @@ class InventoryPage extends ConsumerWidget {
               spacing: 8,
               children: [
                 _chip(ref, 'الكل', InventoryTab.all, tab),
-                _chip(ref, "سناكس", InventoryTab.extras, tab),
                 // _chip(ref, 'المشروبات', InventoryTab.drinks, tab),
                 _chip(ref, 'الأصناف المنفردة', InventoryTab.singles, tab),
                 _chip(ref, 'التوليفات', InventoryTab.blends, tab),
+                _chip(ref, 'سناكس', InventoryTab.extras, tab),
               ],
             ),
             const SizedBox(height: 8),
@@ -79,24 +78,39 @@ class InventoryPage extends ConsumerWidget {
                   child: Text('المشروبات لا تُدار كمخزون جرامات هنا.'),
                 ),
               )
-            else if (list.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(child: Text('لا توجد عناصر')),
-              )
-            else
-              Column(
-                children: list
-                    .map(
-                      (r) => InventoryTile(
-                        row: r,
-                        maxStockForBar: max,
-                        // onEdit: () => _openEdit(context, r),
-                        // onDelete: () => _confirmDelete(context, r),
-                      ),
-                    )
-                    .toList(),
-              ),
+            else if (tab == InventoryTab.extras)
+              _extrasContent(extras)
+            else ...[
+              if (tab == InventoryTab.all) ...[
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: Text(
+                    'سناكس',
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
+                  ),
+                ),
+                _extrasContent(extras),
+                if (list.isNotEmpty) const SizedBox(height: 12),
+              ],
+              if (list.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: Center(child: Text('لا توجد عناصر')),
+                )
+              else
+                Column(
+                  children: list
+                      .map(
+                        (r) => InventoryTile.coffee(
+                          row: r,
+                          maxStockForBar: max,
+                          // onEdit: () => _openEdit(context, r),
+                          // onDelete: () => _confirmDelete(context, r),
+                        ),
+                      )
+                      .toList(),
+                ),
+            ],
           ],
         ),
       ),
@@ -115,6 +129,30 @@ class InventoryPage extends ConsumerWidget {
     );
   }
 
+  Widget _extrasContent(AsyncValue<List<ExtraInventoryRow>> extras) {
+    return extras.when(
+      loading: () => const Padding(
+        padding: EdgeInsets.symmetric(vertical: 16),
+        child: Center(child: CircularProgressIndicator()),
+      ),
+      error: (e, _) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Text('تعذر تحميل الإضافات: $e'),
+      ),
+      data: (rows) {
+        if (rows.isEmpty) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: Center(child: Text('لا توجد إضافات')),
+          );
+        }
+        return Column(
+          children: rows.map((e) => InventoryTile.extra(row: e)).toList(),
+        );
+      },
+    );
+  }
+}
   // PreferredSizeWidget _bar(BuildContext context) {
   //   return PreferredSize(
   //     preferredSize: const Size.fromHeight(72),
@@ -139,31 +177,4 @@ class InventoryPage extends ConsumerWidget {
 
   // Future<void> _confirmDelete(BuildContext context, InventoryRow r) async {
   //   final ok = await showDialog<bool>(
-  //     context: context,
-  //     builder: (_) => AlertDialog(
-  //       title: const Text('حذف العنصر'),
-  //       content: Text(
-  //         'هل تريد حذف "${r.name}${r.variant.isEmpty ? '' : ' — ${r.variant}'}"؟',
-  //       ),
-  //       actions: [
-  //         TextButton(
-  //           onPressed: () => Navigator.pop(context, false),
-  //           child: const Text('إلغاء'),
-  //         ),
-  //         FilledButton(
-  //           onPressed: () => Navigator.pop(context, true),
-  //           child: const Text('حذف'),
-  //         ),
-  //       ],
-  //     ),
-  //   );
-  //   if (ok == true) {
-  //     await deleteInventoryRow(r);
-  //     if (context.mounted) {
-  //       ScaffoldMessenger.of(
-  //         context,
-  //       ).showSnackBar(const SnackBar(content: Text('تم الحذف')));
-  //     }
-  //   }
-  // }
-}
+  //     context: context

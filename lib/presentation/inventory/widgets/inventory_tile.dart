@@ -2,20 +2,24 @@ import 'package:elfouad_admin/presentation/inventory/providers.dart';
 import 'package:flutter/material.dart';
 
 class InventoryTile extends StatelessWidget {
-  final InventoryRow row;
-  // final VoidCallback? onEdit;
-  // final VoidCallback? onDelete;
-  final double maxStockForBar;
-  const InventoryTile({
+  final String title;
+  final List<_InventoryChipData> chips;
+  final double? progressValue;
+  final Color? progressColor;
+
+  const InventoryTile._({
     super.key,
-    required this.row,
-    required this.maxStockForBar,
-    // this.onEdit,
-    // this.onDelete,
+    required this.title,
+    required this.chips,
+    this.progressValue,
+    this.progressColor,
   });
 
-  @override
-  Widget build(BuildContext context) {
+  factory InventoryTile.coffee({
+    Key? key,
+    required InventoryRow row,
+    required double maxStockForBar,
+  }) {
     final title = row.variant.isEmpty
         ? row.name
         : '${row.name} — ${row.variant}';
@@ -32,6 +36,74 @@ class InventoryTile extends StatelessWidget {
       barColor = const Color(0xFF6F4E37); // بني
     }
 
+    return InventoryTile._(
+      key: key,
+      title: title,
+      chips: [
+        _InventoryChipData(
+          icon: Icons.scale,
+          label: 'مخزون',
+          value: '${row.stockG.toStringAsFixed(0)} جم',
+        ),
+        _InventoryChipData(
+          icon: Icons.sell,
+          label: 'سعر/كجم',
+          value: row.sellPerKg.toStringAsFixed(2),
+        ),
+        if (row.minLevelG > 0)
+          _InventoryChipData(
+            icon: Icons.warning_amber_rounded,
+            label: 'حد أدنى',
+            value: '${row.minLevelG.toStringAsFixed(0)} جم',
+          ),
+      ],
+      progressValue: percent,
+      progressColor: barColor,
+    );
+  }
+
+  factory InventoryTile.extra({Key? key, required ExtraInventoryRow row}) {
+    final chips = <_InventoryChipData>[
+      if (row.category.trim().isNotEmpty)
+        _InventoryChipData(
+          icon: Icons.category,
+          label: 'التصنيف',
+          value: row.category.trim(),
+        ),
+      _InventoryChipData(
+        icon: Icons.inventory_2,
+        label: 'المخزون',
+        value: _formatStock(row.stockUnits, row.unit),
+      ),
+      _InventoryChipData(
+        icon: Icons.attach_money,
+        label: 'سعر البيع',
+        value: _formatNumber(row.priceSell),
+      ),
+      _InventoryChipData(
+        icon: Icons.money_off,
+        label: 'التكلفة',
+        value: _formatNumber(row.costUnit),
+      ),
+      if (!row.active)
+        _InventoryChipData(
+          icon: Icons.pause_circle_filled,
+          label: 'الحالة',
+          value: 'غير مفعّل',
+        ),
+    ];
+
+    return InventoryTile._(
+      key: key,
+      title: row.name,
+      chips: chips,
+      progressValue: null,
+      progressColor: null,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       margin: const EdgeInsets.symmetric(vertical: 6),
@@ -40,64 +112,33 @@ class InventoryTile extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // العنوان + أزرار
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    title,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 16,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                // if (onDelete != null)
-                //   IconButton(
-                //     icon: const Icon(Icons.delete_outline),
-                //     onPressed: onDelete,
-                //     tooltip: 'حذف',
-                //   ),
-                // if (onEdit != null)
-                //   IconButton(
-                //     icon: const Icon(Icons.edit),
-                //     onPressed: onEdit,
-                //     tooltip: 'تعديل',
-                //   ),
-              ],
+            Text(
+              title,
+              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+              overflow: TextOverflow.ellipsis,
             ),
-            const SizedBox(height: 4),
-            // معلومات سطر واحد
+            const SizedBox(height: 6),
             Wrap(
               spacing: 12,
               runSpacing: 4,
-              children: [
-                _chip(
-                  Icons.scale,
-                  'مخزون',
-                  '${row.stockG.toStringAsFixed(0)} جم',
-                ),
-                _chip(Icons.sell, 'سعر/كجم', row.sellPerKg.toStringAsFixed(2)),
-                if (row.minLevelG > 0)
-                  _chip(
-                    Icons.warning_amber_rounded,
-                    'حد أدنى',
-                    '${row.minLevelG.toStringAsFixed(0)} جم',
+              children: chips
+                  .map((c) => _chip(c.icon, c.label, c.value))
+                  .toList(),
+            ),
+            if (progressValue != null) ...[
+              const SizedBox(height: 10),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: LinearProgressIndicator(
+                  value: progressValue!.clamp(0.0, 1.0),
+                  minHeight: 8,
+                  backgroundColor: Colors.brown.shade50,
+                  valueColor: AlwaysStoppedAnimation(
+                    progressColor ?? const Color(0xFF6F4E37),
                   ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            // شريط التقدم للمخزون
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: LinearProgressIndicator(
-                value: percent,
-                minHeight: 8,
-                backgroundColor: Colors.brown.shade50,
-                valueColor: AlwaysStoppedAnimation(barColor),
+                ),
               ),
-            ),
+            ],
           ],
         ),
       ),
@@ -129,4 +170,31 @@ class InventoryTile extends StatelessWidget {
       ),
     );
   }
+
+  static String _formatNumber(double value) {
+    if (value.isNaN || value.isInfinite) return '0';
+    if (value == value.roundToDouble()) {
+      return value.toStringAsFixed(0);
+    }
+    return value.toStringAsFixed(2);
+  }
+
+  static String _formatStock(double stock, String unit) {
+    final formatted = _formatNumber(stock);
+    final trimmedUnit = unit.trim();
+    if (trimmedUnit.isEmpty) return formatted;
+    return '$formatted $trimmedUnit';
+  }
+}
+
+class _InventoryChipData {
+  final IconData icon;
+  final String label;
+  final String value;
+
+  const _InventoryChipData({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
 }
