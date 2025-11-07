@@ -86,44 +86,6 @@ groupByOperationalDayWithRollover(
   return byDay;
 }
 
-/// ==== summations ====
-double sumField(
-  List<QueryDocumentSnapshot<Map<String, dynamic>>> es,
-  String k,
-) {
-  double s = 0;
-  for (final e in es) {
-    s += numD(e.data()[k]);
-  }
-  return s;
-}
-
-int sumDrinkCups(List<QueryDocumentSnapshot<Map<String, dynamic>>> es) {
-  int s = 0;
-  for (final e in es) {
-    final m = e.data();
-    final t = (m['type'] ?? '').toString();
-    if (t == 'drink') {
-      final q = numD(m['quantity']);
-      s += (q > 0 ? q.round() : 1);
-    }
-  }
-  return s;
-}
-
-double sumBeansGrams(List<QueryDocumentSnapshot<Map<String, dynamic>>> es) {
-  double s = 0;
-  for (final e in es) {
-    final m = e.data();
-    final t = (m['type'] ?? '').toString();
-    if (t == 'single' || t == 'ready_blend') {
-      s += numD(m['grams']);
-    } else if (t == 'custom_blend') {
-      s += numD(m['total_grams']);
-    }
-  }
-  return s;
-}
 // ====== Shared helpers ======
 
 bool isUnpaidDeferred(Map<String, dynamic> m) {

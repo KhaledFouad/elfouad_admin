@@ -7,6 +7,7 @@ class DayBucket {
     required this.sumProfit,
     required this.cups,
     required this.grams,
+    required this.extrasPieces,
   });
 
   final String dayKey;
@@ -16,6 +17,7 @@ class DayBucket {
   final double sumProfit;
   final int cups;
   final double grams;
+  final int extrasPieces;
 }
 
 String _opDayKeyFromLocal(DateTime local) {
@@ -73,6 +75,7 @@ Future<List<DayBucket>> buildBuckets(Map payload) async {
     final es = byDay[k]!;
     double price = 0, cost = 0, profit = 0, grams = 0;
     int cups = 0;
+    int extrasPieces = 0;
     final ids = <String>[];
 
     for (final m in es) {
@@ -95,6 +98,13 @@ Future<List<DayBucket>> buildBuckets(Map payload) async {
       } else if (type == 'custom_blend') {
         grams += _d(m['total_grams']);
       }
+
+      final isExtra = type == 'extra' ||
+          ((m['unit'] ?? '').toString() == 'piece' && m.containsKey('extra_id'));
+      if (isExtra) {
+        final q = _d(m['quantity']);
+        extrasPieces += (q > 0 ? q.round() : 1);
+      }
       ids.add(m['id'] as String);
     }
     out.add(
@@ -106,6 +116,7 @@ Future<List<DayBucket>> buildBuckets(Map payload) async {
         sumProfit: profit,
         cups: cups,
         grams: grams,
+        extrasPieces: extrasPieces,
       ),
     );
   }

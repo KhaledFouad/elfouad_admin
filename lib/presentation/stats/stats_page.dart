@@ -28,12 +28,7 @@ class _StatsPageState extends ConsumerState<StatsPage> {
     final period = ref.watch(statsSelectedPeriodProvider);
     final theme = Theme.of(context);
 
-    final kpis = ref.watch(statsKpisProvider);
-    final trends = ref.watch(statsTrendsProvider);
-    final beans = ref.watch(beansByNameProvider);
-    final drinks = ref.watch(drinksByNameProvider);
-    final extras = ref.watch(extrasByNameProvider);
-    final highlights = ref.watch(statsHighlightsProvider);
+    final overview = ref.watch(statsOverviewProvider);
     return Scaffold(
       appBar: _brandedMonthAppBar(context, month),
       body: RefreshIndicator.adaptive(
@@ -60,7 +55,7 @@ class _StatsPageState extends ConsumerState<StatsPage> {
             const SizedBox(height: 8),
 
             // KPIs مرنة
-            kpis.when(
+            overview.when(
               loading: () => const Center(
                 child: Padding(
                   padding: EdgeInsets.symmetric(vertical: 16),
@@ -68,29 +63,32 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                 ),
               ),
               error: (e, _) => Text('تعذر تحميل الملخص: $e'),
-              data: (v) => KpiWrap(
-                items: [
-                  Kpi(
-                    'إجمالي المبيعات',
-                    v.sales.toStringAsFixed(2),
-                    Icons.attach_money,
-                  ),
-                  Kpi('التكلفة', v.cost.toStringAsFixed(2), Icons.factory),
-                  Kpi('الربح', v.profit.toStringAsFixed(2), Icons.trending_up),
-                  Kpi('الأكواب', v.cups.toStringAsFixed(0), Icons.local_cafe),
-                  Kpi(
-                    'سناكس',
-                    v.units.toStringAsFixed(0),
-                    Icons.cookie_rounded,
-                  ),
-                  Kpi('جرامات البن', v.grams.toStringAsFixed(0), Icons.scale),
-                  Kpi(
-                    'المصروفات',
-                    v.expenses.toStringAsFixed(2),
-                    Icons.account_balance_wallet,
-                  ),
-                ],
-              ),
+              data: (bundle) {
+                final v = bundle.kpis;
+                return KpiWrap(
+                  items: [
+                    Kpi(
+                      'إجمالي المبيعات',
+                      v.sales.toStringAsFixed(2),
+                      Icons.attach_money,
+                    ),
+                    Kpi('التكلفة', v.cost.toStringAsFixed(2), Icons.factory),
+                    Kpi('الربح', v.profit.toStringAsFixed(2), Icons.trending_up),
+                    Kpi('الأكواب', v.cups.toStringAsFixed(0), Icons.local_cafe),
+                    Kpi(
+                      'سناكس',
+                      v.units.toStringAsFixed(0),
+                      Icons.cookie_rounded,
+                    ),
+                    Kpi('جرامات البن', v.grams.toStringAsFixed(0), Icons.scale),
+                    Kpi(
+                      'المصروفات',
+                      v.expenses.toStringAsFixed(2),
+                      Icons.account_balance_wallet,
+                    ),
+                  ],
+                );
+              },
             ),
 
             const SizedBox(height: 16),
@@ -113,7 +111,7 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    drinks.when(
+                    overview.when(
                       loading: () => const SizedBox(
                         height: 120,
                         child: Center(child: CircularProgressIndicator()),
@@ -122,8 +120,8 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                         padding: const EdgeInsets.all(8.0),
                         child: Text('تعذر تحميل بيانات المشروبات: $e'),
                       ),
-                      data: (drinkList) {
-                        final drinkRows = drinkList
+                      data: (bundle) {
+                        final drinkRows = bundle.drinks
                             .map(
                               (x) => DrinkRow(
                                 name: x.name,
@@ -135,44 +133,28 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                               ),
                             )
                             .toList();
-
-                        return extras.when(
-                          loading: () => const SizedBox(
-                            height: 120,
-                            child: Center(child: CircularProgressIndicator()),
-                          ),
-                          error: (e, _) => Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 8.0),
-                                child: Text('تعذر تحميل بيانات السناكس: $e'),
+                        final snackRows = bundle.extras
+                            .map(
+                              (x) => DrinkRow(
+                                name: x.name,
+                                cups: x.cups,
+                                sales: x.sales,
+                                cost: x.cost,
+                                profit: x.profit,
+                                avgPrice:
+                                    x.cups > 0 ? (x.sales / x.cups) : 0,
                               ),
-                              DrinksByNameTable(rows: drinkRows),
-                            ],
-                          ),
-                          data: (extrasList) {
-                            final snackRows = extrasList
-                                .map(
-                                  (x) => DrinkRow(
-                                    name: x.name,
-                                    cups: x.cups,
-                                    sales: x.sales,
-                                    cost: x.cost,
-                                    profit: x.profit,
-                                    avgPrice: x.cups > 0
-                                        ? (x.sales / x.cups)
-                                        : 0,
-                                  ),
-                                )
-                                .toList();
-
-                            final combined = [...drinkRows, ...snackRows]
-                              ..sort((a, b) => b.sales.compareTo(a.sales));
-
-                            return DrinksByNameTable(rows: combined);
-                          },
-                        );
+                            )
+                            .toList();
+                        final combined = [...drinkRows, ...snackRows]
+                          ..sort((a, b) => b.sales.compareTo(a.sales));
+                        if (combined.isEmpty) {
+                          return const Padding(
+                            padding: EdgeInsets.all(8.0),
+                            child: Text('لا توجد بيانات للمدى المختار'),
+                          );
+                        }
+                        return DrinksByNameTable(rows: combined);
                       },
                     ),
                   ],
@@ -200,7 +182,7 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    highlights.when(
+                    overview.when(
                       loading: () => const SizedBox(
                         height: 120,
                         child: Center(child: CircularProgressIndicator()),
@@ -209,7 +191,8 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                         padding: const EdgeInsets.all(8.0),
                         child: Text('تعذر تحميل المؤشرات اليومية: $e'),
                       ),
-                      data: (value) => StatsHighlightsCard(highlights: value),
+                      data: (bundle) =>
+                          StatsHighlightsCard(highlights: bundle.highlights),
                     ),
                   ],
                 ),
@@ -236,7 +219,7 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    beans.when(
+                    overview.when(
                       loading: () => const SizedBox(
                         height: 120,
                         child: Center(child: CircularProgressIndicator()),
@@ -245,8 +228,8 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                         padding: const EdgeInsets.all(8.0),
                         child: Text('تعذر تحميل بيانات البن: $e'),
                       ),
-                      data: (list) {
-                        final rows = list
+                      data: (bundle) {
+                        final rows = bundle.beans
                             .map(
                               (x) => BeanRow(
                                 name: x.name,
@@ -256,6 +239,12 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                               ),
                             )
                             .toList();
+                        if (rows.isEmpty) {
+                          return const Padding(
+                            padding: EdgeInsets.all(8.0),
+                            child: Text('لا توجد بيانات للمدى المختار'),
+                          );
+                        }
                         return BeansByNameTable(rows: rows);
                       },
                     ),
@@ -307,22 +296,25 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                       ],
                     ),
                     const SizedBox(height: 8),
-                    trends.when(
+                    overview.when(
                       loading: () => const SizedBox(
                         height: 220,
                         child: Center(child: CircularProgressIndicator()),
                       ),
                       error: (e, _) => Text('تعذر تحميل الترند: $e'),
-                      data: (t) => TripleTrendChart(
-                        line1: _profitMode ? t.totalProfit : t.totalSales,
-                        lineDrinks: _profitMode
-                            ? t.drinksProfit
-                            : t.drinksSales,
-                        lineBeansGrams: _profitMode
-                            ? t.beansProfit
-                            : t.beansSales,
-                        asProfit: _profitMode,
-                      ),
+                      data: (bundle) {
+                        final t = bundle.trends;
+                        return TripleTrendChart(
+                          line1: _profitMode ? t.totalProfit : t.totalSales,
+                          lineDrinks: _profitMode
+                              ? t.drinksProfit
+                              : t.drinksSales,
+                          lineBeansGrams: _profitMode
+                              ? t.beansProfit
+                              : t.beansSales,
+                          asProfit: _profitMode,
+                        );
+                      },
                     ),
                   ],
                 ),

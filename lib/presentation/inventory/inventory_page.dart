@@ -51,51 +51,64 @@ class InventoryPage extends ConsumerWidget {
             ),
           ),
         ),
-        body: ListView(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
-          children: [
-            // Chips
-            Wrap(
-              spacing: 8,
-              children: [
-                _chip(ref, 'الكل', InventoryTab.all, tab),
-                // _chip(ref, 'المشروبات', InventoryTab.drinks, tab),
-                _chip(ref, 'الأصناف المنفردة', InventoryTab.singles, tab),
-                _chip(ref, 'التوليفات', InventoryTab.blends, tab),
-              ],
+        body: CustomScrollView(
+          physics: const BouncingScrollPhysics(),
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+              sliver: SliverToBoxAdapter(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        _chip(ref, 'الكل', InventoryTab.all, tab),
+                        _chip(ref, 'الأصناف المنفردة', InventoryTab.singles, tab),
+                        _chip(ref, 'التوليفات', InventoryTab.blends, tab),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    if (tab == InventoryTab.drinks)
+                      Card(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: Text('المشروبات لا تُدار كمخزون جرامات هنا.'),
+                        ),
+                      )
+                    else if (list.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 24),
+                        child: Center(child: Text('لا توجد عناصر')),
+                      )
+                    else
+                      const SizedBox(height: 4),
+                  ],
+                ),
+              ),
             ),
-            const SizedBox(height: 8),
-
-            if (tab == InventoryTab.drinks)
-              Card(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+            if (list.isNotEmpty)
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                      final r = list[index];
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: InventoryTile.coffee(
+                          key: ValueKey(r.id),
+                          row: r,
+                          maxStockForBar: max,
+                        ),
+                      );
+                    },
+                    childCount: list.length,
+                  ),
                 ),
-                child: const Padding(
-                  padding: EdgeInsets.all(12),
-                  child: Text('المشروبات لا تُدار كمخزون جرامات هنا.'),
-                ),
-              )
-            else ...[
-              if (list.isNotEmpty) const SizedBox(height: 12),
-            ],
-            if (list.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(child: Text('لا توجد عناصر')),
-              )
-            else
-              Column(
-                children: list
-                    .map(
-                      (r) => InventoryTile.coffee(
-                        row: r,
-                        maxStockForBar: max,
-                        // onEdit: () => _openEdit(context, r),
-                        // onDelete: () => _confirmDelete(context, r),
-                      ),
-                    )
-                    .toList(),
               ),
           ],
         ),

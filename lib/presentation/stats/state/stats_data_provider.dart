@@ -95,6 +95,23 @@ class StatsHighlights {
   });
 }
 
+class StatsOverview {
+  final Kpis kpis;
+  final List<GroupRow> drinks;
+  final List<GroupRow> beans;
+  final List<GroupRow> extras;
+  final TrendsBundle trends;
+  final StatsHighlights highlights;
+  const StatsOverview({
+    required this.kpis,
+    required this.drinks,
+    required this.beans,
+    required this.extras,
+    required this.trends,
+    required this.highlights,
+  });
+}
+
 /// ============ Helpers ============
 
 double _d(dynamic v) {
@@ -237,10 +254,10 @@ final statsThirdsPreviewProvider =
     });
 
 /// ============ KPIs (الربح من الداتا + استبعاد الأجل غير المدفوع) ============
-final statsKpisProvider = FutureProvider<Kpis>((ref) async {
-  final data = await ref.watch(statsSalesProvider.future);
-  final expensesList = await ref.watch(statsExpensesProvider.future);
-
+Kpis _buildKpis(
+  List<Map<String, dynamic>> data,
+  List<Map<String, dynamic>> expensesList,
+) {
   double sales = 0, cost = 0, profit = 0, grams = 0;
   int cups = 0;
   int units = 0;
@@ -252,12 +269,10 @@ final statsKpisProvider = FutureProvider<Kpis>((ref) async {
 
     final type = '${m['type'] ?? ''}';
 
-    // إجمالي/تكلفة/ربح
     sales += _d(m['total_price']);
     cost += _d(m['total_cost']);
     profit += _d(m['profit_total']);
 
-    // أكواب / جرامات / وحدات سناكس
     if (type == 'drink') {
       final q = (m['quantity'] is num)
           ? (m['quantity'] as num).toDouble()
@@ -272,11 +287,10 @@ final statsKpisProvider = FutureProvider<Kpis>((ref) async {
           ? (m['total_grams'] as num).toDouble()
           : _d(m['total_grams']);
     } else if (type == 'extra') {
-      // 👈 جديد
       final q = (m['quantity'] is num)
           ? (m['quantity'] as num).toDouble()
           : _d(m['quantity']);
-      units += (q > 0 ? q.round() : 1); // عدد قطع السناكس
+      units += (q > 0 ? q.round() : 1);
     }
   }
 
@@ -286,54 +300,57 @@ final statsKpisProvider = FutureProvider<Kpis>((ref) async {
   );
 
   return Kpis(
-    sales: sales, // بدون الأجل غير المدفوع
-    cost: cost, // بدون الأجل غير المدفوع
-    profit: profit, // مجموع profit_total من الداتا
+    sales: sales,
+    cost: cost,
+    profit: profit,
     cups: cups,
     grams: grams,
     expenses: expensesSum,
     units: units,
   );
+}
+
+final statsKpisProvider = FutureProvider<Kpis>((ref) async {
+  final data = await ref.watch(statsSalesProvider.future);
+  final expensesList = await ref.watch(statsExpensesProvider.future);
+  return _buildKpis(data, expensesList);
 });
 
 /// ============ Extras (Snacks: معمول/تمر) by name ============
-final extrasByNameProvider = FutureProvider<List<GroupRow>>((ref) async {
-  final data = await ref.watch(statsSalesProvider.future);
+List<GroupRow> _buildExtrasRows(List<Map<String, dynamic>> data) {
   final map = <String, GroupRow>{};
-
   for (final m in data) {
     if (_isUnpaidDeferred(m)) continue;
 
     final type = '${m['type'] ?? ''}';
     final isExtra = type == 'extra' || m.containsKey('extra_id');
-    if (!isExtra) continue; // بس السناكس
+    if (!isExtra) continue;
 
-    // الاسم + الاختيار (لو موجود)
     final name = ('${m['name'] ?? m['extra_name'] ?? 'سناكس'}').trim();
     final variant = ('${m['variant'] ?? ''}').trim();
     final key = variant.isEmpty ? name : '$name - $variant';
 
-    // أرقام العملية
     final price =
         (m['total_price'] as num?)?.toDouble() ?? _d(m['total_price']);
     final cost = (m['total_cost'] as num?)?.toDouble() ?? _d(m['total_cost']);
     final profit =
         (m['profit_total'] as num?)?.toDouble() ?? _d(m['profit_total']);
     final qRaw = (m['quantity'] as num?)?.toDouble() ?? _d(m['quantity']);
-    final pieces = (qRaw > 0 ? qRaw.round() : 1); // عدد القطع
+    final pieces = (qRaw > 0 ? qRaw.round() : 1);
 
-    // تجميع
     final prev = map[key] ?? const GroupRow(key: '');
     final base = prev.key.isEmpty ? GroupRow(key: key) : prev;
     map[key] = base.add(s: price, c: cost, p: profit, cu: pieces);
   }
-
   final list = map.values.toList()..sort((a, b) => b.sales.compareTo(a.sales));
   return list;
-});
-final statsHighlightsProvider = FutureProvider<StatsHighlights>((ref) async {
-  final data = await ref.watch(statsSalesProvider.future);
+}
 
+final extrasByNameProvider = FutureProvider<List<GroupRow>>((ref) async {
+  final data = await ref.watch(statsSalesProvider.future);
+  return _buildExtrasRows(data);
+});
+StatsHighlights _buildHighlights(List<Map<String, dynamic>> data) {
   final Map<DateTime, double> salesByDay = {};
   final Map<DateTime, double> profitByDay = {};
   final Map<DateTime, int> servingsByDay = {};
@@ -439,14 +456,17 @@ final statsHighlightsProvider = FutureProvider<StatsHighlights>((ref) async {
     activeDays: activeDays,
     totalServings: totalServings,
   );
+}
+
+final statsHighlightsProvider = FutureProvider<StatsHighlights>((ref) async {
+  final data = await ref.watch(statsSalesProvider.future);
+  return _buildHighlights(data);
 });
 
 /// ============ Drinks/Beans by name ============
 
-final drinksByNameProvider = FutureProvider<List<GroupRow>>((ref) async {
-  final data = await ref.watch(statsSalesProvider.future);
+List<GroupRow> _buildDrinksRows(List<Map<String, dynamic>> data) {
   final map = <String, GroupRow>{};
-
   for (final m in data) {
     if (_isUnpaidDeferred(m)) continue;
     if ('${m['type'] ?? ''}' != 'drink') continue;
@@ -470,11 +490,15 @@ final drinksByNameProvider = FutureProvider<List<GroupRow>>((ref) async {
 
   final list = map.values.toList()..sort((a, b) => b.sales.compareTo(a.sales));
   return list;
+}
+
+final drinksByNameProvider = FutureProvider<List<GroupRow>>((ref) async {
+  final data = await ref.watch(statsSalesProvider.future);
+  return _buildDrinksRows(data);
 });
 
 /// يفكّك "توليفة العميل" ويجمع كل مكوّن باسمُه (name - variant)
-final beansByNameProvider = FutureProvider<List<GroupRow>>((ref) async {
-  final data = await ref.watch(statsSalesProvider.future);
+List<GroupRow> _buildBeansRows(List<Map<String, dynamic>> data) {
   final map = <String, GroupRow>{};
 
   List<Map<String, dynamic>> asListMap(dynamic v) {
@@ -525,7 +549,6 @@ final beansByNameProvider = FutureProvider<List<GroupRow>>((ref) async {
     if (_isUnpaidDeferred(m)) continue;
     final type = '${m['type'] ?? ''}';
 
-    // الأصناف الجاهزة/المنفردة
     if (type == 'single' || type == 'ready_blend') {
       final name = ('${m['name'] ?? m['single_name'] ?? m['blend_name'] ?? ''}')
           .trim();
@@ -543,7 +566,6 @@ final beansByNameProvider = FutureProvider<List<GroupRow>>((ref) async {
       continue;
     }
 
-    // توليفة العميل
     if (type == 'custom_blend') {
       final comps = asListMap(m['components']);
       final items = asListMap(m['items']);
@@ -598,6 +620,11 @@ final beansByNameProvider = FutureProvider<List<GroupRow>>((ref) async {
 
   final list = map.values.toList()..sort((a, b) => b.sales.compareTo(a.sales));
   return list;
+}
+
+final beansByNameProvider = FutureProvider<List<GroupRow>>((ref) async {
+  final data = await ref.watch(statsSalesProvider.future);
+  return _buildBeansRows(data);
 });
 
 /// ============ Trends (مدفوع فقط + الربح من الداتا) ============
@@ -619,9 +646,7 @@ class TrendsBundle {
   });
 }
 
-final statsTrendsProvider = FutureProvider<TrendsBundle>((ref) async {
-  final data = await ref.watch(statsSalesProvider.future);
-
+TrendsBundle _buildTrends(List<Map<String, dynamic>> data) {
   final Map<DateTime, double> salesM = {};
   final Map<DateTime, double> profitM = {};
   final Map<DateTime, double> drinksSalesM = {};
@@ -633,7 +658,7 @@ final statsTrendsProvider = FutureProvider<TrendsBundle>((ref) async {
     if (_isUnpaidDeferred(m)) continue;
 
     final ts = _asUtc(m['created_at']);
-    final k = opDayKeyUtc(ts); // 4ص تشغيلية
+    final k = opDayKeyUtc(ts);
     final type = '${m['type'] ?? ''}';
 
     final price =
@@ -666,6 +691,24 @@ final statsTrendsProvider = FutureProvider<TrendsBundle>((ref) async {
     beansSales: toList(beansSalesM),
     beansProfit: toList(beansProfitM),
   );
+}
+
+final statsTrendsProvider = FutureProvider<TrendsBundle>((ref) async {
+  final data = await ref.watch(statsSalesProvider.future);
+  return _buildTrends(data);
+});
+
+final statsOverviewProvider = FutureProvider<StatsOverview>((ref) async {
+  final data = await ref.watch(statsSalesProvider.future);
+  final expenses = await ref.watch(statsExpensesProvider.future);
+  return StatsOverview(
+    kpis: _buildKpis(data, expenses),
+    drinks: _buildDrinksRows(data),
+    beans: _buildBeansRows(data),
+    extras: _buildExtrasRows(data),
+    trends: _buildTrends(data),
+    highlights: _buildHighlights(data),
+  );
 });
 
 // دالة بتعمل Refresh لكل الداتا من السورس
@@ -678,6 +721,7 @@ Future<void> refreshStatsProviders(WidgetRef ref) async {
   ref.invalidate(statsTrendsProvider);
   ref.invalidate(extrasByNameProvider);
   ref.invalidate(statsHighlightsProvider);
+  ref.invalidate(statsOverviewProvider);
 
   // كمان بنعمل invalidate للكاش الخام الشهري (family)
   ref.invalidate(salesRawForMonthProvider);

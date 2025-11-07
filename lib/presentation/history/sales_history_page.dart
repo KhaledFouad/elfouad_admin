@@ -271,8 +271,9 @@ class SalesHistoryPage extends ConsumerWidget {
                               sumPrice: b.sumPrice,
                               sumCost: b.sumCost,
                               sumProfit: b.sumProfit,
-                              cups: sumDrinkCups(entries),
-                              grams: sumBeansGrams(entries),
+                              cups: b.cups,
+                              grams: b.grams,
+                              extrasPieces: b.extrasPieces,
                               onEdit: (doc) => showModalBottomSheet(
                                 context: context,
                                 isScrollControlled: true,

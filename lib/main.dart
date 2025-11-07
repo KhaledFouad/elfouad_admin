@@ -1,7 +1,9 @@
 import 'dart:async' show unawaited;
+import 'package:elfouad_admin/core/firestore_tuning.dart' show configureFirestore;
 import 'package:elfouad_admin/presentation/home/app_shell.dart';
 import 'package:elfouad_admin/services/archive/auto_archiver.dart.dart'
     show runAutoArchiveIfNeeded;
+import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -14,12 +16,12 @@ const _accentHex = 0xFFC49A6C; // بيج  اتح
 
 Future<void> _initFirebase() async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await configureFirestore();
 }
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await _initFirebase();
-  runApp(const ProviderScope(child: MyApp()));
+Future<void> _scheduleAutoArchive() async {
+  if (!kReleaseMode) return; // keep dev builds snappy
+  await Future<void>.delayed(const Duration(seconds: 8));
   unawaited(
     runAutoArchiveIfNeeded(
       adminUid: 'system',
@@ -28,6 +30,13 @@ void main() async {
       batchSize: 200,
     ),
   );
+}
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await _initFirebase();
+  runApp(const ProviderScope(child: MyApp()));
+  unawaited(_scheduleAutoArchive());
 }
 
 ThemeData _lightTheme() {

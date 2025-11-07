@@ -8,6 +8,7 @@ class DaySection extends StatelessWidget {
   final double sumPrice, sumCost, sumProfit;
   final int cups;
   final double grams;
+  final int extrasPieces;
   final void Function(DocumentSnapshot<Map<String, dynamic>> doc) onEdit;
   final void Function(DocumentSnapshot<Map<String, dynamic>> doc) onDelete;
 
@@ -20,31 +21,13 @@ class DaySection extends StatelessWidget {
     required this.sumProfit,
     required this.cups,
     required this.grams,
+    required this.extrasPieces,
     required this.onEdit,
     required this.onDelete,
   });
 
-  // اجمع عدد قطع المعمول/التمر من نفس لستة اليوم
-  int _extrasPieces() {
-    var total = 0;
-    for (final e in entries) {
-      final m = e.data();
-      final t = (m['type'] ?? '').toString();
-      if (t == 'extra' ||
-          ((m['unit'] ?? '').toString() == 'piece' &&
-              m.containsKey('extra_id'))) {
-        final q = m['quantity'];
-        final qi = (q is num) ? q.toInt() : int.tryParse('${q ?? 0}') ?? 0;
-        total += qi;
-      }
-    }
-    return total;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final extrasPieces = _extrasPieces();
-
     return RepaintBoundary(
       child: Card(
         elevation: 3,
@@ -95,7 +78,8 @@ class DaySection extends StatelessWidget {
 
   static Widget _pill(IconData icon, String label, dynamic v) {
     final isGrams = label.contains('جرام');
-    final isPieces = label.contains('معمول') || label.contains('تمر');
+    final isPieces =
+        label.contains('معمول') || label.contains('تمر') || label.contains('سناكس');
     final text = isGrams
         ? '${v.toStringAsFixed(0)} جم'
         : isPieces

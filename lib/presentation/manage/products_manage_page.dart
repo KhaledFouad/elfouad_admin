@@ -88,14 +88,20 @@ class ManagePage extends ConsumerWidget {
     );
 
     // خليه يعرف الـ collection علشان يفتح الـ ProductEditSheet
-    Widget invList(String collection, List<InventoryRow> rows) => Column(
-      children: rows
-          .map(
-            (r) => Card(
+    Widget invList(String collection, List<InventoryRow> rows) =>
+        ListView.separated(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: rows.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 8),
+          itemBuilder: (_, index) {
+            final r = rows[index];
+            return Card(
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(14),
               ),
               child: ListTile(
+                key: ValueKey('${collection}_${r.id}'),
                 title: Text(
                   r.variant.isEmpty ? r.name : '${r.name} — ${r.variant}',
                   overflow: TextOverflow.ellipsis,
@@ -125,8 +131,6 @@ class ManagePage extends ConsumerWidget {
                       onPressed: () => _openProductEditor(
                         context,
                         collection: collection,
-                        // InventoryRow عندك غالبًا فيه ref/id.
-                        // استخدم اللي موجود:
                         id: r.id,
                       ),
                     ),
@@ -138,10 +142,9 @@ class ManagePage extends ConsumerWidget {
                   ],
                 ),
               ),
-            ),
-          )
-          .toList(),
-    );
+            );
+          },
+        );
 
     Widget singles0() => singles.when(
       loading: _loading,
@@ -157,58 +160,62 @@ class ManagePage extends ConsumerWidget {
     Widget extras0() => extras.when(
       loading: _loading,
       error: _err('الإضافات'),
-      data: (rows) => Column(
-        children: rows
-            .map(
-              (e) => Card(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: ListTile(
-                  title: Text(
-                    e.name,
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  subtitle: Wrap(
-                    spacing: 10,
-                    runSpacing: 6,
-                    children: [
-                      if (e.category.isNotEmpty)
-                        _pill(Icons.category, 'التصنيف', e.category),
-                      _pill(
-                        Icons.inventory_2,
-                        'المخزون',
-                        '${_fmtNum(e.stockUnits)}${e.unit.isEmpty ? '' : ' ${e.unit}'}',
-                      ),
-                      _pill(
-                        Icons.attach_money,
-                        'سعر البيع',
-                        _fmtNum(e.priceSell),
-                      ),
-                      _pill(Icons.money_off, 'التكلفة', _fmtNum(e.costUnit)),
-                      if (!e.active)
-                        _pill(Icons.pause_circle_filled, 'الحالة', 'غير مفعّل'),
-                    ],
-                  ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.edit),
-                        tooltip: 'تعديل',
-                        onPressed: () => _openExtraEditor(context, e.id),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline),
-                        tooltip: 'حذف',
-                        onPressed: () => _confirmDeleteExtra(context, e),
-                      ),
-                    ],
-                  ),
-                ),
+      data: (rows) => ListView.separated(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: rows.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 8),
+        itemBuilder: (_, index) {
+          final e = rows[index];
+          return Card(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: ListTile(
+              key: ValueKey('extra_${e.id}'),
+              title: Text(
+                e.name,
+                style: const TextStyle(fontWeight: FontWeight.w700),
               ),
-            )
-            .toList(),
+              subtitle: Wrap(
+                spacing: 10,
+                runSpacing: 6,
+                children: [
+                  if (e.category.isNotEmpty)
+                    _pill(Icons.category, 'التصنيف', e.category),
+                  _pill(
+                    Icons.inventory_2,
+                    'المخزون',
+                    '${_fmtNum(e.stockUnits)}${e.unit.isEmpty ? '' : ' ${e.unit}'}',
+                  ),
+                  _pill(
+                    Icons.attach_money,
+                    'سعر البيع',
+                    _fmtNum(e.priceSell),
+                  ),
+                  _pill(Icons.money_off, 'التكلفة', _fmtNum(e.costUnit)),
+                  if (!e.active)
+                    _pill(Icons.pause_circle_filled, 'الحالة', 'غير مفعّل'),
+                ],
+              ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.edit),
+                    tooltip: 'تعديل',
+                    onPressed: () => _openExtraEditor(context, e.id),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline),
+                    tooltip: 'حذف',
+                    onPressed: () => _confirmDeleteExtra(context, e),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
 
