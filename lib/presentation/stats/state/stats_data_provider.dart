@@ -59,6 +59,42 @@ class DayVal {
   const DayVal(this.day, this.v);
 }
 
+class DayHighlight {
+  final DateTime day;
+  final double sales;
+  final double profit;
+  final int servings;
+  final int orders;
+  const DayHighlight({
+    required this.day,
+    required this.sales,
+    required this.profit,
+    required this.servings,
+    required this.orders,
+  });
+}
+
+class StatsHighlights {
+  final DayHighlight? topSalesDay;
+  final DayHighlight? topProfitDay;
+  final DayHighlight? busiestDay;
+  final double averageOrderValue;
+  final double averageDailySales;
+  final int totalOrders;
+  final int activeDays;
+  final int totalServings;
+  const StatsHighlights({
+    required this.topSalesDay,
+    required this.topProfitDay,
+    required this.busiestDay,
+    required this.averageOrderValue,
+    required this.averageDailySales,
+    required this.totalOrders,
+    required this.activeDays,
+    required this.totalServings,
+  });
+}
+
 /// ============ Helpers ============
 
 double _d(dynamic v) {
@@ -294,6 +330,115 @@ final extrasByNameProvider = FutureProvider<List<GroupRow>>((ref) async {
 
   final list = map.values.toList()..sort((a, b) => b.sales.compareTo(a.sales));
   return list;
+});
+final statsHighlightsProvider = FutureProvider<StatsHighlights>((ref) async {
+  final data = await ref.watch(statsSalesProvider.future);
+
+  final Map<DateTime, double> salesByDay = {};
+  final Map<DateTime, double> profitByDay = {};
+  final Map<DateTime, int> servingsByDay = {};
+  final Map<DateTime, Set<String>> ordersByDay = {};
+
+  double totalSales = 0;
+  int totalServings = 0;
+  final uniqueOrders = <String>{};
+
+  for (final m in data) {
+    if (_isUnpaidDeferred(m)) continue;
+
+    final ts = _asUtc(m['created_at']);
+    final opDay = opDayKeyUtc(ts);
+
+    final price =
+        (m['total_price'] as num?)?.toDouble() ?? _d(m['total_price']);
+    final profit =
+        (m['profit_total'] as num?)?.toDouble() ?? _d(m['profit_total']);
+    final type = '${m['type'] ?? ''}';
+
+    int servings = 0;
+    if (type == 'drink') {
+      final q = (m['quantity'] as num?)?.toDouble() ?? _d(m['quantity']);
+      servings = (q > 0 ? q.round() : 1);
+    } else {
+      final isExtra = type == 'extra' || m.containsKey('extra_id');
+      if (isExtra) {
+        final q = (m['quantity'] as num?)?.toDouble() ?? _d(m['quantity']);
+        servings = (q > 0 ? q.round() : 1);
+      }
+    }
+
+    final saleId = '${m['sale_id'] ?? m['id'] ?? ''}'.trim();
+    if (saleId.isNotEmpty) {
+      uniqueOrders.add(saleId);
+      final set = ordersByDay.putIfAbsent(opDay, () => <String>{});
+      set.add(saleId);
+    }
+
+    salesByDay[opDay] = (salesByDay[opDay] ?? 0) + price;
+    profitByDay[opDay] = (profitByDay[opDay] ?? 0) + profit;
+
+    if (servings > 0) {
+      servingsByDay[opDay] = (servingsByDay[opDay] ?? 0) + servings;
+      totalServings += servings;
+    }
+
+    totalSales += price;
+  }
+
+  DateTime? maxDayBySales;
+  double maxSales = -1;
+  salesByDay.forEach((day, value) {
+    if (value > maxSales) {
+      maxSales = value;
+      maxDayBySales = day;
+    }
+  });
+
+  DateTime? maxDayByProfit;
+  double maxProfit = -1;
+  profitByDay.forEach((day, value) {
+    if (value > maxProfit) {
+      maxProfit = value;
+      maxDayByProfit = day;
+    }
+  });
+
+  DateTime? maxDayByServings;
+  int maxServings = -1;
+  servingsByDay.forEach((day, value) {
+    if (value > maxServings) {
+      maxServings = value;
+      maxDayByServings = day;
+    }
+  });
+
+  DayHighlight? highlightFor(DateTime? day) {
+    if (day == null) return null;
+    return DayHighlight(
+      day: day,
+      sales: salesByDay[day] ?? 0,
+      profit: profitByDay[day] ?? 0,
+      servings: servingsByDay[day] ?? 0,
+      orders: ordersByDay[day]?.length ?? 0,
+    );
+  }
+
+  final activeDays = salesByDay.keys.length;
+  final totalOrders = uniqueOrders.length;
+
+  final avgOrderValue = totalOrders > 0 ? (totalSales / totalOrders) : 0.0;
+  final avgDailySales = activeDays > 0 ? (totalSales / activeDays) : 0.0;
+
+  return StatsHighlights(
+    topSalesDay: highlightFor(maxDayBySales),
+    topProfitDay: highlightFor(maxDayByProfit),
+    busiestDay: highlightFor(maxDayByServings),
+    averageOrderValue: avgOrderValue,
+    averageDailySales: avgDailySales,
+    totalOrders: totalOrders,
+    activeDays: activeDays,
+    totalServings: totalServings,
+  );
 });
 
 /// ============ Drinks/Beans by name ============
@@ -532,6 +677,8 @@ Future<void> refreshStatsProviders(WidgetRef ref) async {
   ref.invalidate(beansByNameProvider);
   ref.invalidate(statsTrendsProvider);
   ref.invalidate(extrasByNameProvider);
+  ref.invalidate(statsHighlightsProvider);
+
   // كمان بنعمل invalidate للكاش الخام الشهري (family)
   ref.invalidate(salesRawForMonthProvider);
   await Future.delayed(const Duration(milliseconds: 1));

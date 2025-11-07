@@ -9,6 +9,7 @@ import 'widgets/kpi_wrap.dart';
 import 'widgets/period_chips.dart';
 import 'widgets/triple_trend_chart.dart';
 import 'widgets/beans_by_name_table.dart';
+import 'widgets/highlights_card.dart';
 
 class StatsPage extends ConsumerStatefulWidget {
   const StatsPage({super.key});
@@ -32,7 +33,7 @@ class _StatsPageState extends ConsumerState<StatsPage> {
     final beans = ref.watch(beansByNameProvider);
     final drinks = ref.watch(drinksByNameProvider);
     final extras = ref.watch(extrasByNameProvider);
-
+    final highlights = ref.watch(statsHighlightsProvider);
     return Scaffold(
       appBar: _brandedMonthAppBar(context, month),
       body: RefreshIndicator.adaptive(
@@ -121,8 +122,8 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                         padding: const EdgeInsets.all(8.0),
                         child: Text('تعذر تحميل بيانات المشروبات: $e'),
                       ),
-                      data: (list) {
-                        final rows = list
+                      data: (drinkList) {
+                        final drinkRows = drinkList
                             .map(
                               (x) => DrinkRow(
                                 name: x.name,
@@ -134,8 +135,81 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                               ),
                             )
                             .toList();
-                        return DrinksByNameTable(rows: rows);
+
+                        return extras.when(
+                          loading: () => const SizedBox(
+                            height: 120,
+                            child: Center(child: CircularProgressIndicator()),
+                          ),
+                          error: (e, _) => Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 8.0),
+                                child: Text('تعذر تحميل بيانات السناكس: $e'),
+                              ),
+                              DrinksByNameTable(rows: drinkRows),
+                            ],
+                          ),
+                          data: (extrasList) {
+                            final snackRows = extrasList
+                                .map(
+                                  (x) => DrinkRow(
+                                    name: x.name,
+                                    cups: x.cups,
+                                    sales: x.sales,
+                                    cost: x.cost,
+                                    profit: x.profit,
+                                    avgPrice: x.cups > 0
+                                        ? (x.sales / x.cups)
+                                        : 0,
+                                  ),
+                                )
+                                .toList();
+
+                            final combined = [...drinkRows, ...snackRows]
+                              ..sort((a, b) => b.sales.compareTo(a.sales));
+
+                            return DrinksByNameTable(rows: combined);
+                          },
+                        );
                       },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // أبرز الأيام والمؤشرات
+            Card(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                      child: Text(
+                        'أبرز المؤشرات اليومية',
+                        style: TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    highlights.when(
+                      loading: () => const SizedBox(
+                        height: 120,
+                        child: Center(child: CircularProgressIndicator()),
+                      ),
+                      error: (e, _) => Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Text('تعذر تحميل المؤشرات اليومية: $e'),
+                      ),
+                      data: (value) => StatsHighlightsCard(highlights: value),
                     ),
                   ],
                 ),
