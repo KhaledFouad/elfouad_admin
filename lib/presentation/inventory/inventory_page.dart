@@ -12,7 +12,6 @@ class InventoryPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final max = ref.watch(inventoryMaxStockProvider);
     final list = ref.watch(inventoryListForTabProvider);
-    final extras = ref.watch(extrasInventoryStreamProvider);
     final tab = ref.watch(inventoryTabProvider);
 
     return Directionality(
@@ -63,7 +62,6 @@ class InventoryPage extends ConsumerWidget {
                 // _chip(ref, 'المشروبات', InventoryTab.drinks, tab),
                 _chip(ref, 'الأصناف المنفردة', InventoryTab.singles, tab),
                 _chip(ref, 'التوليفات', InventoryTab.blends, tab),
-                _chip(ref, 'سناكس', InventoryTab.extras, tab),
               ],
             ),
             const SizedBox(height: 8),
@@ -78,39 +76,27 @@ class InventoryPage extends ConsumerWidget {
                   child: Text('المشروبات لا تُدار كمخزون جرامات هنا.'),
                 ),
               )
-            else if (tab == InventoryTab.extras)
-              _extrasContent(extras)
             else ...[
-              if (tab == InventoryTab.all) ...[
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8),
-                  child: Text(
-                    'سناكس',
-                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
-                  ),
-                ),
-                _extrasContent(extras),
-                if (list.isNotEmpty) const SizedBox(height: 12),
-              ],
-              if (list.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 24),
-                  child: Center(child: Text('لا توجد عناصر')),
-                )
-              else
-                Column(
-                  children: list
-                      .map(
-                        (r) => InventoryTile.coffee(
-                          row: r,
-                          maxStockForBar: max,
-                          // onEdit: () => _openEdit(context, r),
-                          // onDelete: () => _confirmDelete(context, r),
-                        ),
-                      )
-                      .toList(),
-                ),
+              if (list.isNotEmpty) const SizedBox(height: 12),
             ],
+            if (list.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(child: Text('لا توجد عناصر')),
+              )
+            else
+              Column(
+                children: list
+                    .map(
+                      (r) => InventoryTile.coffee(
+                        row: r,
+                        maxStockForBar: max,
+                        // onEdit: () => _openEdit(context, r),
+                        // onDelete: () => _confirmDelete(context, r),
+                      ),
+                    )
+                    .toList(),
+              ),
           ],
         ),
       ),
@@ -126,30 +112,6 @@ class InventoryPage extends ConsumerWidget {
       labelStyle: TextStyle(
         fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
       ),
-    );
-  }
-
-  Widget _extrasContent(AsyncValue<List<ExtraInventoryRow>> extras) {
-    return extras.when(
-      loading: () => const Padding(
-        padding: EdgeInsets.symmetric(vertical: 16),
-        child: Center(child: CircularProgressIndicator()),
-      ),
-      error: (e, _) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        child: Text('تعذر تحميل الإضافات: $e'),
-      ),
-      data: (rows) {
-        if (rows.isEmpty) {
-          return const Padding(
-            padding: EdgeInsets.symmetric(vertical: 24),
-            child: Center(child: Text('لا توجد إضافات')),
-          );
-        }
-        return Column(
-          children: rows.map((e) => InventoryTile.extra(row: e)).toList(),
-        );
-      },
     );
   }
 }
