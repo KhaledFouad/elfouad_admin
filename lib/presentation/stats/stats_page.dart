@@ -107,7 +107,7 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                     const Padding(
                       padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                       child: Text(
-                        'المشروبات حسب الاسم',
+                        'مشروبات و سناكس',
                         style: TextStyle(fontWeight: FontWeight.w800),
                       ),
                     ),
