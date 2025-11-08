@@ -1,0 +1,17 @@
+builder: (_) => AlertDialog(
+                      title: const Text('تأكيد السداد'),
+                      content: Text(
+                        'سيتم تثبيت دفع ${totalPrice.toStringAsFixed(2)} جم.\nهل تريد المتابعة؟',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('إلغاء'),
+                        ),
+                        FilledButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text('تأكيد'),
+                        ),
+                      ],
+                    ),
+                  

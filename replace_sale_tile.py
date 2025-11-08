@@ -1,0 +1,9 @@
+from pathlib import Path
+path = Path(r'lib/presentation/history/widgets/sale_tile.dart')
+text = path.read_text(encoding='utf-8')
+old = "                    builder: (_) => AlertDialog(\r\n                      title: const Text('O?O?U?USO_ O\u0015U,O3O_O\u0015O_'),\r\n                      content: Text(\r\n                        'O3USO?U. O?O?O\"USO? O_U?O1  O?U..\\nU?U, O?O?USO_ O\u0015U,U.O?O\u0015O\"O1OcOY',\r\n                      ),\r\n                      actions: [\r\n                        TextButton(\r\n                          onPressed: () => Navigator.pop(context, false),\r\n                          child: const Text('O?U,O?O\u0015O?'),\r\n                        ),\r\n                        FilledButton(\r\n                          onPressed: () => Navigator.pop(context, true),\r\n                          child: const Text('O?O?U?USO_'),\r\n                        ),\r\n                      ],\r\n                    ),\r\n"
+new = "                    builder: (_) => AlertDialog(\r\n                      title: const Text('????? ????? ????? ??????'),\r\n                      content: Text(\r\n                        '???? ????? ????? ???? .\\n?? ???? ?????? ????????',\r\n                        textAlign: TextAlign.center,\r\n                      ),\r\n                      actions: [\r\n                        TextButton(\r\n                          onPressed: () => Navigator.pop(context, false),\r\n                          child: const Text('?????'),\r\n                        ),\r\n                        FilledButton(\r\n                          onPressed: () => Navigator.pop(context, true),\r\n                          child: const Text('?????'),\r\n                        ),\r\n                      ],\r\n                    ),\r\n"
+if old not in text:
+    raise SystemExit('old block not found')
+text = text.replace(old, new, 1)
+path.write_text(text, encoding='utf-8')

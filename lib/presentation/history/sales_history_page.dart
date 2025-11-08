@@ -11,8 +11,12 @@ import 'utils/sales_history_utils.dart';
 import 'utils/sales_stream_provider.dart';
 import 'widgets/day_section.dart';
 import 'widgets/sale_edit_sheet.dart';
+import 'widgets/sale_tile.dart';
 import 'utils/sales_stream_provider.dart'
-    show salesStreamProvider, deferredCountStreamProvider;
+    show
+        salesStreamProvider,
+        deferredCountStreamProvider,
+        unpaidDeferredStreamProvider;
 
 class SalesHistoryPage extends ConsumerWidget {
   const SalesHistoryPage({super.key});
@@ -23,6 +27,7 @@ class SalesHistoryPage extends ConsumerWidget {
     final r = ref.watch(dateRangeProvider) ?? DateRangeController.today();
     final historyAsync = ref.watch(salesStreamProvider);
     final deferredAsync = ref.watch(deferredCountStreamProvider);
+    final unpaidDeferredAsync = ref.watch(unpaidDeferredStreamProvider);
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -51,9 +56,30 @@ class SalesHistoryPage extends ConsumerWidget {
               elevation: 8,
               backgroundColor: Colors.transparent,
               actions: [
-                _DeferredBadges(
-                  totalAsync: deferredAsync,
-                  rangeAsync: historyAsync,
+                deferredAsync.when(
+                  data: (n) => n == 0
+                      ? const SizedBox.shrink()
+                      : Container(
+                          margin: const EdgeInsetsDirectional.only(end: 8),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 1.5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color.fromARGB(255, 222, 100, 100),
+                            borderRadius: BorderRadius.circular(120),
+                          ),
+                          child: Text(
+                            '$n',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 17,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                  loading: () => const SizedBox.shrink(),
+                  error: (_, stackTrace) => const SizedBox.shrink(),
                 ),
                 IconButton(
                   tooltip: 'تصفية بالتاريخ',
@@ -162,9 +188,6 @@ class SalesHistoryPage extends ConsumerWidget {
             // sales_history_page.dart (داخل data: (snap) { ... })
             final docs = snap.docs
                 .cast<QueryDocumentSnapshot<Map<String, dynamic>>>();
-            if (docs.isEmpty) {
-              return const Center(child: Text('لا يوجد عمليات بيع'));
-            }
 
             // حضّر بيانات خفيفة للإيزوليت
             final rows = docs
@@ -213,16 +236,89 @@ class SalesHistoryPage extends ConsumerWidget {
                   return const Center(child: CircularProgressIndicator());
                 }
                 final buckets = aggSnap.data!;
-                if (buckets.isEmpty) {
-                  return const Center(
-                    child: Text('لا يوجد عمليات في هذا النطاق'),
+                final daySections = <_BucketViewModel>[];
+                for (final bucket in buckets) {
+                  final entries =
+                      <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+                  for (final id in bucket.ids) {
+                    final doc = byId[id];
+                    if (doc == null) continue;
+                    final data = doc.data();
+                    final isDeferred = (data['is_deferred'] ?? false) == true;
+                    final paid = (data['paid'] ?? false) == true;
+                    if (isDeferred && !paid) continue;
+                    entries.add(doc);
+                  }
+                  if (entries.isNotEmpty) {
+                    daySections.add(
+                      _BucketViewModel(bucket: bucket, entries: entries),
+                    );
+                  }
+                }
+                final hasDaySections = daySections.isNotEmpty;
+                final totalItems =
+                    (hasDaySections ? daySections.length : 1) + 1;
+
+                void openEdit(DocumentSnapshot<Map<String, dynamic>> doc) {
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    useSafeArea: true,
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.vertical(
+                        top: Radius.circular(16),
+                      ),
+                    ),
+                    builder: (_) => SaleEditSheet(snap: doc),
                   );
                 }
+
+                Future<void> deleteDoc(
+                  DocumentSnapshot<Map<String, dynamic>> doc,
+                ) async {
+                  final ok = await showDialog<bool>(
+                    context: context,
+                    builder: (_) => AlertDialog(
+                      title: const Text('حذف عملية البيع؟'),
+                      content: const Text(
+                        'سيتم حذف هذه العملية وإرجاع أي تأثير على المخزون. هل تريد المتابعة؟',
+                        textAlign: TextAlign.center,
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('إلغاء'),
+                        ),
+                        FilledButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text('حذف'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (ok == true) {
+                    try {
+                      await deleteSaleWithStockRollback(doc.reference);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('تم حذف العملية وإرجاع المخزون.'),
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('تعذر حذف العملية: $e')),
+                        );
+                      }
+                    }
+                  }
+                }
+
                 return RefreshIndicator.adaptive(
                   onRefresh: () async {
-                    // إجبار إعادة الاشتراك في الستريم
                     ref.invalidate(salesStreamProvider);
-                    // مهلة خفيفة عشان يرجع الاشتراك يشتغل
                     await Future<void>.delayed(
                       const Duration(milliseconds: 300),
                     );
@@ -233,82 +329,44 @@ class SalesHistoryPage extends ConsumerWidget {
                     ),
                     cacheExtent: 800,
                     padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
-                    itemCount: buckets.length,
+                    itemCount: totalItems,
                     itemBuilder: (context, i) {
-                      final b = buckets[i];
-                      final entries =
-                          <QueryDocumentSnapshot<Map<String, dynamic>>>[
-                            for (final id in b.ids)
-                              if (byId[id] != null) byId[id]!,
-                          ];
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: DaySection(
-                          day: b.dayKey,
-                          entries: entries,
-                          sumPrice: b.sumPrice,
-                          sumCost: b.sumCost,
-                          sumProfit: b.sumProfit,
-                          cups: b.cups,
-                          grams: b.grams,
-                          extrasPieces: b.extrasPieces,
-                          onEdit: (doc) => showModalBottomSheet(
-                            context: context,
-                            isScrollControlled: true,
-                            useSafeArea: true,
-                            shape: const RoundedRectangleBorder(
-                              borderRadius: BorderRadius.vertical(
-                                top: Radius.circular(16),
-                              ),
-                            ),
-                            builder: (_) => SaleEditSheet(snap: doc),
+                      if (!hasDaySections) {
+                        if (i == 0) {
+                          return const _HistoryEmptyPlaceholder();
+                        }
+                        return _DeferredOutstandingPanel(
+                          unpaidAsync: unpaidDeferredAsync,
+                          onEdit: openEdit,
+                          onDelete: deleteDoc,
+                        );
+                      }
+
+                      if (i < daySections.length) {
+                        final vm = daySections[i];
+                        final b = vm.bucket;
+                        final entries = vm.entries;
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: DaySection(
+                            day: b.dayKey,
+                            entries: entries,
+                            sumPrice: b.sumPrice,
+                            sumCost: b.sumCost,
+                            sumProfit: b.sumProfit,
+                            cups: b.cups,
+                            grams: b.grams,
+                            extrasPieces: b.extrasPieces,
+                            onEdit: openEdit,
+                            onDelete: deleteDoc,
                           ),
-                          onDelete: (doc) async {
-                            final ok = await showDialog<bool>(
-                              context: context,
-                              builder: (_) => AlertDialog(
-                                title: const Text('تأكيد الحذف'),
-                                content: const Text(
-                                  'هل تريد حذف عملية البيع؟ سيتم تعديل المخزون تلقائيًا.',
-                                ),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () =>
-                                        Navigator.pop(context, false),
-                                    child: const Text('إلغاء'),
-                                  ),
-                                  FilledButton(
-                                    onPressed: () =>
-                                        Navigator.pop(context, true),
-                                    child: const Text('حذف'),
-                                  ),
-                                ],
-                              ),
-                            );
-                            if (ok == true) {
-                              try {
-                                await deleteSaleWithStockRollback(
-                                  doc.reference,
-                                );
-                                if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                        'تم الحذف وتمت تسوية المخزون',
-                                      ),
-                                    ),
-                                  );
-                                }
-                              } catch (e) {
-                                if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('تعذر الحذف: $e')),
-                                  );
-                                }
-                              }
-                            }
-                          },
-                        ),
+                        );
+                      }
+
+                      return _DeferredOutstandingPanel(
+                        unpaidAsync: unpaidDeferredAsync,
+                        onEdit: openEdit,
+                        onDelete: deleteDoc,
                       );
                     },
                   ),
@@ -322,125 +380,180 @@ class SalesHistoryPage extends ConsumerWidget {
   }
 }
 
-class _DeferredBadges extends StatelessWidget {
-  const _DeferredBadges({required this.totalAsync, required this.rangeAsync});
+class _BucketViewModel {
+  const _BucketViewModel({required this.bucket, required this.entries});
 
-  final AsyncValue<int> totalAsync;
-  final AsyncValue<QuerySnapshot<Map<String, dynamic>>> rangeAsync;
+  final DayBucket bucket;
+  final List<QueryDocumentSnapshot<Map<String, dynamic>>> entries;
+}
+
+class _HistoryEmptyPlaceholder extends StatelessWidget {
+  const _HistoryEmptyPlaceholder();
 
   @override
   Widget build(BuildContext context) {
-    return totalAsync.when(
-      data: (total) {
-        if (total <= 0) return const SizedBox.shrink();
-
-        return rangeAsync.maybeWhen(
-          data: (snap) {
-            final inRangeRaw = snap.docs.where((doc) {
-              final m = doc.data();
-              final isDeferred = (m['is_deferred'] ?? false) == true;
-              final paid = (m['paid'] ?? false) == true;
-              return isDeferred && !paid;
-            }).length;
-
-            int inRange = inRangeRaw;
-            if (inRange > total) inRange = total;
-            if (inRange < 0) inRange = 0;
-
-            int outsideRange = total - inRange;
-            if (outsideRange < 0) outsideRange = 0;
-
-            if (inRange == 0 && outsideRange == 0) {
-              return const SizedBox.shrink();
-            }
-
-            final children = <Widget>[];
-            if (inRange > 0) {
-              children.add(
-                _DeferredChip(
-                  label: 'In range',
-                  count: inRange,
-                  color: Colors.teal.shade600,
-                  tooltip: 'Deferred sales inside the selected range',
-                ),
-              );
-            }
-            if (outsideRange > 0) {
-              if (children.isNotEmpty) {
-                children.add(const SizedBox(width: 4));
-              }
-              children.add(
-                _DeferredChip(
-                  label: 'Outside',
-                  count: outsideRange,
-                  color: Colors.deepOrange.shade600,
-                  tooltip: 'Deferred sales outside the selected range',
-                ),
-              );
-            }
-
-            return Padding(
-              padding: const EdgeInsetsDirectional.only(end: 6),
-              child: Row(mainAxisSize: MainAxisSize.min, children: children),
-            );
-          },
-          orElse: () => const SizedBox.shrink(),
-        );
-      },
-      loading: () => const SizedBox.shrink(),
-      error: (_, stackTrace) => const SizedBox.shrink(),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 48),
+      child: Center(
+        child: Text(
+          'لا توجد عمليات في هذه الفترة.',
+          style: const TextStyle(fontWeight: FontWeight.w600),
+          textAlign: TextAlign.center,
+        ),
+      ),
     );
   }
 }
 
-class _DeferredChip extends StatelessWidget {
-  const _DeferredChip({
-    required this.label,
-    required this.count,
-    required this.color,
-    required this.tooltip,
+class _DeferredOutstandingPanel extends StatelessWidget {
+  const _DeferredOutstandingPanel({
+    required this.unpaidAsync,
+    required this.onEdit,
+    required this.onDelete,
   });
 
-  final String label;
-  final int count;
-  final Color color;
-  final String tooltip;
+  final AsyncValue<QuerySnapshot<Map<String, dynamic>>> unpaidAsync;
+  final void Function(DocumentSnapshot<Map<String, dynamic>> doc) onEdit;
+  final void Function(DocumentSnapshot<Map<String, dynamic>> doc) onDelete;
 
   @override
   Widget build(BuildContext context) {
-    final textStyle = TextStyle(
-      color: color,
-      fontWeight: FontWeight.w600,
-      fontSize: 12,
-    );
-
-    return Tooltip(
-      message: tooltip,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: color.withValues(alpha: 0.5)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 8,
-              height: 8,
-              margin: const EdgeInsetsDirectional.only(end: 4),
-              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-            ),
-            Text(label, style: textStyle),
-            const SizedBox(width: 4),
-            Text(
-              '$count',
-              style: textStyle.copyWith(fontWeight: FontWeight.w700),
-            ),
-          ],
+    return unpaidAsync.when(
+      loading: () => const SizedBox.shrink(),
+      error: (e, stackTrace) => Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Card(
+          elevation: 2,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Text('تعذر تحميل الديون المؤجلة: $e'),
+          ),
         ),
       ),
+      data: (snap) {
+        final docs = snap.docs
+            .where((d) => (d.data()['paid'] ?? false) == false)
+            .toList();
+
+        if (docs.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        DateTime createdAtOf(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
+          final data = doc.data();
+          final ts = data['created_at'];
+          if (ts is Timestamp) return ts.toDate();
+          if (ts is DateTime) return ts;
+          return DateTime.tryParse('${ts ?? ''}') ??
+              DateTime.fromMillisecondsSinceEpoch(0);
+        }
+
+        docs.sort((a, b) => createdAtOf(a).compareTo(createdAtOf(b)));
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Card(
+            elevation: 3,
+            color: Colors.orange.shade50,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.warning_amber_rounded,
+                        color: Colors.deepOrange,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Deferred pending (${docs.length})',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                        ),
+                      ),
+                      const Spacer(),
+                      const Text(
+                        'Oldest first',
+                        style: TextStyle(fontSize: 12, color: Colors.black54),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Original date & time shown. Use edit to add notes.',
+                    style: TextStyle(fontSize: 12, color: Colors.black54),
+                  ),
+                  const SizedBox(height: 12),
+                  ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: docs.length,
+                    separatorBuilder: (_, index) => const Divider(height: 20),
+                    itemBuilder: (context, index) {
+                      final doc = docs[index];
+                      final data = doc.data();
+                      final createdAt = createdAtOf(doc).toLocal();
+                      final createdLabel = fmtDateTime(createdAt);
+                      final note =
+                          ((data['note'] ?? data['notes'] ?? '') as Object)
+                              .toString()
+                              .trim();
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.schedule,
+                                size: 14,
+                                color: Colors.black54,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                createdLabel,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              if (note.isNotEmpty) ...[
+                                const Spacer(),
+                                const Icon(
+                                  Icons.sticky_note_2_outlined,
+                                  size: 16,
+                                  color: Colors.black45,
+                                ),
+                              ],
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          SaleTile(
+                            key: ValueKey('deferred-${doc.id}'),
+                            doc: doc,
+                            onEdit: () => onEdit(doc),
+                            onDelete: () => onDelete(doc),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

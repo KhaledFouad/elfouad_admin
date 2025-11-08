@@ -239,21 +239,24 @@ class SaleTile extends StatelessWidget {
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text('تم تسوية العملية المؤجّلة'),
+                            content:
+                                Text('تمت تسوية العملية المؤجلة بنجاح.'),
                           ),
                         );
                       }
                     } catch (e) {
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('تعذر التسوية: $e')),
+                          SnackBar(
+                            content: Text('تعذر تسوية العملية: $e'),
+                          ),
                         );
                       }
                     }
                   }
                 },
                 icon: const Icon(Icons.payments),
-                label: const Text('تم الدفع'),
+                label: const Text('تسوية المؤجل'),
               ),
             ),
           ),
@@ -387,3 +390,4 @@ Widget componentRow(Map<String, dynamic> c) {
     ),
   );
 }
+
