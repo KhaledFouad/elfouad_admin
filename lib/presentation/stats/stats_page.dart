@@ -234,6 +234,8 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                               (x) => BeanRow(
                                 name: x.name,
                                 grams: x.grams,
+                                plainGrams: x.plainGrams,
+                                spicedGrams: x.spicedGrams,
                                 sales: x.sales,
                                 cost: x.cost,
                               ),

@@ -3,11 +3,15 @@ import 'package:flutter/material.dart';
 class BeanRow {
   final String name; // name أو name - variant
   final double grams;
+  final double plainGrams;
+  final double spicedGrams;
   final double sales;
   final double cost;
   BeanRow({
     required this.name,
     required this.grams,
+    required this.plainGrams,
+    required this.spicedGrams,
     required this.sales,
     required this.cost,
   });
@@ -33,6 +37,8 @@ class BeansByNameTable extends StatelessWidget {
         columns: const [
           DataColumn(label: Text('الصنف')),
           DataColumn(label: Text('جرامات')),
+          DataColumn(label: Text('سادة')),
+          DataColumn(label: Text('محوج')),
           DataColumn(label: Text('المبيعات')),
           DataColumn(label: Text('التكلفة')),
           DataColumn(label: Text('الربح')),
@@ -47,6 +53,8 @@ class BeansByNameTable extends StatelessWidget {
                 ),
               ),
               DataCell(Text(r.grams.toStringAsFixed(0))),
+              DataCell(Text(r.plainGrams.toStringAsFixed(0))),
+              DataCell(Text(r.spicedGrams.toStringAsFixed(0))),
               DataCell(Text(r.sales.toStringAsFixed(2))),
               DataCell(Text(r.cost.toStringAsFixed(2))),
               DataCell(Text(r.profit.toStringAsFixed(2))),

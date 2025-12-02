@@ -15,6 +15,10 @@ class StatsHighlightsCard extends StatelessWidget {
     return value.toStringAsFixed(2);
   }
 
+  String _formatNumber(double value, {int decimals = 1}) {
+    return value.toStringAsFixed(decimals);
+  }
+
   Widget _buildTile({
     required IconData icon,
     required String title,
@@ -87,17 +91,6 @@ class StatsHighlightsCard extends StatelessWidget {
 
     tiles.add(
       _buildTile(
-        icon: Icons.receipt_long,
-        title: 'متوسط قيمة الفاتورة',
-        value: _formatCurrency(highlights.averageOrderValue),
-        subtitle: highlights.totalOrders > 0
-            ? 'محسوبة من ${highlights.totalOrders} عملية مدفوعة'
-            : null,
-      ),
-    );
-
-    tiles.add(
-      _buildTile(
         icon: Icons.calendar_month,
         title: 'متوسط المبيعات اليومية',
         value: _formatCurrency(highlights.averageDailySales),
@@ -107,15 +100,32 @@ class StatsHighlightsCard extends StatelessWidget {
       ),
     );
 
-    if (highlights.totalServings > 0) {
-      tiles.add(
-        _buildTile(
-          icon: Icons.cookie_rounded,
-          title: 'إجمالي المشروبات والسناكس',
-          value: '${highlights.totalServings} وحدة',
-        ),
-      );
-    }
+    tiles.add(
+      _buildTile(
+        icon: Icons.coffee_outlined,
+        title: 'متوسط المشروبات/اليوم',
+        value: _formatNumber(highlights.averageDrinksPerDay, decimals: 1),
+      ),
+    );
+
+    tiles.add(
+      _buildTile(
+        icon: Icons.cookie_outlined,
+        title: 'متوسط السناكس/اليوم',
+        value: _formatNumber(highlights.averageSnacksPerDay, decimals: 1),
+      ),
+    );
+
+    tiles.add(
+      _buildTile(
+        icon: Icons.point_of_sale,
+        title: 'متوسط العمليات/اليوم',
+        value: _formatNumber(highlights.averageOrdersPerDay, decimals: 1),
+        subtitle: highlights.totalOrders > 0
+            ? '${highlights.totalOrders} عملية مدفوعة'
+            : null,
+      ),
+    );
 
     return Column(
       children: [

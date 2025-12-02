@@ -112,10 +112,10 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
     final db = FirebaseFirestore.instance;
     final out = <DocumentReference<Map<String, dynamic>>, double>{};
 
-    double _d(v) =>
+    double d(v) =>
         (v is num) ? v.toDouble() : double.tryParse('${v ?? ''}') ?? 0.0;
 
-    void _acc(String? coll, dynamic id, double grams) {
+    void acc(String? coll, dynamic id, double grams) {
       if (coll == null || id == null || grams <= 0) return;
       final ref = db.collection(coll).doc(id.toString());
       out[ref] = (out[ref] ?? 0) + grams;
@@ -126,13 +126,13 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
     if (type == 'single' || type == 'ready_blend') {
       final coll = (type == 'single') ? 'singles' : 'blends';
       final id = m['single_id'] ?? m['blend_id'] ?? m['item_id'] ?? m['id'];
-      final grams = _d(m['grams']);
-      _acc(coll, id, grams);
+      final grams = d(m['grams']);
+      acc(coll, id, grams);
       return out;
     }
 
     if (type == 'custom_blend') {
-      List<Map<String, dynamic>> _asList(dynamic v) {
+      List<Map<String, dynamic>> asList(dynamic v) {
         if (v is List) {
           return v
               .map(
@@ -146,13 +146,13 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
       }
 
       final rows = [
-        ..._asList(m['components']),
-        ..._asList(m['items']),
-        ..._asList(m['lines']),
+        ...asList(m['components']),
+        ...asList(m['items']),
+        ...asList(m['lines']),
       ];
 
       for (final r in rows) {
-        final grams = _d(r['grams']);
+        final grams = d(r['grams']);
         String? coll = (r['coll'] ?? r['collection'])?.toString();
         dynamic id = r['id'] ?? r['item_id'] ?? r['single_id'] ?? r['blend_id'];
 
@@ -162,7 +162,7 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
             ? 'singles'
             : null;
 
-        _acc(coll, id, grams);
+        acc(coll, id, grams);
       }
       return out;
     }
@@ -222,7 +222,7 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
         final cur = _intOf(ex['stock_units'], 0);
 
         if (delta > 0 && cur < delta) {
-          throw Exception('المخزون غير كافٍ (${cur} قطعة متاحة).');
+          throw Exception('المخزون غير كافٍ ($cur قطعة متاحة).');
         }
 
         tx.update(extraRef, {
@@ -376,8 +376,9 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
           updates['discount_amount'] = (listPrice * qty) - newTotalPrice;
           updates['total_price'] = newTotalPrice;
           updates['total_cost'] = newTotalCost;
-          if (!freezeProfit)
+          if (!freezeProfit) {
             updates['profit_total'] = newTotalPrice - newTotalCost;
+          }
         } else {
           final unitPriceEffective = unitPrice > 0 ? unitPrice : listPrice;
           updates['unit_price'] = unitPriceEffective;
@@ -386,8 +387,9 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
           newTotalCost = unitCost * qty;
           updates['total_price'] = newTotalPrice;
           updates['total_cost'] = newTotalCost;
-          if (!freezeProfit)
+          if (!freezeProfit) {
             updates['profit_total'] = newTotalPrice - newTotalCost;
+          }
         }
 
         await _applyStockDeltaAndUpdate(updates);
@@ -460,8 +462,9 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
 
           updates['total_price'] = newTotalPrice;
           updates['total_cost'] = newTotalCost;
-          if (!freezeProfit)
+          if (!freezeProfit) {
             updates['profit_total'] = newTotalPrice - newTotalCost;
+          }
         } else {
           if (_isSpiced) {
             spiceAmount = (grams / 1000.0) * spicePricePerKg;
@@ -478,8 +481,9 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
 
           updates['total_price'] = newTotalPrice;
           updates['total_cost'] = newTotalCost;
-          if (!freezeProfit)
+          if (!freezeProfit) {
             updates['profit_total'] = newTotalPrice - newTotalCost;
+          }
         }
 
         // ثوابت مرجعية
@@ -568,8 +572,9 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
           newTotalPrice = uiTotalPrice;
           newTotalCost = oldTotalCost;
           updates['manual_override'] = true;
-          if (!freezeProfit)
+          if (!freezeProfit) {
             updates['profit_total'] = newTotalPrice - newTotalCost;
+          }
         }
         updates['total_price'] = newTotalPrice;
         updates['total_cost'] = newTotalCost;

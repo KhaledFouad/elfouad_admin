@@ -303,7 +303,7 @@ class _RecipeEditSheetState extends ConsumerState<RecipeEditSheet> {
                 const Icon(Icons.percent),
                 const SizedBox(width: 8),
                 Text(
-                  'المجموع: ${_sumPercentInt}%   •   المتبقي: ${_remainingInt}%',
+                  'المجموع: $_sumPercentInt%   •   المتبقي: $_remainingInt%',
                   style: TextStyle(
                     fontWeight: FontWeight.w800,
                     color: (_sumPercentInt == 100) ? Colors.green : Colors.red,

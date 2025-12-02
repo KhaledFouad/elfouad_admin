@@ -1,3 +1,5 @@
+// ignore_for_file: unused_element
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -25,6 +27,8 @@ class Kpis {
 class GroupRow {
   final String key;
   final double sales, cost, profit, grams;
+  final double plainGrams;
+  final double spicedGrams;
   final int cups;
   const GroupRow({
     required this.key,
@@ -32,6 +36,8 @@ class GroupRow {
     this.cost = 0,
     this.profit = 0,
     this.grams = 0,
+    this.plainGrams = 0,
+    this.spicedGrams = 0,
     this.cups = 0,
   });
 
@@ -42,6 +48,8 @@ class GroupRow {
     double c = 0,
     double p = 0,
     double g = 0,
+    double gPlain = 0,
+    double gSpiced = 0,
     int cu = 0,
   }) => GroupRow(
     key: key,
@@ -49,6 +57,8 @@ class GroupRow {
     cost: cost + c,
     profit: profit + p,
     grams: grams + g,
+    plainGrams: plainGrams + gPlain,
+    spicedGrams: spicedGrams + gSpiced,
     cups: cups + cu,
   );
 }
@@ -78,20 +88,22 @@ class StatsHighlights {
   final DayHighlight? topSalesDay;
   final DayHighlight? topProfitDay;
   final DayHighlight? busiestDay;
-  final double averageOrderValue;
   final double averageDailySales;
+  final double averageDrinksPerDay;
+  final double averageSnacksPerDay;
+  final double averageOrdersPerDay;
   final int totalOrders;
   final int activeDays;
-  final int totalServings;
   const StatsHighlights({
     required this.topSalesDay,
     required this.topProfitDay,
     required this.busiestDay,
-    required this.averageOrderValue,
     required this.averageDailySales,
+    required this.averageDrinksPerDay,
+    required this.averageSnacksPerDay,
+    required this.averageOrdersPerDay,
     required this.totalOrders,
     required this.activeDays,
-    required this.totalServings,
   });
 }
 
@@ -138,6 +150,34 @@ DateTime _asUtc(dynamic v) {
   return DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
 }
 
+DateTime _productionUtc(Map<String, dynamic> m) {
+  final orig = m['original_created_at'];
+  final origUtc = orig == null ? null : _asUtc(orig);
+  if (origUtc != null && origUtc.millisecondsSinceEpoch > 0) return origUtc;
+  return _asUtc(m['created_at']);
+}
+
+DateTime _financialUtc(Map<String, dynamic> m) {
+  final created = _asUtc(m['created_at']);
+  final settledRaw = m['settled_at'];
+  final settled = settledRaw == null ? null : _asUtc(settledRaw);
+  final updatedRaw = m['updated_at'];
+  final updated = updatedRaw == null ? null : _asUtc(updatedRaw);
+
+  final isDeferred = (m['is_deferred'] ?? false) == true;
+  final paid = (m['paid'] ?? (!isDeferred)) == true;
+
+  if (paid) {
+    if (settled != null && settled.millisecondsSinceEpoch > 0) {
+      return settled;
+    }
+    if (updated != null && updated.millisecondsSinceEpoch > 0) {
+      return updated;
+    }
+  }
+  return created;
+}
+
 bool _inRangeUtc(DateTime ts, DateTime start, DateTime end) {
   final afterOrEqual = ts.isAtSameMomentAs(start) || ts.isAfter(start);
   final before = ts.isBefore(end); // end حصري
@@ -150,6 +190,12 @@ bool _isUnpaidDeferred(Map<String, dynamic> m) {
   return isDeferred && !paid;
 }
 
+bool _inProductionRange(Map<String, dynamic> m, DateTime start, DateTime end) =>
+    _inRangeUtc(_productionUtc(m), start, end);
+
+bool _inFinancialRange(Map<String, dynamic> m, DateTime start, DateTime end) =>
+    _inRangeUtc(_financialUtc(m), start, end);
+
 /// ============ RAW الشهري + فلترة الثلث/الشهر ============
 
 final statsSalesProvider = FutureProvider<List<Map<String, dynamic>>>((
@@ -158,17 +204,20 @@ final statsSalesProvider = FutureProvider<List<Map<String, dynamic>>>((
   final month = ref.watch(statsForMonthProvider);
   final period = ref.watch(statsSelectedPeriodProvider);
 
-  // اسحب الشهر كله مرّة واحدة
+  // OO3O-O" OU,O'U?O? U?U,U? U.O?U`Oc U^OO-O_Oc
   final rawMonth = await ref.watch(salesRawForMonthProvider(month).future);
 
-  // فلتر بالمدى المحسوب (4ص → 4ص)
+  // U?U,O?O? O"OU,U.O_U% OU,U.O-O3U^O" (4O? ?+' 4O?)
   final r = statsComputeRange(month, period);
-  return rawMonth
-      .where((m) => _inRangeUtc(_asUtc(m['created_at']), r.startUtc, r.endUtc))
-      .toList();
+  return rawMonth.where((m) {
+    final inProd = _inProductionRange(m, r.startUtc, r.endUtc);
+    final inFin = _inFinancialRange(m, r.startUtc, r.endUtc);
+    final isDeferred = (m['is_deferred'] ?? false) == true;
+    final paid = (m['paid'] ?? (!isDeferred)) == true;
+    if (isDeferred && !paid) return inProd;
+    return inProd || inFin;
+  }).toList();
 });
-
-/// المصروفات حسب المدى المختار
 final statsExpensesProvider = FutureProvider<List<Map<String, dynamic>>>((
   ref,
 ) async {
@@ -191,53 +240,7 @@ final statsThirdsPreviewProvider =
       final rawMonth = await ref.watch(salesRawForMonthProvider(month).future);
 
       Kpis kpisForRange(DateTime start, DateTime end) {
-        double sales = 0, cost = 0, profit = 0, grams = 0;
-        int cups = 0;
-        int units = 0;
-        for (final m in rawMonth) {
-          final ts = _asUtc(m['created_at']);
-          if (!_inRangeUtc(ts, start, end)) continue;
-          if (_isUnpaidDeferred(m)) continue;
-
-          final type = '${m['type'] ?? ''}';
-          final price = (m['total_price'] is num)
-              ? (m['total_price'] as num).toDouble()
-              : _d(m['total_price']);
-          final tcost = (m['total_cost'] is num)
-              ? (m['total_cost'] as num).toDouble()
-              : _d(m['total_cost']);
-          final p = (m['profit_total'] is num)
-              ? (m['profit_total'] as num).toDouble()
-              : _d(m['profit_total']);
-
-          sales += price;
-          cost += tcost;
-          profit += p;
-
-          if (type == 'drink') {
-            final q = (m['quantity'] is num)
-                ? (m['quantity'] as num).toDouble()
-                : _d(m['quantity']);
-            cups += (q > 0 ? q.round() : 1);
-          } else if (type == 'single' || type == 'ready_blend') {
-            grams += (m['grams'] is num)
-                ? (m['grams'] as num).toDouble()
-                : _d(m['grams']);
-          } else if (type == 'custom_blend') {
-            grams += (m['total_grams'] is num)
-                ? (m['total_grams'] as num).toDouble()
-                : _d(m['total_grams']);
-          }
-        }
-        return Kpis(
-          sales: sales,
-          cost: cost,
-          profit: profit,
-          cups: cups,
-          grams: grams,
-          expenses: 0,
-          units: units,
-        );
+        return _buildKpis(rawMonth, const [], startUtc: start, endUtc: end);
       }
 
       final r1 = statsComputeRange(month, StatsPeriod.firstThird);
@@ -256,8 +259,10 @@ final statsThirdsPreviewProvider =
 /// ============ KPIs (الربح من الداتا + استبعاد الأجل غير المدفوع) ============
 Kpis _buildKpis(
   List<Map<String, dynamic>> data,
-  List<Map<String, dynamic>> expensesList,
-) {
+  List<Map<String, dynamic>> expensesList, {
+  required DateTime startUtc,
+  required DateTime endUtc,
+}) {
   double sales = 0, cost = 0, profit = 0, grams = 0;
   int cups = 0;
   int units = 0;
@@ -265,32 +270,38 @@ Kpis _buildKpis(
   for (final m in data) {
     final isDeferred = (m['is_deferred'] ?? false) == true;
     final paid = (m['paid'] ?? (!isDeferred)) == true;
-    if (isDeferred && !paid) continue;
+    final prodInRange = _inProductionRange(m, startUtc, endUtc);
+    final finInRange = _inFinancialRange(m, startUtc, endUtc);
+    if (!prodInRange && !finInRange) continue;
 
     final type = '${m['type'] ?? ''}';
 
-    sales += _d(m['total_price']);
-    cost += _d(m['total_cost']);
-    profit += _d(m['profit_total']);
+    if (finInRange && (!isDeferred || paid)) {
+      sales += _d(m['total_price']);
+      cost += _d(m['total_cost']);
+      profit += _d(m['profit_total']);
+    }
 
-    if (type == 'drink') {
-      final q = (m['quantity'] is num)
-          ? (m['quantity'] as num).toDouble()
-          : _d(m['quantity']);
-      cups += (q > 0 ? q.round() : 1);
-    } else if (type == 'single' || type == 'ready_blend') {
-      grams += (m['grams'] is num)
-          ? (m['grams'] as num).toDouble()
-          : _d(m['grams']);
-    } else if (type == 'custom_blend') {
-      grams += (m['total_grams'] is num)
-          ? (m['total_grams'] as num).toDouble()
-          : _d(m['total_grams']);
-    } else if (type == 'extra') {
-      final q = (m['quantity'] is num)
-          ? (m['quantity'] as num).toDouble()
-          : _d(m['quantity']);
-      units += (q > 0 ? q.round() : 1);
+    if (prodInRange) {
+      if (type == 'drink') {
+        final q = (m['quantity'] is num)
+            ? (m['quantity'] as num).toDouble()
+            : _d(m['quantity']);
+        cups += (q > 0 ? q.round() : 1);
+      } else if (type == 'single' || type == 'ready_blend') {
+        grams += (m['grams'] is num)
+            ? (m['grams'] as num).toDouble()
+            : _d(m['grams']);
+      } else if (type == 'custom_blend') {
+        grams += (m['total_grams'] is num)
+            ? (m['total_grams'] as num).toDouble()
+            : _d(m['total_grams']);
+      } else if (type == 'extra') {
+        final q = (m['quantity'] is num)
+            ? (m['quantity'] as num).toDouble()
+            : _d(m['quantity']);
+        units += (q > 0 ? q.round() : 1);
+      }
     }
   }
 
@@ -311,22 +322,36 @@ Kpis _buildKpis(
 }
 
 final statsKpisProvider = FutureProvider<Kpis>((ref) async {
+  final range = ref.watch(statsRangeProvider);
   final data = await ref.watch(statsSalesProvider.future);
   final expensesList = await ref.watch(statsExpensesProvider.future);
-  return _buildKpis(data, expensesList);
+  return _buildKpis(
+    data,
+    expensesList,
+    startUtc: range.startUtc,
+    endUtc: range.endUtc,
+  );
 });
 
-/// ============ Extras (Snacks: معمول/تمر) by name ============
-List<GroupRow> _buildExtrasRows(List<Map<String, dynamic>> data) {
+/// ============ Extras (Snacks: U.O1U.U^U,/O?U.O?) by name ============
+List<GroupRow> _buildExtrasRows(
+  List<Map<String, dynamic>> data, {
+  required DateTime startUtc,
+  required DateTime endUtc,
+}) {
   final map = <String, GroupRow>{};
   for (final m in data) {
-    if (_isUnpaidDeferred(m)) continue;
+    final isDeferred = (m['is_deferred'] ?? false) == true;
+    final paid = (m['paid'] ?? (!isDeferred)) == true;
+    final prodInRange = _inProductionRange(m, startUtc, endUtc);
+    final finInRange = _inFinancialRange(m, startUtc, endUtc);
+    if (!prodInRange && !finInRange) continue;
 
     final type = '${m['type'] ?? ''}';
     final isExtra = type == 'extra' || m.containsKey('extra_id');
     if (!isExtra) continue;
 
-    final name = ('${m['name'] ?? m['extra_name'] ?? 'سناكس'}').trim();
+    final name = ('${m['name'] ?? m['extra_name'] ?? 'O3U+OU?O3'}').trim();
     final variant = ('${m['variant'] ?? ''}').trim();
     final key = variant.isEmpty ? name : '$name - $variant';
 
@@ -340,7 +365,12 @@ List<GroupRow> _buildExtrasRows(List<Map<String, dynamic>> data) {
 
     final prev = map[key] ?? const GroupRow(key: '');
     final base = prev.key.isEmpty ? GroupRow(key: key) : prev;
-    map[key] = base.add(s: price, c: cost, p: profit, cu: pieces);
+    map[key] = base.add(
+      s: (finInRange && (!isDeferred || paid)) ? price : 0,
+      c: (finInRange && (!isDeferred || paid)) ? cost : 0,
+      p: (finInRange && (!isDeferred || paid)) ? profit : 0,
+      cu: prodInRange ? pieces : 0,
+    );
   }
   final list = map.values.toList()..sort((a, b) => b.sales.compareTo(a.sales));
   return list;
@@ -348,58 +378,73 @@ List<GroupRow> _buildExtrasRows(List<Map<String, dynamic>> data) {
 
 final extrasByNameProvider = FutureProvider<List<GroupRow>>((ref) async {
   final data = await ref.watch(statsSalesProvider.future);
-  return _buildExtrasRows(data);
+  final range = ref.watch(statsRangeProvider);
+  return _buildExtrasRows(data, startUtc: range.startUtc, endUtc: range.endUtc);
 });
-StatsHighlights _buildHighlights(List<Map<String, dynamic>> data) {
+
+StatsHighlights _buildHighlights(
+  List<Map<String, dynamic>> data, {
+  required DateTime startUtc,
+  required DateTime endUtc,
+}) {
   final Map<DateTime, double> salesByDay = {};
   final Map<DateTime, double> profitByDay = {};
   final Map<DateTime, int> servingsByDay = {};
   final Map<DateTime, Set<String>> ordersByDay = {};
 
   double totalSales = 0;
-  int totalServings = 0;
+  int totalDrinkServings = 0;
+  int totalSnackServings = 0;
   final uniqueOrders = <String>{};
 
   for (final m in data) {
-    if (_isUnpaidDeferred(m)) continue;
+    final isDeferred = (m['is_deferred'] ?? false) == true;
+    final paid = (m['paid'] ?? (!isDeferred)) == true;
+    final prodInRange = _inProductionRange(m, startUtc, endUtc);
+    final finInRange = _inFinancialRange(m, startUtc, endUtc);
+    if (!prodInRange && !finInRange) continue;
 
-    final ts = _asUtc(m['created_at']);
-    final opDay = opDayKeyUtc(ts);
+    final finDay = opDayKeyUtc(_financialUtc(m));
+    final prodDay = opDayKeyUtc(_productionUtc(m));
 
-    final price =
-        (m['total_price'] as num?)?.toDouble() ?? _d(m['total_price']);
-    final profit =
-        (m['profit_total'] as num?)?.toDouble() ?? _d(m['profit_total']);
-    final type = '${m['type'] ?? ''}';
+    if (finInRange && (!isDeferred || paid)) {
+      final price =
+          (m['total_price'] as num?)?.toDouble() ?? _d(m['total_price']);
+      final profit =
+          (m['profit_total'] as num?)?.toDouble() ?? _d(m['profit_total']);
 
-    int servings = 0;
-    if (type == 'drink') {
-      final q = (m['quantity'] as num?)?.toDouble() ?? _d(m['quantity']);
-      servings = (q > 0 ? q.round() : 1);
-    } else {
-      final isExtra = type == 'extra' || m.containsKey('extra_id');
-      if (isExtra) {
+      final saleId = '${m['sale_id'] ?? m['id'] ?? ''}'.trim();
+      if (saleId.isNotEmpty) {
+        uniqueOrders.add(saleId);
+        final set = ordersByDay.putIfAbsent(finDay, () => <String>{});
+        set.add(saleId);
+      }
+
+      salesByDay[finDay] = (salesByDay[finDay] ?? 0) + price;
+      profitByDay[finDay] = (profitByDay[finDay] ?? 0) + profit;
+      totalSales += price;
+    }
+
+    if (prodInRange) {
+      final type = '${m['type'] ?? ''}';
+      int servings = 0;
+      if (type == 'drink') {
         final q = (m['quantity'] as num?)?.toDouble() ?? _d(m['quantity']);
         servings = (q > 0 ? q.round() : 1);
+        totalDrinkServings += servings;
+      } else {
+        final isExtra = type == 'extra' || m.containsKey('extra_id');
+        if (isExtra) {
+          final q = (m['quantity'] as num?)?.toDouble() ?? _d(m['quantity']);
+          servings = (q > 0 ? q.round() : 1);
+          totalSnackServings += servings;
+        }
+      }
+
+      if (servings > 0) {
+        servingsByDay[prodDay] = (servingsByDay[prodDay] ?? 0) + servings;
       }
     }
-
-    final saleId = '${m['sale_id'] ?? m['id'] ?? ''}'.trim();
-    if (saleId.isNotEmpty) {
-      uniqueOrders.add(saleId);
-      final set = ordersByDay.putIfAbsent(opDay, () => <String>{});
-      set.add(saleId);
-    }
-
-    salesByDay[opDay] = (salesByDay[opDay] ?? 0) + price;
-    profitByDay[opDay] = (profitByDay[opDay] ?? 0) + profit;
-
-    if (servings > 0) {
-      servingsByDay[opDay] = (servingsByDay[opDay] ?? 0) + servings;
-      totalServings += servings;
-    }
-
-    totalSales += price;
   }
 
   DateTime? maxDayBySales;
@@ -429,49 +474,97 @@ StatsHighlights _buildHighlights(List<Map<String, dynamic>> data) {
     }
   });
 
-  DayHighlight? highlightFor(DateTime? day) {
+  DayHighlight? highlightFor(
+    DateTime? day, {
+    required Map<DateTime, double> bySales,
+    required Map<DateTime, double> byProfit,
+    required Map<DateTime, int> byServings,
+    required Map<DateTime, Set<String>> byOrders,
+  }) {
     if (day == null) return null;
     return DayHighlight(
       day: day,
-      sales: salesByDay[day] ?? 0,
-      profit: profitByDay[day] ?? 0,
-      servings: servingsByDay[day] ?? 0,
-      orders: ordersByDay[day]?.length ?? 0,
+      sales: bySales[day] ?? 0,
+      profit: byProfit[day] ?? 0,
+      servings: byServings[day] ?? 0,
+      orders: byOrders[day]?.length ?? 0,
     );
   }
 
-  final activeDays = salesByDay.keys.length;
+  final activeSalesDays = salesByDay.keys.length;
+  final activeProdDays = servingsByDay.keys.length;
   final totalOrders = uniqueOrders.length;
 
-  final avgOrderValue = totalOrders > 0 ? (totalSales / totalOrders) : 0.0;
-  final avgDailySales = activeDays > 0 ? (totalSales / activeDays) : 0.0;
+  final avgDailySales = activeSalesDays > 0
+      ? (totalSales / activeSalesDays)
+      : 0.0;
+  final avgDrinksPerDay = activeProdDays > 0
+      ? (totalDrinkServings / activeProdDays)
+      : 0.0;
+  final avgSnacksPerDay = activeProdDays > 0
+      ? (totalSnackServings / activeProdDays)
+      : 0.0;
+  final avgOrdersPerDay = activeSalesDays > 0
+      ? (totalOrders / activeSalesDays)
+      : 0.0;
 
   return StatsHighlights(
-    topSalesDay: highlightFor(maxDayBySales),
-    topProfitDay: highlightFor(maxDayByProfit),
-    busiestDay: highlightFor(maxDayByServings),
-    averageOrderValue: avgOrderValue,
+    topSalesDay: highlightFor(
+      maxDayBySales,
+      bySales: salesByDay,
+      byProfit: profitByDay,
+      byServings: servingsByDay,
+      byOrders: ordersByDay,
+    ),
+    topProfitDay: highlightFor(
+      maxDayByProfit,
+      bySales: salesByDay,
+      byProfit: profitByDay,
+      byServings: servingsByDay,
+      byOrders: ordersByDay,
+    ),
+    busiestDay: highlightFor(
+      maxDayByServings,
+      bySales: salesByDay,
+      byProfit: profitByDay,
+      byServings: servingsByDay,
+      byOrders: ordersByDay,
+    ),
     averageDailySales: avgDailySales,
+    averageDrinksPerDay: avgDrinksPerDay,
+    averageSnacksPerDay: avgSnacksPerDay,
+    averageOrdersPerDay: avgOrdersPerDay,
     totalOrders: totalOrders,
-    activeDays: activeDays,
-    totalServings: totalServings,
+    activeDays: activeSalesDays,
   );
 }
 
 final statsHighlightsProvider = FutureProvider<StatsHighlights>((ref) async {
   final data = await ref.watch(statsSalesProvider.future);
-  return _buildHighlights(data);
+  final range = ref.watch(statsRangeProvider);
+  return _buildHighlights(data, startUtc: range.startUtc, endUtc: range.endUtc);
 });
 
 /// ============ Drinks/Beans by name ============
 
-List<GroupRow> _buildDrinksRows(List<Map<String, dynamic>> data) {
+List<GroupRow> _buildDrinksRows(
+  List<Map<String, dynamic>> data, {
+  required DateTime startUtc,
+  required DateTime endUtc,
+}) {
   final map = <String, GroupRow>{};
   for (final m in data) {
-    if (_isUnpaidDeferred(m)) continue;
+    final isDeferred = (m['is_deferred'] ?? false) == true;
+    final paid = (m['paid'] ?? (!isDeferred)) == true;
+    final prodInRange = _inProductionRange(m, startUtc, endUtc);
+    final finInRange = _inFinancialRange(m, startUtc, endUtc);
+    if (!prodInRange && !finInRange) continue;
     if ('${m['type'] ?? ''}' != 'drink') continue;
 
-    final name = ('${m['drink_name'] ?? m['name'] ?? 'مشروب'}').trim();
+    final name =
+        ('${m['drink_name'] ?? m['name'] ?? 'U.O'
+                    'O?U^O"'}')
+            .trim();
     final variant = ('${m['variant'] ?? m['roast'] ?? ''}').trim();
     final key = variant.isEmpty ? name : '$name - $variant';
 
@@ -485,7 +578,12 @@ List<GroupRow> _buildDrinksRows(List<Map<String, dynamic>> data) {
 
     final prev = map[key] ?? const GroupRow(key: '');
     final base = prev.key.isEmpty ? GroupRow(key: key) : prev;
-    map[key] = base.add(s: price, c: cost, p: profit, cu: cups);
+    map[key] = base.add(
+      s: (finInRange && (!isDeferred || paid)) ? price : 0,
+      c: (finInRange && (!isDeferred || paid)) ? cost : 0,
+      p: (finInRange && (!isDeferred || paid)) ? profit : 0,
+      cu: prodInRange ? cups : 0,
+    );
   }
 
   final list = map.values.toList()..sort((a, b) => b.sales.compareTo(a.sales));
@@ -494,11 +592,16 @@ List<GroupRow> _buildDrinksRows(List<Map<String, dynamic>> data) {
 
 final drinksByNameProvider = FutureProvider<List<GroupRow>>((ref) async {
   final data = await ref.watch(statsSalesProvider.future);
-  return _buildDrinksRows(data);
+  final range = ref.watch(statsRangeProvider);
+  return _buildDrinksRows(data, startUtc: range.startUtc, endUtc: range.endUtc);
 });
 
-/// يفكّك "توليفة العميل" ويجمع كل مكوّن باسمُه (name - variant)
-List<GroupRow> _buildBeansRows(List<Map<String, dynamic>> data) {
+/// USU?U?U`U? "O?U^U,USU?Oc OU,O1U.USU," U^USO?U.O1 U?U, U.U?U^U`U+ O"OO3U.U?U? (name - variant)
+List<GroupRow> _buildBeansRows(
+  List<Map<String, dynamic>> data, {
+  required DateTime startUtc,
+  required DateTime endUtc,
+}) {
   final map = <String, GroupRow>{};
 
   List<Map<String, dynamic>> asListMap(dynamic v) {
@@ -512,7 +615,10 @@ List<GroupRow> _buildBeansRows(List<Map<String, dynamic>> data) {
     return const [];
   }
 
-  Map<String, dynamic> normRow(Map<String, dynamic> c) {
+  Map<String, dynamic> normRow(
+    Map<String, dynamic> c, {
+    required bool fallbackSpiced,
+  }) {
     String name = (c['name'] ?? c['item_name'] ?? c['product_name'] ?? '')
         .toString();
     String variant = (c['variant'] ?? c['roast'] ?? '').toString();
@@ -525,12 +631,14 @@ List<GroupRow> _buildBeansRows(List<Map<String, dynamic>> data) {
     double lineCost = (c['line_total_cost'] is num)
         ? (c['line_total_cost'] as num).toDouble()
         : _d(c['line_total_cost']);
+    final isSpiced = (c['is_spiced'] ?? fallbackSpiced) == true;
     return {
       'name': name.trim(),
       'variant': variant.trim(),
       'grams': grams,
       'line_total_price': linePrice,
       'line_total_cost': lineCost,
+      'is_spiced': isSpiced,
     };
   }
 
@@ -539,22 +647,39 @@ List<GroupRow> _buildBeansRows(List<Map<String, dynamic>> data) {
     double grams = 0,
     double sales = 0,
     double cost = 0,
+    bool isSpiced = false,
   }) {
     final prev = map[key] ?? const GroupRow(key: '');
     final base = prev.key.isEmpty ? GroupRow(key: key) : prev;
-    map[key] = base.add(g: grams, s: sales, c: cost, p: (sales - cost), cu: 0);
+    map[key] = base.add(
+      g: grams,
+      gPlain: isSpiced ? 0 : grams,
+      gSpiced: isSpiced ? grams : 0,
+      s: sales,
+      c: cost,
+      p: (sales - cost),
+      cu: 0,
+    );
   }
 
   for (final m in data) {
-    if (_isUnpaidDeferred(m)) continue;
+    final isDeferred = (m['is_deferred'] ?? false) == true;
+    final paid = (m['paid'] ?? (!isDeferred)) == true;
+    final prodInRange = _inProductionRange(m, startUtc, endUtc);
+    final finInRange = _inFinancialRange(m, startUtc, endUtc);
+    if (!prodInRange && !finInRange) continue;
+    final includeGrams = prodInRange;
+    final includeMoney = finInRange && (!isDeferred || paid);
+
     final type = '${m['type'] ?? ''}';
+    final saleIsSpiced = (m['is_spiced'] ?? false) == true;
 
     if (type == 'single' || type == 'ready_blend') {
       final name = ('${m['name'] ?? m['single_name'] ?? m['blend_name'] ?? ''}')
           .trim();
       final variant = ('${m['variant'] ?? m['roast'] ?? ''}').trim();
       final key = name.isEmpty
-          ? 'بدون اسم'
+          ? 'O"O_U^U+ OO3U.'
           : (variant.isEmpty ? name : '$name - $variant');
 
       final grams = (m['grams'] as num?)?.toDouble() ?? _d(m['grams']);
@@ -562,7 +687,13 @@ List<GroupRow> _buildBeansRows(List<Map<String, dynamic>> data) {
           (m['total_price'] as num?)?.toDouble() ?? _d(m['total_price']);
       final cost = (m['total_cost'] as num?)?.toDouble() ?? _d(m['total_cost']);
 
-      addToMap(key: key, grams: grams, sales: price, cost: cost);
+      addToMap(
+        key: key,
+        grams: includeGrams ? grams : 0,
+        sales: includeMoney ? price : 0,
+        cost: includeMoney ? cost : 0,
+        isSpiced: saleIsSpiced,
+      );
       continue;
     }
 
@@ -582,11 +713,19 @@ List<GroupRow> _buildBeansRows(List<Map<String, dynamic>> data) {
             (m['beans_amount'] as num?)?.toDouble() ??
             0.0;
         final cost = (m['total_cost'] as num?)?.toDouble() ?? 0.0;
-        addToMap(key: 'مخصص', grams: gramsAll, sales: price, cost: cost);
+        addToMap(
+          key: 'U.OrO?O?',
+          grams: includeGrams ? gramsAll : 0,
+          sales: includeMoney ? price : 0,
+          cost: includeMoney ? cost : 0,
+          isSpiced: saleIsSpiced,
+        );
         continue;
       }
 
-      final rows = rowsRaw.map(normRow).toList();
+      final rows = rowsRaw
+          .map((r) => normRow(r, fallbackSpiced: saleIsSpiced))
+          .toList();
       final totalGrams = rows.fold<double>(
         0,
         (s, r) => s + (r['grams'] as double),
@@ -600,10 +739,11 @@ List<GroupRow> _buildBeansRows(List<Map<String, dynamic>> data) {
         final name = r['name'] as String;
         final variant = r['variant'] as String;
         final grams = r['grams'] as double;
+        final isRowSpiced = (r['is_spiced'] as bool?) ?? saleIsSpiced;
         if (name.isEmpty && grams <= 0) continue;
 
         final key = (variant.isEmpty ? name : '$name - $variant').trim().isEmpty
-            ? 'مكوّن'
+            ? 'U.U?U^U`U+'
             : (variant.isEmpty ? name : '$name - $variant');
 
         double linePrice = r['line_total_price'] as double;
@@ -613,7 +753,13 @@ List<GroupRow> _buildBeansRows(List<Map<String, dynamic>> data) {
           linePrice = beansAmount * (grams / totalGrams);
         }
 
-        addToMap(key: key, grams: grams, sales: linePrice, cost: lineCost);
+        addToMap(
+          key: key,
+          grams: includeGrams ? grams : 0,
+          sales: includeMoney ? linePrice : 0,
+          cost: includeMoney ? lineCost : 0,
+          isSpiced: isRowSpiced,
+        );
       }
     }
   }
@@ -624,7 +770,8 @@ List<GroupRow> _buildBeansRows(List<Map<String, dynamic>> data) {
 
 final beansByNameProvider = FutureProvider<List<GroupRow>>((ref) async {
   final data = await ref.watch(statsSalesProvider.future);
-  return _buildBeansRows(data);
+  final range = ref.watch(statsRangeProvider);
+  return _buildBeansRows(data, startUtc: range.startUtc, endUtc: range.endUtc);
 });
 
 /// ============ Trends (مدفوع فقط + الربح من الداتا) ============
@@ -646,7 +793,11 @@ class TrendsBundle {
   });
 }
 
-TrendsBundle _buildTrends(List<Map<String, dynamic>> data) {
+TrendsBundle _buildTrends(
+  List<Map<String, dynamic>> data, {
+  required DateTime startUtc,
+  required DateTime endUtc,
+}) {
   final Map<DateTime, double> salesM = {};
   final Map<DateTime, double> profitM = {};
   final Map<DateTime, double> drinksSalesM = {};
@@ -655,10 +806,12 @@ TrendsBundle _buildTrends(List<Map<String, dynamic>> data) {
   final Map<DateTime, double> beansProfitM = {};
 
   for (final m in data) {
-    if (_isUnpaidDeferred(m)) continue;
+    final isDeferred = (m['is_deferred'] ?? false) == true;
+    final paid = (m['paid'] ?? (!isDeferred)) == true;
+    final finInRange = _inFinancialRange(m, startUtc, endUtc);
+    if (!finInRange || (isDeferred && !paid)) continue;
 
-    final ts = _asUtc(m['created_at']);
-    final k = opDayKeyUtc(ts);
+    final k = opDayKeyUtc(_financialUtc(m));
     final type = '${m['type'] ?? ''}';
 
     final price =
@@ -695,23 +848,45 @@ TrendsBundle _buildTrends(List<Map<String, dynamic>> data) {
 
 final statsTrendsProvider = FutureProvider<TrendsBundle>((ref) async {
   final data = await ref.watch(statsSalesProvider.future);
-  return _buildTrends(data);
+  final range = ref.watch(statsRangeProvider);
+  return _buildTrends(data, startUtc: range.startUtc, endUtc: range.endUtc);
 });
 
 final statsOverviewProvider = FutureProvider<StatsOverview>((ref) async {
   final data = await ref.watch(statsSalesProvider.future);
   final expenses = await ref.watch(statsExpensesProvider.future);
+  final range = ref.watch(statsRangeProvider);
   return StatsOverview(
-    kpis: _buildKpis(data, expenses),
-    drinks: _buildDrinksRows(data),
-    beans: _buildBeansRows(data),
-    extras: _buildExtrasRows(data),
-    trends: _buildTrends(data),
-    highlights: _buildHighlights(data),
+    kpis: _buildKpis(
+      data,
+      expenses,
+      startUtc: range.startUtc,
+      endUtc: range.endUtc,
+    ),
+    drinks: _buildDrinksRows(
+      data,
+      startUtc: range.startUtc,
+      endUtc: range.endUtc,
+    ),
+    beans: _buildBeansRows(
+      data,
+      startUtc: range.startUtc,
+      endUtc: range.endUtc,
+    ),
+    extras: _buildExtrasRows(
+      data,
+      startUtc: range.startUtc,
+      endUtc: range.endUtc,
+    ),
+    trends: _buildTrends(data, startUtc: range.startUtc, endUtc: range.endUtc),
+    highlights: _buildHighlights(
+      data,
+      startUtc: range.startUtc,
+      endUtc: range.endUtc,
+    ),
   );
 });
-
-// دالة بتعمل Refresh لكل الداتا من السورس
+// Refresh لكل الداتا من السورس
 Future<void> refreshStatsProviders(WidgetRef ref) async {
   ref.invalidate(statsSalesProvider);
   ref.invalidate(statsExpensesProvider);

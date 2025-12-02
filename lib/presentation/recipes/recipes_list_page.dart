@@ -40,7 +40,7 @@ class _RecipesListPageState extends State<RecipesListPage> {
       final m = snap.data() ?? {};
 
       // في داتا قديمة ممكن يبقى اسم الحقول مختلف
-      double _numOf(keys) {
+      double numOf(keys) {
         for (final k in keys) {
           final v = m[k];
           if (v is num) return v.toDouble();
@@ -48,8 +48,8 @@ class _RecipesListPageState extends State<RecipesListPage> {
         return 0.0;
       }
 
-      final sell = _numOf(['sellPricePerKg', 'sellPerKg', 'sell_price_per_kg']);
-      final cost = _numOf(['costPricePerKg', 'costPerKg', 'cost_price_per_kg']);
+      final sell = numOf(['sellPricePerKg', 'sellPerKg', 'sell_price_per_kg']);
+      final cost = numOf(['costPricePerKg', 'costPerKg', 'cost_price_per_kg']);
 
       pricePerKg += sell * (c.percent / 100.0);
       costPerKg += cost * (c.percent / 100.0);

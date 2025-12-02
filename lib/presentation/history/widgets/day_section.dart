@@ -9,6 +9,7 @@ class DaySection extends StatelessWidget {
   final int cups;
   final double grams;
   final int extrasPieces;
+  final int saleCount;
   final void Function(DocumentSnapshot<Map<String, dynamic>> doc) onEdit;
   final void Function(DocumentSnapshot<Map<String, dynamic>> doc) onDelete;
 
@@ -22,6 +23,7 @@ class DaySection extends StatelessWidget {
     required this.cups,
     required this.grams,
     required this.extrasPieces,
+    required this.saleCount,
     required this.onEdit,
     required this.onDelete,
   });
@@ -52,6 +54,13 @@ class DaySection extends StatelessWidget {
                 alignment: WrapAlignment.start,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
+                  _pill(
+                    Icons.receipt_long,
+                    'عدد العمليات',
+                    saleCount,
+                    suffix: 'عملية',
+                    decimals: 0,
+                  ),
                   _pill(Icons.attach_money, 'مبيعات', sumPrice),
                   _pill(Icons.factory, 'تكلفة', sumCost),
                   _pill(Icons.trending_up, 'ربح', sumProfit),
@@ -76,15 +85,24 @@ class DaySection extends StatelessWidget {
     );
   }
 
-  static Widget _pill(IconData icon, String label, dynamic v) {
-    final isGrams = label.contains('جرام');
+  static Widget _pill(
+    IconData icon,
+    String label,
+    num v, {
+    String? suffix,
+    int? decimals,
+  }) {
+    final isGrams = label.contains('جرام') || label.contains('جم');
     final isPieces =
-        label.contains('معمول') || label.contains('تمر') || label.contains('سناكس');
-    final text = isGrams
-        ? '${v.toStringAsFixed(0)} جم'
-        : isPieces
-        ? '${v.toStringAsFixed(0)} قطعة'
-        : v.toStringAsFixed(2);
+        label.contains('معمول') ||
+        label.contains('تمر') ||
+        label.contains('سناكس') ||
+        label.contains('عدد');
+    final fraction =
+        decimals ?? ((isGrams || isPieces || v is int) ? 0 : 2);
+    final valueText = v.toStringAsFixed(fraction);
+    final text =
+        (suffix == null || suffix.isEmpty) ? valueText : '$valueText $suffix';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(

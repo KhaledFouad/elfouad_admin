@@ -342,7 +342,7 @@ class _RecipePrepareSheetState extends State<RecipePrepareSheet> {
                             ),
                           ],
                         );
-                      }).toList(),
+                      }),
                     ],
                   ),
                 ),

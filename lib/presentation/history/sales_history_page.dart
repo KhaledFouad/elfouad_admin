@@ -208,9 +208,15 @@ class SalesHistoryPage extends ConsumerWidget {
                     'created_at_iso': safeDate(
                       m['created_at'],
                     ).toIso8601String(),
+                    'original_created_at_iso': m['original_created_at'] == null
+                        ? null
+                        : safeDate(m['original_created_at']).toIso8601String(),
                     'settled_at_iso': m['settled_at'] == null
                         ? null
                         : safeDate(m['settled_at']).toIso8601String(),
+                    'updated_at_iso': m['updated_at'] == null
+                        ? null
+                        : safeDate(m['updated_at']).toIso8601String(),
                     'total_price': m['total_price'],
                     'total_cost': m['total_cost'],
                     'profit_total': m['profit_total'],
@@ -244,12 +250,13 @@ class SalesHistoryPage extends ConsumerWidget {
                     final doc = byId[id];
                     if (doc == null) continue;
                     final data = doc.data();
-                    final isDeferred = (data['is_deferred'] ?? false) == true;
-                    final paid = (data['paid'] ?? false) == true;
-                    if (isDeferred && !paid) continue;
-                    entries.add(doc);
-                  }
-                  if (entries.isNotEmpty) {
+                      final isDeferred = (data['is_deferred'] ?? false) == true;
+                      final paid = (data['paid'] ?? false) == true;
+                      if (isDeferred && !paid) continue;
+                      entries.add(doc);
+                    }
+                  final hasData = entries.isNotEmpty || bucket.opCount > 0;
+                  if (hasData) {
                     daySections.add(
                       _BucketViewModel(bucket: bucket, entries: entries),
                     );
@@ -357,6 +364,7 @@ class SalesHistoryPage extends ConsumerWidget {
                             cups: b.cups,
                             grams: b.grams,
                             extrasPieces: b.extrasPieces,
+                            saleCount: b.opCount,
                             onEdit: openEdit,
                             onDelete: deleteDoc,
                           ),

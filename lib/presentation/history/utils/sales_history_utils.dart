@@ -111,13 +111,16 @@ String detectType(Map<String, dynamic> m) {
   if (t.isNotEmpty) return t;
   if (m.containsKey('components')) return 'custom_blend';
   if (m.containsKey('drink_id') || m.containsKey('drink_name')) return 'drink';
-  if (m.containsKey('single_id') || m.containsKey('single_name'))
+  if (m.containsKey('single_id') || m.containsKey('single_name')) {
     return 'single';
-  if (m.containsKey('blend_id') || m.containsKey('blend_name'))
+  }
+  if (m.containsKey('blend_id') || m.containsKey('blend_name')) {
     return 'ready_blend';
+  }
   final items = asListMap(m['items']);
-  if (items.isNotEmpty && items.any((x) => x.containsKey('grams')))
+  if (items.isNotEmpty && items.any((x) => x.containsKey('grams'))) {
     return 'single';
+  }
   return 'unknown';
 }
 
@@ -246,12 +249,12 @@ Future<void> settleDeferredSale(String docId) async {
     final snap = await trx.get(ref);
     final data = snap.data() ?? {};
 
-    double _n(dynamic v) =>
+    double n(dynamic v) =>
         (v is num) ? v.toDouble() : double.tryParse(v?.toString() ?? '0') ?? 0;
 
-    final totalPrice = _n(data['total_price']);
-    final totalCost = _n(data['total_cost']);
-    final currentProfit = _n(data['profit_total']);
+    final totalPrice = n(data['total_price']);
+    final totalCost = n(data['total_cost']);
+    final currentProfit = n(data['profit_total']);
 
     final newProfit = currentProfit != 0
         ? currentProfit
@@ -265,6 +268,7 @@ Future<void> settleDeferredSale(String docId) async {
       'profit_total': newProfit,
       if (!data.containsKey('original_created_at'))
         'original_created_at': oldCreated,
+      'settled_at': FieldValue.serverTimestamp(),
       'created_at': FieldValue.serverTimestamp(),
       'updated_at': FieldValue.serverTimestamp(),
     });
@@ -450,6 +454,12 @@ DateTime effectiveTimeLocal(Map<String, dynamic> m) {
       : (settledAtRaw is Timestamp
             ? settledAtRaw.toDate()
             : DateTime.tryParse('$settledAtRaw'));
+  final updatedRaw = m['updated_at'];
+  final updatedAt = updatedRaw == null
+      ? null
+      : (updatedRaw is Timestamp
+            ? updatedRaw.toDate()
+            : DateTime.tryParse('$updatedRaw'));
 
   final isDeferred = (m['is_deferred'] ?? m['is_credit'] ?? false) == true;
   final paid = (m['paid'] ?? (!isDeferred)) == true;
@@ -463,7 +473,10 @@ DateTime effectiveTimeLocal(Map<String, dynamic> m) {
     return (origKey.compareTo(anchorKey) < 0) ? anchor : createdAt;
   }
 
-  if (paid && settledAt != null) return settledAt;
+  if (paid) {
+    if (settledAt != null) return settledAt;
+    if (updatedAt != null) return updatedAt;
+  }
   return createdAt;
 }
 

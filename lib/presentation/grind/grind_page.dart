@@ -117,14 +117,14 @@ class _ItemCard extends StatelessWidget {
         : '${row.name} — ${row.variant}';
 
     // تقدير بسيط للماكس عشان البار يبقى مفهوم
-    double _maxBar(double x) {
+    double maxBar(double x) {
       if (x <= 500) return 500;
       if (x <= 2000) return 2000;
       if (x <= 5000) return 5000;
       return 20000;
     }
 
-    final pct = row.stockG <= 0 ? 0.0 : (row.stockG / _maxBar(row.stockG));
+    final pct = row.stockG <= 0 ? 0.0 : (row.stockG / maxBar(row.stockG));
 
     return InkWell(
       onTap: () {
