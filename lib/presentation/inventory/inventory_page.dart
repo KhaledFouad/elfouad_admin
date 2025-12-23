@@ -1,4 +1,5 @@
 import 'package:awesome_drawer_bar/awesome_drawer_bar.dart';
+import 'package:elfouad_admin/core/app_strings.dart';
 import 'package:elfouad_admin/presentation/inventory/providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -30,7 +31,7 @@ class InventoryPage extends ConsumerWidget {
                 onPressed: () => AwesomeDrawerBar.of(context)?.toggle(),
               ),
               title: const Text(
-                "المخزون",
+                AppStrings.tabInventory,
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
                   fontSize: 35,
@@ -63,9 +64,19 @@ class InventoryPage extends ConsumerWidget {
                     Wrap(
                       spacing: 8,
                       children: [
-                        _chip(ref, 'الكل', InventoryTab.all, tab),
-                        _chip(ref, 'الأصناف المنفردة', InventoryTab.singles, tab),
-                        _chip(ref, 'التوليفات', InventoryTab.blends, tab),
+                        _chip(ref, AppStrings.inventoryAll, InventoryTab.all, tab),
+                        _chip(
+                          ref,
+                          AppStrings.inventorySingles,
+                          InventoryTab.singles,
+                          tab,
+                        ),
+                        _chip(
+                          ref,
+                          AppStrings.inventoryBlends,
+                          InventoryTab.blends,
+                          tab,
+                        ),
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -76,13 +87,13 @@ class InventoryPage extends ConsumerWidget {
                         ),
                         child: const Padding(
                           padding: EdgeInsets.all(12),
-                          child: Text('المشروبات لا تُدار كمخزون جرامات هنا.'),
+                          child: Text(AppStrings.drinksNoStockNote),
                         ),
                       )
                     else if (list.isEmpty)
                       const Padding(
                         padding: EdgeInsets.symmetric(vertical: 24),
-                        child: Center(child: Text('لا توجد عناصر')),
+                        child: Center(child: Text(AppStrings.noItems)),
                       )
                     else
                       const SizedBox(height: 4),

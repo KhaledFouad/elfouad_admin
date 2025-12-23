@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:excel/excel.dart';
 import 'package:file_saver/file_saver.dart';
 import 'package:open_filex/open_filex.dart';
+import 'package:elfouad_admin/core/app_strings.dart';
 
 /// ========== مفاتيح يوم التشغيل (4 ص) ==========
 String dayKeyFromUtc(DateTime createdUtc) {
@@ -14,17 +15,29 @@ String dayKeyFromUtc(DateTime createdUtc) {
 /// تحويل آمن لأرقام
 double numD(dynamic v) {
   if (v is num) return v.toDouble();
-  return double.tryParse(v?.toString() ?? '0') ?? 0.0;
+  final s = v?.toString().replaceAll(',', '.') ?? '0';
+  return double.tryParse(s) ?? 0.0;
 }
 
 /// فحص الأجل غير المدفوع
 
 /// قراءة created_at كـ UTC (لو String/Timestamp)
+DateTime _parseAnyDate(dynamic v) {
+  if (v is Timestamp) return v.toDate();
+  if (v is DateTime) return v;
+  if (v is num) {
+    final raw = v.toInt();
+    final ms = raw < 10000000000 ? raw * 1000 : raw;
+    return DateTime.fromMillisecondsSinceEpoch(ms);
+  }
+  if (v is String) {
+    return DateTime.tryParse(v) ?? DateTime.fromMillisecondsSinceEpoch(0);
+  }
+  return DateTime.fromMillisecondsSinceEpoch(0);
+}
+
 DateTime createdAtUtcOf(Map<String, dynamic> m) {
-  final ts =
-      (m['created_at'] as Timestamp?)?.toDate() ??
-      DateTime.tryParse(m['created_at']?.toString() ?? '');
-  return (ts?.toUtc()) ?? DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+  return _parseAnyDate(m['created_at']).toUtc();
 }
 
 const int kOpShiftHours = 4;
@@ -56,9 +69,9 @@ DateTime viewCreatedAtFor(Map<String, dynamic> m) {
 
 /// لو العملية فيها تاريخ أصلي محفوظ
 DateTime? originalCreatedAtIfAny(Map<String, dynamic> m) {
-  final t = (m['original_created_at'] as Timestamp?)?.toDate();
-  if (t != null) return t.toUtc();
-  return null;
+  final v = m['original_created_at'];
+  if (v == null) return null;
+  return _parseAnyDate(v).toUtc();
 }
 
 /// Group docs by (operational) day with rollover of unpaid deferred to today.
@@ -128,11 +141,42 @@ Map<String, dynamic> normalizeRow(Map<String, dynamic> c) {
   String name = (c['name'] ?? c['item_name'] ?? c['product_name'] ?? '')
       .toString();
   String variant = (c['variant'] ?? c['roast'] ?? '').toString();
-  double grams = numD(c['grams'] ?? c['weight'] ?? 0);
-  double qty = numD(c['qty'] ?? c['count'] ?? 0);
-  String unit = (c['unit'] ?? (grams > 0 ? 'g' : '')).toString();
-  double linePrice = numD(c['line_total_price'] ?? c['total_price'] ?? 0);
-  double lineCost = numD(c['line_total_cost'] ?? c['total_cost'] ?? 0);
+  double grams = numD(c['grams'] ?? c['weight'] ?? c['gram'] ?? 0);
+  double qty =
+      numD(c['qty'] ?? c['quantity'] ?? c['count'] ?? c['pieces'] ?? 0);
+  String unit = (c['unit'] ?? c['uom'] ?? (grams > 0 ? 'g' : '')).toString();
+  final hasLinePrice = c.containsKey('line_total_price') ||
+      c.containsKey('total_price') ||
+      c.containsKey('price') ||
+      c.containsKey('amount') ||
+      c.containsKey('total');
+  final hasLineCost = c.containsKey('line_total_cost') ||
+      c.containsKey('total_cost') ||
+      c.containsKey('cost') ||
+      c.containsKey('cost_amount');
+  double linePrice = numD(
+    c['line_total_price'] ??
+        c['total_price'] ??
+        c['price'] ??
+        c['amount'] ??
+        c['total'] ??
+        0,
+  );
+  double lineCost = numD(
+    c['line_total_cost'] ??
+        c['total_cost'] ??
+        c['cost'] ??
+        c['cost_amount'] ??
+        0,
+  );
+  final unitPrice = numD(c['unit_price'] ?? c['price_per_unit']);
+  final unitCost = numD(c['unit_cost'] ?? c['cost_per_unit']);
+  if (!hasLinePrice && unitPrice > 0 && qty > 0) {
+    linePrice = unitPrice * qty;
+  }
+  if (!hasLineCost && unitCost > 0 && qty > 0) {
+    lineCost = unitCost * qty;
+  }
   return {
     'name': name,
     'variant': variant,
@@ -154,11 +198,21 @@ List<Map<String, dynamic>> extractComponents(
   final items = asListMap(m['items']);
   if (items.isNotEmpty) return items.map(normalizeRow).toList();
 
+  final cartItems = asListMap(m['cart_items']);
+  if (cartItems.isNotEmpty) return cartItems.map(normalizeRow).toList();
+
+  final orderItems = asListMap(m['order_items']);
+  if (orderItems.isNotEmpty) return orderItems.map(normalizeRow).toList();
+
+  final products = asListMap(m['products']);
+  if (products.isNotEmpty) return products.map(normalizeRow).toList();
+
   final lines = asListMap(m['lines']);
   if (lines.isNotEmpty) return lines.map(normalizeRow).toList();
 
   if (type == 'drink') {
-    final name = (m['drink_name'] ?? m['name'] ?? 'مشروب').toString();
+    final name = (m['drink_name'] ?? m['name'] ?? AppStrings.drinkLabel)
+        .toString();
     final variant = (m['roast'] ?? m['variant'] ?? '').toString();
     final qty = numD(m['quantity'] ?? m['qty'] ?? 1);
     final unit = (m['unit'] ?? 'cup').toString();
@@ -201,6 +255,47 @@ List<Map<String, dynamic>> extractComponents(
   return const [];
 }
 
+({double price, double cost, double profit}) saleTotalsWithFallback(
+  Map<String, dynamic> m, {
+  List<Map<String, dynamic>>? components,
+}) {
+  double price = numD(m['total_price']);
+  double cost = numD(m['total_cost']);
+  double profit = numD(m['profit_total']);
+  final isComplimentary = (m['is_complimentary'] ?? false) == true;
+
+  if (price <= 0) {
+    price = numD(
+      m['total'] ?? m['total_amount'] ?? m['amount'] ?? m['grand_total'],
+    );
+  }
+  if (cost <= 0) {
+    cost = numD(m['total_cost_amount'] ?? m['cost'] ?? m['totalCost']);
+  }
+
+  final type = (m['type'] ?? detectType(m)).toString();
+  final rows = components ?? extractComponents(m, type);
+  if (rows.isNotEmpty) {
+    final linePrice =
+        rows.fold<double>(0.0, (s, r) => s + numD(r['line_total_price']));
+    final lineCost =
+        rows.fold<double>(0.0, (s, r) => s + numD(r['line_total_cost']));
+    if (price <= 0 && linePrice > 0) price = linePrice;
+    if (cost <= 0 && lineCost > 0) cost = lineCost;
+  }
+
+  if (profit == 0 && (price > 0 || cost > 0)) {
+    profit = price - cost;
+  }
+
+  if (isComplimentary) {
+    price = 0.0;
+    profit = 0.0;
+  }
+
+  return (price: price, cost: cost, profit: profit);
+}
+
 IconData iconForType(String t) {
   switch (t) {
     case 'drink':
@@ -213,6 +308,42 @@ IconData iconForType(String t) {
       return Icons.auto_awesome_mosaic;
     default:
       return Icons.receipt_long;
+  }
+}
+
+String titleLine(Map<String, dynamic> m, String type) {
+  final name = (m['name'] ?? '').toString();
+  final variant = (m['variant'] ?? m['roast'] ?? '').toString();
+  final labelNV = variant.isNotEmpty ? '$name $variant' : name;
+
+  switch (type) {
+    case 'extra':
+      final q = (m['quantity'] is num)
+          ? (m['quantity'] as num).toInt()
+          : int.tryParse('${m['quantity'] ?? 0}') ?? 0;
+      final lbl = labelNV.isNotEmpty ? labelNV : name;
+      return AppStrings.snacksSaleTitle(q, lbl);
+    case 'drink':
+      final qd = numD(m['quantity']) > 0
+          ? numD(m['quantity']).toStringAsFixed(0)
+          : '1';
+      final dn = (m['drink_name'] ?? '').toString();
+      final finalName = labelNV.isNotEmpty
+          ? labelNV
+          : (dn.isNotEmpty ? dn : AppStrings.drinkLabel);
+      return AppStrings.drinkSaleTitle(qd, finalName);
+    case 'single':
+      final g = numD(m['grams']).toStringAsFixed(0);
+      final lbl = labelNV.isNotEmpty ? labelNV : name;
+      return AppStrings.singleItemTitle(g, lbl);
+    case 'ready_blend':
+      final g = numD(m['grams']).toStringAsFixed(0);
+      final lbl = labelNV.isNotEmpty ? labelNV : name;
+      return AppStrings.readyBlendTitle(g, lbl);
+    case 'custom_blend':
+      return AppStrings.customBlendTitle;
+    default:
+      return labelNV.isNotEmpty ? labelNV : AppStrings.operationLabel;
   }
 }
 
@@ -425,6 +556,9 @@ List<Map<String, dynamic>> _extractLines(
     ...asList(m['components']),
     ...asList(m['items']),
     ...asList(m['lines']),
+    ...asList(m['cart_items']),
+    ...asList(m['order_items']),
+    ...asList(m['products']),
   ];
   int idx = 0;
   for (final c in candidates) {
@@ -434,32 +568,26 @@ List<Map<String, dynamic>> _extractLines(
       'name': _safeStr(c['name'] ?? c['item_name'] ?? c['product_name']),
       'variant': _safeStr(c['variant'] ?? c['roast']),
       'unit': _safeStr(c['unit']),
-      'qty': _numD(c['qty']),
-      'grams': _numD(c['grams']),
-      'line_total_price': _numD(c['line_total_price']),
-      'line_total_cost': _numD(c['line_total_cost']),
+      'qty': _numD(c['qty'] ?? c['quantity'] ?? c['count'] ?? c['pieces']),
+      'grams': _numD(c['grams'] ?? c['weight'] ?? c['gram']),
+      'line_total_price':
+          _numD(c['line_total_price'] ?? c['total_price'] ?? c['price'] ?? c['amount']),
+      'line_total_cost':
+          _numD(c['line_total_cost'] ?? c['total_cost'] ?? c['cost']),
     });
   }
   return rows;
 }
 
 DateTime effectiveTimeLocal(Map<String, dynamic> m) {
-  final createdAt =
-      (m['created_at'] as Timestamp?)?.toDate() ??
-      DateTime.fromMillisecondsSinceEpoch(0);
+  final createdAt = _parseAnyDate(m['created_at']);
 
   final settledAtRaw = m['settled_at'];
-  final settledAt = settledAtRaw == null
-      ? null
-      : (settledAtRaw is Timestamp
-            ? settledAtRaw.toDate()
-            : DateTime.tryParse('$settledAtRaw'));
+  final settledAt =
+      settledAtRaw == null ? null : _parseAnyDate(settledAtRaw);
   final updatedRaw = m['updated_at'];
-  final updatedAt = updatedRaw == null
-      ? null
-      : (updatedRaw is Timestamp
-            ? updatedRaw.toDate()
-            : DateTime.tryParse('$updatedRaw'));
+  final updatedAt =
+      updatedRaw == null ? null : _parseAnyDate(updatedRaw);
 
   final isDeferred = (m['is_deferred'] ?? m['is_credit'] ?? false) == true;
   final paid = (m['paid'] ?? (!isDeferred)) == true;
@@ -501,6 +629,10 @@ Future<void> exportSalesExcelFromFilter(
   try {
     final startUtc = _utc(range.start);
     final endUtc = _utc(range.end);
+    final startIso = startUtc.toIso8601String();
+    final endIso = endUtc.toIso8601String();
+    final startMs = startUtc.millisecondsSinceEpoch;
+    final endMs = endUtc.millisecondsSinceEpoch;
 
     // Query أساسي بالنطاق (4ص→4ص)
     final qs = await FirebaseFirestore.instance
@@ -509,15 +641,57 @@ Future<void> exportSalesExcelFromFilter(
         .where('created_at', isLessThan: endUtc)
         .orderBy('created_at', descending: false)
         .get();
+    QuerySnapshot<Map<String, dynamic>>? qsStr;
+    try {
+      qsStr = await FirebaseFirestore.instance
+          .collection('sales')
+          .where('created_at', isGreaterThanOrEqualTo: startIso)
+          .where('created_at', isLessThan: endIso)
+          .orderBy('created_at', descending: false)
+          .get();
+    } catch (_) {
+      qsStr = null;
+    }
+    QuerySnapshot<Map<String, dynamic>>? qsNum;
+    try {
+      qsNum = await FirebaseFirestore.instance
+          .collection('sales')
+          .where('created_at', isGreaterThanOrEqualTo: startMs)
+          .where('created_at', isLessThan: endMs)
+          .orderBy('created_at', descending: false)
+          .get();
+    } catch (_) {
+      qsNum = null;
+    }
+
+    final docsById = <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
+    for (final d in qs.docs) {
+      docsById[d.id] = d;
+    }
+    if (qsStr != null) {
+      for (final d in qsStr.docs) {
+        docsById[d.id] = d;
+      }
+    }
+    if (qsNum != null) {
+      for (final d in qsNum.docs) {
+        docsById[d.id] = d;
+      }
+    }
+    final docs = docsById.values.toList()
+      ..sort((a, b) => createdAtUtcOf(b.data()).compareTo(createdAtUtcOf(a.data())));
 
     final sales = <Map<String, dynamic>>[];
     final lines = <Map<String, dynamic>>[];
 
-    for (final d in qs.docs) {
+    for (final d in docs) {
       final m = d.data();
       final id = d.id;
 
-      final createdAt = (m['created_at'] as Timestamp?)?.toDate();
+      final totals = saleTotalsWithFallback(m);
+      final createdAt = _parseAnyDate(m['created_at']);
+      final settledAtRaw = m['settled_at'];
+      final settledAt = settledAtRaw == null ? null : _parseAnyDate(settledAtRaw);
       final eff = effectiveTimeLocal(m);
 
       // لو حابب تستبعد الأجل غير المدفوع من التصدير، فكّ الكومنت:
@@ -529,17 +703,15 @@ Future<void> exportSalesExcelFromFilter(
         'id': id,
         'created_at': _fmtDateTimeLocal(createdAt),
         'effective_time': _fmtDateTimeLocal(eff),
-        'settled_at': _fmtDateTimeLocal(
-          (m['settled_at'] as Timestamp?)?.toDate(),
-        ),
+        'settled_at': _fmtDateTimeLocal(settledAt),
         'type': _safeStr(m['type']),
         'name': _safeStr(m['name'] ?? m['drink_name']),
         'variant': _safeStr(m['variant'] ?? m['roast']),
         'grams': _numD(m['grams'] ?? m['total_grams']),
         'quantity': _numD(m['quantity']),
-        'total_price': _numD(m['total_price']),
-        'total_cost': _numD(m['total_cost']),
-        'profit_total': _numD(m['profit_total']),
+        'total_price': totals.price,
+        'total_cost': totals.cost,
+        'profit_total': totals.profit,
         'is_deferred': (m['is_deferred'] ?? false) == true,
         'paid': (m['paid'] ?? false) == true,
         'due_amount': _numD(m['due_amount']),
@@ -565,36 +737,36 @@ Future<void> exportSalesExcelFromFilter(
       mimeType: MimeType.microsoftExcel,
     );
 
-    if (context.mounted) Navigator.pop(context); // قفل اللودينج
+    if (!context.mounted) return;
+    Navigator.pop(context); // قفل اللودينج
 
     // SnackBar طويل + زر فتح
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          duration: const Duration(seconds: 14),
-          content: Text(
-            'تم الحفظ في التنزيلات: $savedPath',
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          action: SnackBarAction(
-            label: 'فتح',
-            onPressed: () async {
-              try {
-                await OpenFilex.open(savedPath);
-              } catch (_) {}
-            },
-          ),
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        duration: const Duration(seconds: 14),
+        content: Text(
+          AppStrings.savedToDownloads(savedPath),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
         ),
-      );
-    }
+        action: SnackBarAction(
+          label: AppStrings.actionOpen,
+          onPressed: () async {
+            try {
+              await OpenFilex.open(savedPath);
+            } catch (_) {}
+          },
+        ),
+      ),
+    );
   } catch (e) {
-    if (context.mounted) Navigator.pop(context); // قفل اللودينج
+    if (!context.mounted) return;
+    Navigator.pop(context); // قفل اللودينج
     // بديل: مشاركة الملف لو فشل الحفظ
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'تعذّر الحفظ في التنزيلات. هشارك الملف بدلًا من ذلك. ($e)',
+          AppStrings.downloadsSaveFailed(e),
         ),
         duration: const Duration(seconds: 10),
       ),

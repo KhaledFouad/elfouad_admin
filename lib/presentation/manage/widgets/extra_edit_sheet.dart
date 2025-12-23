@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:elfouad_admin/core/app_strings.dart';
 
 class ExtraEditSheet extends StatefulWidget {
   final DocumentSnapshot<Map<String, dynamic>> snap;
@@ -78,12 +79,14 @@ class _ExtraEditSheetState extends State<ExtraEditSheet> {
       Navigator.pop(context);
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('تم الحفظ')));
+      ).showSnackBar(const SnackBar(content: Text(AppStrings.saveSuccess)));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('تعذّر الحفظ: $e')));
+      ).showSnackBar(
+        SnackBar(content: Text(AppStrings.saveFailedAccented(e))),
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -112,27 +115,35 @@ class _ExtraEditSheetState extends State<ExtraEditSheet> {
             ),
           ),
           const Text(
-            'تعديل إضافة',
+            AppStrings.editExtraTitle,
             textAlign: TextAlign.center,
             style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
           ),
           const SizedBox(height: 12),
-          _field('الاسم', _name),
+          _field(AppStrings.nameLabel, _name),
           const SizedBox(height: 8),
-          _field('التصنيف (اختياري)', _category),
+          _field(AppStrings.categoryOptionalLabel, _category),
           const SizedBox(height: 8),
-          _field('الوحدة', _unit),
+          _field(AppStrings.unitLabel, _unit),
           const SizedBox(height: 8),
-          _field('المخزون (وحدات)', _stockUnits, numKeyboard: true),
+          _field(AppStrings.stockUnitsLabel, _stockUnits, numKeyboard: true),
           const SizedBox(height: 8),
-          _field('سعر البيع للوحدة', _priceSell, numKeyboard: true),
+          _field(
+            AppStrings.sellPricePerUnitLabel,
+            _priceSell,
+            numKeyboard: true,
+          ),
           const SizedBox(height: 8),
-          _field('التكلفة للوحدة', _costUnit, numKeyboard: true),
+          _field(
+            AppStrings.costPerUnitShortLabel,
+            _costUnit,
+            numKeyboard: true,
+          ),
           const SizedBox(height: 8),
           SwitchListTile.adaptive(
             value: _active,
             onChanged: (v) => setState(() => _active = v),
-            title: const Text('مفعل؟'),
+            title: const Text(AppStrings.activeQuestionLabel),
             contentPadding: EdgeInsets.zero,
             dense: true,
           ),
@@ -142,7 +153,7 @@ class _ExtraEditSheetState extends State<ExtraEditSheet> {
               Expanded(
                 child: OutlinedButton(
                   onPressed: _busy ? null : () => Navigator.pop(context),
-                  child: const Text('إلغاء'),
+                  child: const Text(AppStrings.actionCancel),
                 ),
               ),
               const SizedBox(width: 8),
@@ -156,7 +167,7 @@ class _ExtraEditSheetState extends State<ExtraEditSheet> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.save),
-                  label: const Text('حفظ'),
+                  label: const Text(AppStrings.actionSave),
                 ),
               ),
             ],

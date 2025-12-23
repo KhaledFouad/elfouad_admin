@@ -1,5 +1,6 @@
 import 'dart:async' show unawaited;
-import 'package:elfouad_admin/core/firestore_tuning.dart' show configureFirestore;
+import 'package:elfouad_admin/core/firestore_tuning.dart'
+    show configureFirestore;
 import 'package:elfouad_admin/presentation/home/app_shell.dart';
 import 'package:elfouad_admin/services/archive/auto_archiver.dart.dart'
     show runAutoArchiveIfNeeded;
@@ -10,6 +11,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'services/firebase_options.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:elfouad_admin/core/app_strings.dart';
 
 const _primaryHex = 0xFF543824; // بني غامق
 const _accentHex = 0xFFC49A6C; // بيج  اتح
@@ -24,9 +26,9 @@ Future<void> _scheduleAutoArchive() async {
   await Future<void>.delayed(const Duration(seconds: 8));
   unawaited(
     runAutoArchiveIfNeeded(
-      adminUid: 'system',
+      adminUid: AppStrings.systemUserId,
       everyNDays: 5,
-      daysThreshold: 30,
+      daysThreshold: 40,
       batchSize: 200,
     ),
   );
@@ -99,9 +101,12 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Elfouad Admin',
-      locale: const Locale('ar'),
-      supportedLocales: const [Locale('ar'), Locale('en')],
+      title: AppStrings.appTitle,
+      locale: const Locale(AppStrings.localeAr),
+      supportedLocales: const [
+        Locale(AppStrings.localeAr),
+        Locale(AppStrings.localeEn),
+      ],
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,

@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:elfouad_admin/core/app_strings.dart';
 
 class ProductEditSheet extends StatefulWidget {
   final String collection; // 'drinks' | 'singles' | 'blends'
@@ -158,12 +159,14 @@ class _ProductEditSheetState extends State<ProductEditSheet> {
       Navigator.pop(context);
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('تم الحفظ')));
+      ).showSnackBar(const SnackBar(content: Text(AppStrings.saveSuccess)));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('تعذّر الحفظ: $e')));
+      ).showSnackBar(
+        SnackBar(content: Text(AppStrings.saveFailedAccented(e))),
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -192,57 +195,67 @@ class _ProductEditSheetState extends State<ProductEditSheet> {
             ),
           ),
           Text(
-            isDrinks ? 'تعديل مشروب' : 'تعديل صنف',
+            isDrinks ? AppStrings.editDrinkTitle : AppStrings.editItemTitle,
             style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
           ),
           const SizedBox(height: 12),
 
-          _t('الاسم', _name),
+          _t(AppStrings.nameLabel, _name),
           if (!isDrinks) ...[
             const SizedBox(height: 8),
-            _t('التحميصة/الفاريانت', _variant),
+            _t(AppStrings.roastVariantLabel, _variant),
           ],
           const SizedBox(height: 8),
-          _t('الوحدة (اختياري)', _unit),
+          _t(AppStrings.unitOptionalLabel, _unit),
 
           const SizedBox(height: 12),
           _t(
-            isDrinks ? 'المخزون (اختياري)' : 'المخزون (جم)',
+            isDrinks
+                ? AppStrings.stockOptionalLabel
+                : AppStrings.stockGramsShortLabel,
             _stock,
             numKeyboard: true,
           ),
 
           const SizedBox(height: 12),
           if (!isDrinks) ...[
-            _t('سعر/كجم', _sellPerKg, numKeyboard: true),
+            _t(AppStrings.pricePerKgLabel, _sellPerKg, numKeyboard: true),
             const SizedBox(height: 8),
-            _t('تكلفة/كجم', _costPerKg, numKeyboard: true),
+            _t(AppStrings.costPerKgLabel, _costPerKg, numKeyboard: true),
             const SizedBox(height: 8),
             _t(
-              'سعر التحويج/كجم (spicesPrice)',
+              AppStrings.spicePricePerKgLabel,
               _spicesPrice,
               numKeyboard: true,
             ),
             const SizedBox(height: 8),
             _t(
-              'تكلفة التحويج/كجم (spicesCost)',
+              AppStrings.spiceCostPerKgLabel,
               _spicesCost,
               numKeyboard: true,
             ),
           ] else ...[
-            _t('سعر الكوب', _sellPrice, numKeyboard: true),
+            _t(AppStrings.cupPriceLabel, _sellPrice, numKeyboard: true),
             const SizedBox(height: 8),
-            _t('تكلفة الكوب', _costPrice, numKeyboard: true),
+            _t(AppStrings.cupCostLabel, _costPrice, numKeyboard: true),
             const SizedBox(height: 8),
-            _t('سعر الدابل', _doublePrice, numKeyboard: true),
+            _t(AppStrings.doublePriceLabel, _doublePrice, numKeyboard: true),
             const SizedBox(height: 8),
-            _t('تكلفة الدابل', _doubleCost, numKeyboard: true),
+            _t(AppStrings.doubleCostLabel, _doubleCost, numKeyboard: true),
             const SizedBox(height: 8),
-            _t('تكلفة كوب محوّج', _spicedCupCost, numKeyboard: true),
+            _t(
+              AppStrings.spicedCupCostLabel,
+              _spicedCupCost,
+              numKeyboard: true,
+            ),
             const SizedBox(height: 8),
-            _t('تكلفة دابل محوّج', _spicedDoubleCupCost, numKeyboard: true),
+            _t(
+              AppStrings.spicedDoubleCostLabel,
+              _spicedDoubleCupCost,
+              numKeyboard: true,
+            ),
             const SizedBox(height: 8),
-            _t('استخدام خامة/كوب (usedAmount)', _usedAmount, numKeyboard: true),
+            _t(AppStrings.usedAmountLabel, _usedAmount, numKeyboard: true),
           ],
 
           const SizedBox(height: 14),
@@ -251,7 +264,7 @@ class _ProductEditSheetState extends State<ProductEditSheet> {
               Expanded(
                 child: OutlinedButton(
                   onPressed: _busy ? null : () => Navigator.pop(context),
-                  child: const Text('إلغاء'),
+                  child: const Text(AppStrings.actionCancel),
                 ),
               ),
               const SizedBox(width: 8),
@@ -265,7 +278,7 @@ class _ProductEditSheetState extends State<ProductEditSheet> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.save),
-                  label: const Text('حفظ'),
+                  label: const Text(AppStrings.actionSave),
                 ),
               ),
             ],

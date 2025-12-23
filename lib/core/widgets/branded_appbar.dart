@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:elfouad_admin/core/app_strings.dart';
 
 class BrandedAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String title;
@@ -30,7 +31,7 @@ class BrandedAppBar extends StatelessWidget implements PreferredSizeWidget {
                   builder: (ctx) => IconButton(
                     icon: const Icon(Icons.menu, color: Colors.brown),
                     onPressed: () => Scaffold.of(ctx).openDrawer(),
-                    tooltip: 'القائمة',
+                    tooltip: AppStrings.menuTooltip,
                   ),
                 )
               : (showBack

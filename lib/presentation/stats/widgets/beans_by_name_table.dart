@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:elfouad_admin/core/app_strings.dart';
 
 class BeanRow {
   final String name; // name أو name - variant
@@ -26,7 +27,7 @@ class BeansByNameTable extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (rows.isEmpty) {
-      return const Center(child: Text('لا توجد بيانات بن في هذا المدى'));
+      return const Center(child: Text(AppStrings.noBeansData));
     }
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -35,13 +36,13 @@ class BeansByNameTable extends StatelessWidget {
         dataRowMinHeight: 36,
         dataRowMaxHeight: 48,
         columns: const [
-          DataColumn(label: Text('الصنف')),
-          DataColumn(label: Text('جرامات')),
-          DataColumn(label: Text('سادة')),
-          DataColumn(label: Text('محوج')),
-          DataColumn(label: Text('المبيعات')),
-          DataColumn(label: Text('التكلفة')),
-          DataColumn(label: Text('الربح')),
+          DataColumn(label: Text(AppStrings.itemLabel)),
+          DataColumn(label: Text(AppStrings.gramsLabel)),
+          DataColumn(label: Text(AppStrings.plainLabel)),
+          DataColumn(label: Text(AppStrings.spicedLabelPlain)),
+          DataColumn(label: Text(AppStrings.salesLabelDefinite)),
+          DataColumn(label: Text(AppStrings.costLabelDefinite)),
+          DataColumn(label: Text(AppStrings.profitLabelDefinite)),
         ],
         rows: rows.map((r) {
           return DataRow(

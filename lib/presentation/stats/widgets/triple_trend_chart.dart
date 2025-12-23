@@ -1,6 +1,7 @@
 import 'package:elfouad_admin/presentation/stats/state/stats_data_provider.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:elfouad_admin/core/app_strings.dart';
 
 class TripleTrendChart extends StatelessWidget {
   final List<DayVal> line1; // إجمالي (مبيعات أو ربح)
@@ -21,7 +22,7 @@ class TripleTrendChart extends StatelessWidget {
     if (all.isEmpty) {
       return const SizedBox(
         height: 220,
-        child: Center(child: Text('لا توجد بيانات للمدى المختار')),
+        child: Center(child: Text(AppStrings.noDataForRange)),
       );
     }
 
@@ -65,9 +66,14 @@ class TripleTrendChart extends StatelessWidget {
             runSpacing: 4,
             alignment: WrapAlignment.center,
             children: [
-              _legendDot(color1, asProfit ? 'الربح' : 'المبيعات'),
-              _legendDot(color2, 'مشروبات (مبيعات)'),
-              _legendDot(color3, 'بن (جرامات)'),
+              _legendDot(
+                color1,
+                asProfit
+                    ? AppStrings.profitLabelDefinite
+                    : AppStrings.salesLabelDefinite,
+              ),
+              _legendDot(color2, AppStrings.drinksSalesLegend),
+              _legendDot(color3, AppStrings.beansGramsLegend),
             ],
           ),
         ),

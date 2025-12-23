@@ -1,19 +1,20 @@
 import 'package:elfouad_admin/presentation/inventory/providers.dart';
 import 'package:flutter/material.dart';
+import 'package:elfouad_admin/core/app_strings.dart';
 
 class InventoryTile extends StatelessWidget {
   final String title;
-  final List<_InventoryChipData> chips;
+  final List<_InventoryChipData> _chips;
   final double? progressValue;
   final Color? progressColor;
 
   const InventoryTile._({
     super.key,
     required this.title,
-    required this.chips,
+    required List<_InventoryChipData> chips,
     this.progressValue,
     this.progressColor,
-  });
+  }) : _chips = chips;
 
   factory InventoryTile.coffee({
     Key? key,
@@ -42,19 +43,19 @@ class InventoryTile extends StatelessWidget {
       chips: [
         _InventoryChipData(
           icon: Icons.scale,
-          label: 'مخزون',
-          value: '${row.stockG.toStringAsFixed(0)} جم',
+          label: AppStrings.stockLabel,
+          value: AppStrings.gramsAmount(row.stockG),
         ),
         _InventoryChipData(
           icon: Icons.sell,
-          label: 'سعر/كجم',
+          label: AppStrings.pricePerKgLabel,
           value: row.sellPerKg.toStringAsFixed(2),
         ),
         if (row.minLevelG > 0)
           _InventoryChipData(
             icon: Icons.warning_amber_rounded,
-            label: 'حد أدنى',
-            value: '${row.minLevelG.toStringAsFixed(0)} جم',
+            label: AppStrings.minLevelLabel,
+            value: AppStrings.gramsAmount(row.minLevelG),
           ),
       ],
       progressValue: percent,
@@ -72,24 +73,24 @@ class InventoryTile extends StatelessWidget {
       chips: [
         _InventoryChipData(
           icon: Icons.scale,
-          label: 'مخزون',
+          label: AppStrings.stockLabel,
           value: _formatStock(row.stockUnits, row.unit),
         ),
         _InventoryChipData(
           icon: Icons.sell,
-          label: 'سعر/وحدة',
+          label: AppStrings.pricePerUnitLabel,
           value: _formatNumber(row.priceSell),
         ),
         _InventoryChipData(
           icon: Icons.money_off,
-          label: 'التكلفة/وحدة',
+          label: AppStrings.costPerUnitLabel,
           value: _formatNumber(row.costUnit),
         ),
         if (!row.active)
           _InventoryChipData(
             icon: Icons.pause_circle_filled,
-            label: 'الحالة',
-            value: 'غير مفعّل',
+            label: AppStrings.statusLabel,
+            value: AppStrings.inactiveLabel,
           ),
       ],
     );
@@ -114,7 +115,7 @@ class InventoryTile extends StatelessWidget {
             Wrap(
               spacing: 12,
               runSpacing: 4,
-              children: chips
+              children: _chips
                   .map((c) => _chip(c.icon, c.label, c.value))
                   .toList(),
             ),

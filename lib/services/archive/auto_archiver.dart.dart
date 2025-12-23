@@ -1,5 +1,6 @@
 // lib/services/auto_archiver.dart
 import 'dart:async';
+import 'dart:developer' as developer;
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// يشغّل الأرشفة تلقائيًا لو آخر تشغيل كان من ≥ everyNDays أيام.
@@ -8,7 +9,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 Future<void> runAutoArchiveIfNeeded({
   String? adminUid, // ممكن تسيبه null -> يكتب 'system'
   int everyNDays = 5, // كل كام يوم يشتغل تلقائي
-  int daysThreshold = 32, // الأقدم من كام يوم يتأرشف
+  int daysThreshold = 40, // الأقدم من كام يوم يتأرشف
   int batchSize = 200, // حجم الدُفعة
   Duration pause = const Duration(milliseconds: 120),
 }) async {
@@ -78,7 +79,7 @@ Future<int> _archiveOldSales({
       snap = await q.get();
     } on FirebaseException catch (e) {
       // لو ظهر failed-precondition (index) مع orderBy واحد نادر جدًا؛ اطبع وأوقف
-      print('Auto-archiver query failed: ${e.code} ${e.message}');
+      developer.log('Auto-archiver query failed: ${e.code} ${e.message}');
       break;
     }
 
@@ -125,6 +126,6 @@ Future<int> _archiveOldSales({
     await Future.delayed(pause);
   }
 
-  print('Auto-archiver moved: $moved docs.');
+  developer.log('Auto-archiver moved: $moved docs.');
   return moved;
 }

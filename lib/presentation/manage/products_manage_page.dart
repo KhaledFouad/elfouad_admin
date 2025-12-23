@@ -1,5 +1,6 @@
 import 'package:awesome_drawer_bar/awesome_drawer_bar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart' show FirebaseFirestore;
+import 'package:elfouad_admin/core/app_strings.dart';
 import 'package:elfouad_admin/presentation/inventory/providers.dart';
 import 'package:elfouad_admin/presentation/manage/product_edit_sheet.dart'
     show ProductEditSheet;
@@ -33,7 +34,7 @@ class ManagePage extends ConsumerWidget {
 
     Widget drinks0() => drinks.when(
       loading: _loading,
-      error: _err('المشروبات'),
+      error: _err(AppStrings.drinksLabelDefinite),
       data: (rows) => Column(
         children: rows
             .map(
@@ -51,12 +52,12 @@ class ManagePage extends ConsumerWidget {
                     children: [
                       _pill(
                         Icons.attach_money,
-                        'سعر',
+                        AppStrings.priceLabel,
                         d.sellPrice.toStringAsFixed(2),
                       ),
                       _pill(
                         Icons.handyman,
-                        'تكلفة',
+                        AppStrings.costLabel,
                         d.costPrice.toStringAsFixed(2),
                       ),
                     ],
@@ -66,7 +67,7 @@ class ManagePage extends ConsumerWidget {
                     children: [
                       IconButton(
                         icon: const Icon(Icons.edit),
-                        tooltip: 'تعديل',
+                        tooltip: AppStrings.actionEdit,
                         onPressed: () => _openProductEditor(
                           context,
                           collection: 'drinks',
@@ -75,7 +76,7 @@ class ManagePage extends ConsumerWidget {
                       ),
                       IconButton(
                         icon: const Icon(Icons.delete_outline),
-                        tooltip: 'حذف',
+                        tooltip: AppStrings.actionDelete,
                         onPressed: () => _confirmDeleteDrink(context, d.id),
                       ),
                     ],
@@ -93,7 +94,7 @@ class ManagePage extends ConsumerWidget {
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           itemCount: rows.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 8),
+          separatorBuilder: (_, _) => const SizedBox(height: 8),
           itemBuilder: (_, index) {
             final r = rows[index];
             return Card(
@@ -112,12 +113,12 @@ class ManagePage extends ConsumerWidget {
                   children: [
                     _pill(
                       Icons.scale,
-                      'مخزون',
-                      '${r.stockG.toStringAsFixed(0)} جم',
+                      AppStrings.stockLabel,
+                      AppStrings.gramsAmount(r.stockG),
                     ),
                     _pill(
                       Icons.sell,
-                      'سعر/كجم',
+                      AppStrings.pricePerKgLabel,
                       r.sellPerKg.toStringAsFixed(2),
                     ),
                   ],
@@ -127,7 +128,7 @@ class ManagePage extends ConsumerWidget {
                   children: [
                     IconButton(
                       icon: const Icon(Icons.edit),
-                      tooltip: 'تعديل',
+                      tooltip: AppStrings.actionEdit,
                       onPressed: () => _openProductEditor(
                         context,
                         collection: collection,
@@ -136,7 +137,7 @@ class ManagePage extends ConsumerWidget {
                     ),
                     IconButton(
                       icon: const Icon(Icons.delete_outline),
-                      tooltip: 'حذف',
+                      tooltip: AppStrings.actionDelete,
                       onPressed: () => _confirmDeleteInventory(context, r),
                     ),
                   ],
@@ -148,23 +149,23 @@ class ManagePage extends ConsumerWidget {
 
     Widget singles0() => singles.when(
       loading: _loading,
-      error: _err('الأصناف المنفردة'),
+      error: _err(AppStrings.inventorySingles),
       data: (rows) => invList('singles', rows),
     );
 
     Widget blends0() => blends.when(
       loading: _loading,
-      error: _err('التوليفات'),
+      error: _err(AppStrings.inventoryBlends),
       data: (rows) => invList('blends', rows),
     );
     Widget extras0() => extras.when(
       loading: _loading,
-      error: _err('الإضافات'),
+      error: _err(AppStrings.extrasLabel),
       data: (rows) => ListView.separated(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
         itemCount: rows.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 8),
+        separatorBuilder: (_, _) => const SizedBox(height: 8),
         itemBuilder: (_, index) {
           final e = rows[index];
           return Card(
@@ -182,20 +183,24 @@ class ManagePage extends ConsumerWidget {
                 runSpacing: 6,
                 children: [
                   if (e.category.isNotEmpty)
-                    _pill(Icons.category, 'التصنيف', e.category),
+                    _pill(Icons.category, AppStrings.categoryLabel, e.category),
                   _pill(
                     Icons.inventory_2,
-                    'المخزون',
+                    AppStrings.stockLabel,
                     '${_fmtNum(e.stockUnits)}${e.unit.isEmpty ? '' : ' ${e.unit}'}',
                   ),
                   _pill(
                     Icons.attach_money,
-                    'سعر البيع',
+                    AppStrings.sellPriceLabel,
                     _fmtNum(e.priceSell),
                   ),
-                  _pill(Icons.money_off, 'التكلفة', _fmtNum(e.costUnit)),
+                  _pill(Icons.money_off, AppStrings.costLabelDefinite, _fmtNum(e.costUnit)),
                   if (!e.active)
-                    _pill(Icons.pause_circle_filled, 'الحالة', 'غير مفعّل'),
+                    _pill(
+                      Icons.pause_circle_filled,
+                      AppStrings.statusLabel,
+                      AppStrings.inactiveLabel,
+                    ),
                 ],
               ),
               trailing: Row(
@@ -203,12 +208,12 @@ class ManagePage extends ConsumerWidget {
                 children: [
                   IconButton(
                     icon: const Icon(Icons.edit),
-                    tooltip: 'تعديل',
+                    tooltip: AppStrings.actionEdit,
                     onPressed: () => _openExtraEditor(context, e.id),
                   ),
                   IconButton(
                     icon: const Icon(Icons.delete_outline),
-                    tooltip: 'حذف',
+                    tooltip: AppStrings.actionDelete,
                     onPressed: () => _confirmDeleteExtra(context, e),
                   ),
                 ],
@@ -232,16 +237,16 @@ class ManagePage extends ConsumerWidget {
         case ManageTab.all:
           return Column(
             children: [
-              _Section('سناكس'),
+              _Section(AppStrings.snacksLabel),
               extras0(),
               const SizedBox(height: 8),
-              _Section('التوليفات'),
+              _Section(AppStrings.inventoryBlends),
               blends0(),
               const SizedBox(height: 8),
-              _Section('الأصناف المنفردة'),
+              _Section(AppStrings.inventorySingles),
               singles0(),
               const SizedBox(height: 8),
-              _Section('المشروبات'),
+              _Section(AppStrings.drinksLabelDefinite),
               drinks0(),
             ],
           );
@@ -264,7 +269,7 @@ class ManagePage extends ConsumerWidget {
                 onPressed: () => AwesomeDrawerBar.of(context)?.toggle(),
               ),
               title: const Text(
-                "التعديلات",
+                AppStrings.tabEdits,
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
                   fontSize: 35,
@@ -292,11 +297,16 @@ class ManagePage extends ConsumerWidget {
             Wrap(
               spacing: 8,
               children: [
-                _mChip(ref, 'الكل', ManageTab.all, tab),
-                _mChip(ref, 'المشروبات', ManageTab.drinks, tab),
-                _mChip(ref, 'الأصناف المنفردة', ManageTab.singles, tab),
-                _mChip(ref, 'التوليفات', ManageTab.blends, tab),
-                _mChip(ref, 'سناكس', ManageTab.extras, tab),
+                _mChip(ref, AppStrings.inventoryAll, ManageTab.all, tab),
+                _mChip(ref, AppStrings.drinksLabelDefinite, ManageTab.drinks, tab),
+                _mChip(
+                  ref,
+                  AppStrings.inventorySingles,
+                  ManageTab.singles,
+                  tab,
+                ),
+                _mChip(ref, AppStrings.inventoryBlends, ManageTab.blends, tab),
+                _mChip(ref, AppStrings.snacksLabel, ManageTab.extras, tab),
               ],
             ),
             const SizedBox(height: 8),
@@ -319,8 +329,8 @@ class ManagePage extends ConsumerWidget {
                       AddItemSheet(initialType: _newTypeForTab(tab)),
                 ),
           icon: const Icon(Icons.add),
-          label: const Text('إضافة'),
-          tooltip: 'إضافة عنصر جديد',
+          label: const Text(AppStrings.actionAdd),
+          tooltip: AppStrings.addNewItemTooltip,
 
           backgroundColor: kDarkBrown,
           foregroundColor: Colors.white,
@@ -337,7 +347,7 @@ class ManagePage extends ConsumerWidget {
   Widget Function(Object, StackTrace) _err(String where) =>
       (e, _) => Padding(
         padding: const EdgeInsets.all(12),
-        child: Text('تعذر تحميل $where: $e'),
+        child: Text(AppStrings.loadFailed(where, e)),
       );
 
   Widget _mChip(WidgetRef ref, String label, ManageTab me, ManageTab cur) {
@@ -390,16 +400,16 @@ class ManagePage extends ConsumerWidget {
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('حذف المشروب'),
-        content: const Text('هل تريد حذف هذا المشروب؟'),
+        title: const Text(AppStrings.deleteDrinkTitle),
+        content: const Text(AppStrings.deleteDrinkConfirm),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('إلغاء'),
+            child: const Text(AppStrings.actionCancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('حذف'),
+            child: const Text(AppStrings.actionDelete),
           ),
         ],
       ),
@@ -409,7 +419,7 @@ class ManagePage extends ConsumerWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('تم الحذف')));
+        ).showSnackBar(const SnackBar(content: Text(AppStrings.deleteSuccess)));
       }
     }
   }
@@ -418,16 +428,16 @@ class ManagePage extends ConsumerWidget {
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('حذف الإضافة'),
-        content: Text('هل تريد حذف "${e.name}"؟'),
+        title: const Text(AppStrings.deleteExtraTitle),
+        content: Text(AppStrings.deleteExtraConfirm(e.name)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('إلغاء'),
+            child: const Text(AppStrings.actionCancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('حذف'),
+            child: const Text(AppStrings.actionDelete),
           ),
         ],
       ),
@@ -437,7 +447,7 @@ class ManagePage extends ConsumerWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('تم الحذف')));
+        ).showSnackBar(const SnackBar(content: Text(AppStrings.deleteSuccess)));
       }
     }
   }
@@ -450,18 +460,20 @@ Future<void> _confirmDeleteInventory(
   final ok = await showDialog<bool>(
     context: context,
     builder: (_) => AlertDialog(
-      title: const Text('حذف العنصر'),
+      title: const Text(AppStrings.deleteItemTitle),
       content: Text(
-        'هل تريد حذف "${r.name}${r.variant.isEmpty ? '' : ' — ${r.variant}'}"؟',
+        AppStrings.deleteItemConfirm(
+          '${r.name}${r.variant.isEmpty ? '' : ' — ${r.variant}'}',
+        ),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context, false),
-          child: const Text('إلغاء'),
+          child: const Text(AppStrings.actionCancel),
         ),
         FilledButton(
           onPressed: () => Navigator.pop(context, true),
-          child: const Text('حذف'),
+          child: const Text(AppStrings.actionDelete),
         ),
       ],
     ),
@@ -471,7 +483,7 @@ Future<void> _confirmDeleteInventory(
     if (context.mounted) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('تم الحذف')));
+      ).showSnackBar(const SnackBar(content: Text(AppStrings.deleteSuccess)));
     }
   }
 }

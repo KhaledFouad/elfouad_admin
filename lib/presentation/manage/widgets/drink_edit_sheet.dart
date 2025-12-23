@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:elfouad_admin/core/app_strings.dart';
 import '../state/drinks_provider.dart';
 
 class DrinkEditSheet extends StatefulWidget {
@@ -51,12 +52,12 @@ class _DrinkEditSheetState extends State<DrinkEditSheet> {
       Navigator.pop(context);
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('تم الحفظ')));
+      ).showSnackBar(const SnackBar(content: Text(AppStrings.saveSuccess)));
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('تعذر الحفظ: $e')));
+        ).showSnackBar(SnackBar(content: Text(AppStrings.saveFailed(e))));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -86,17 +87,17 @@ class _DrinkEditSheetState extends State<DrinkEditSheet> {
               ),
             ),
             Text(
-              'تعديل مشروب',
+              AppStrings.editDrinkTitle,
               style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
             ),
             const SizedBox(height: 12),
-            _tf(_name, 'الاسم'),
+            _tf(_name, AppStrings.nameLabel),
             const SizedBox(height: 8),
-            _tf(_unit, 'الوحدة (cup/bottle)'),
+            _tf(_unit, AppStrings.unitCupBottleLabel),
             const SizedBox(height: 8),
-            _tf(_sell, 'السعر'),
+            _tf(_sell, AppStrings.priceLabelDefinite),
             const SizedBox(height: 8),
-            _tf(_cost, 'التكلفة'),
+            _tf(_cost, AppStrings.costLabelDefinite),
             // const SizedBox(height: 8),
             // _tf(_img, 'الصورة (اختياري)'),
             const SizedBox(height: 12),
@@ -105,7 +106,7 @@ class _DrinkEditSheetState extends State<DrinkEditSheet> {
                 Expanded(
                   child: OutlinedButton(
                     onPressed: _busy ? null : () => Navigator.pop(context),
-                    child: const Text('إلغاء'),
+                    child: const Text(AppStrings.actionCancel),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -119,7 +120,7 @@ class _DrinkEditSheetState extends State<DrinkEditSheet> {
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.save),
-                    label: const Text('حفظ'),
+                    label: const Text(AppStrings.actionSave),
                   ),
                 ),
               ],

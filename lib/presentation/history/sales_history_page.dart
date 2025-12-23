@@ -2,6 +2,7 @@
 import 'package:awesome_drawer_bar/awesome_drawer_bar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:elfouad_admin/presentation/history/utils/history_compute.dart';
+import 'package:elfouad_admin/core/app_strings.dart';
 import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -45,7 +46,7 @@ class SalesHistoryPage extends ConsumerWidget {
                 onPressed: () => AwesomeDrawerBar.of(context)?.toggle(),
               ),
               title: const Text(
-                'سجلّ المبيعات',
+                AppStrings.salesHistoryTitle,
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
                   fontSize: 35,
@@ -82,7 +83,7 @@ class SalesHistoryPage extends ConsumerWidget {
                   error: (_, stackTrace) => const SizedBox.shrink(),
                 ),
                 IconButton(
-                  tooltip: 'تصفية بالتاريخ',
+                  tooltip: AppStrings.actionFilterByDate,
                   onPressed: () async {
                     final now = DateTime.now();
                     final picked = await showDateRangePicker(
@@ -136,7 +137,7 @@ class SalesHistoryPage extends ConsumerWidget {
                                   leading: const Icon(
                                     Icons.check_circle_outline,
                                   ),
-                                  title: const Text('تطبيق الفلتر'),
+                                  title: const Text(AppStrings.actionApplyFilter),
                                   onTap: () {
                                     // يقفل الشيت تلقائيًا
                                     Navigator.pop(ctx);
@@ -150,7 +151,7 @@ class SalesHistoryPage extends ConsumerWidget {
                                 ),
                                 ListTile(
                                   leading: const Icon(Icons.file_download),
-                                  title: const Text('تصدير Excel لهذا النطاق'),
+                                  title: const Text(AppStrings.actionExportExcel),
                                   onTap: () {
                                     Navigator.pop(ctx); // يقفل الشيت تلقائيًا
                                     exportSalesExcelFromFilter(
@@ -183,19 +184,26 @@ class SalesHistoryPage extends ConsumerWidget {
         ),
         body: historyAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, st) => Center(child: Text('خطأ في تحميل السجل: $e')),
-          data: (snap) {
-            // sales_history_page.dart (داخل data: (snap) { ... })
-            final docs = snap.docs
-                .cast<QueryDocumentSnapshot<Map<String, dynamic>>>();
+          error: (e, st) =>
+              Center(child: Text(AppStrings.historyLoadError(e))),
+          data: (docs) {
+            // sales_history_page.dart (داخل data: (docs) { ... })
+            final docsList =
+                docs.cast<QueryDocumentSnapshot<Map<String, dynamic>>>();
 
             // حضّر بيانات خفيفة للإيزوليت
-            final rows = docs
+            final rows = docsList
                 .map((d) {
                   final m = d.data();
+                  final totals = saleTotalsWithFallback(m);
                   DateTime safeDate(dynamic v) {
                     if (v is Timestamp) return v.toDate();
                     if (v is DateTime) return v;
+                    if (v is num) {
+                      final raw = v.toInt();
+                      final ms = raw < 10000000000 ? raw * 1000 : raw;
+                      return DateTime.fromMillisecondsSinceEpoch(ms);
+                    }
                     return DateTime.tryParse('${v ?? ''}') ??
                         DateTime.fromMillisecondsSinceEpoch(0);
                   }
@@ -217,9 +225,9 @@ class SalesHistoryPage extends ConsumerWidget {
                     'updated_at_iso': m['updated_at'] == null
                         ? null
                         : safeDate(m['updated_at']).toIso8601String(),
-                    'total_price': m['total_price'],
-                    'total_cost': m['total_cost'],
-                    'profit_total': m['profit_total'],
+                    'total_price': totals.price,
+                    'total_cost': totals.cost,
+                    'profit_total': totals.profit,
                     'quantity': m['quantity'],
                     'grams': m['grams'],
                     'total_grams': m['total_grams'],
@@ -228,7 +236,7 @@ class SalesHistoryPage extends ConsumerWidget {
                 .toList(growable: false);
 
             // Map سريع من id → doc علشان نجيب الدوكيومنت وقت البناء
-            final byId = {for (final d in docs) d.id: d};
+            final byId = {for (final d in docsList) d.id: d};
 
             // شغّل التجميع في Isolate
             return FutureBuilder<List<DayBucket>>(
@@ -286,19 +294,19 @@ class SalesHistoryPage extends ConsumerWidget {
                   final ok = await showDialog<bool>(
                     context: context,
                     builder: (_) => AlertDialog(
-                      title: const Text('حذف عملية البيع؟'),
+                      title: const Text(AppStrings.deleteSaleTitle),
                       content: const Text(
-                        'سيتم حذف هذه العملية وإرجاع أي تأثير على المخزون. هل تريد المتابعة؟',
+                        AppStrings.deleteSaleConfirm,
                         textAlign: TextAlign.center,
                       ),
                       actions: [
                         TextButton(
                           onPressed: () => Navigator.pop(context, false),
-                          child: const Text('إلغاء'),
+                          child: const Text(AppStrings.actionCancel),
                         ),
                         FilledButton(
                           onPressed: () => Navigator.pop(context, true),
-                          child: const Text('حذف'),
+                          child: const Text(AppStrings.actionDelete),
                         ),
                       ],
                     ),
@@ -309,14 +317,14 @@ class SalesHistoryPage extends ConsumerWidget {
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text('تم حذف العملية وإرجاع المخزون.'),
+                            content: Text(AppStrings.saleDeletedRollback),
                           ),
                         );
                       }
                     } catch (e) {
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('تعذر حذف العملية: $e')),
+                          SnackBar(content: Text(AppStrings.saleDeleteFailed(e))),
                         );
                       }
                     }
@@ -404,7 +412,7 @@ class _HistoryEmptyPlaceholder extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 48),
       child: Center(
         child: Text(
-          'لا توجد عمليات في هذه الفترة.',
+          AppStrings.noSalesInRange,
           style: const TextStyle(fontWeight: FontWeight.w600),
           textAlign: TextAlign.center,
         ),
@@ -437,7 +445,7 @@ class _DeferredOutstandingPanel extends StatelessWidget {
           ),
           child: Padding(
             padding: const EdgeInsets.all(12),
-            child: Text('تعذر تحميل الديون المؤجلة: $e'),
+            child: Text(AppStrings.deferredLoadError(e)),
           ),
         ),
       ),
@@ -455,6 +463,11 @@ class _DeferredOutstandingPanel extends StatelessWidget {
           final ts = data['created_at'];
           if (ts is Timestamp) return ts.toDate();
           if (ts is DateTime) return ts;
+          if (ts is num) {
+            final raw = ts.toInt();
+            final ms = raw < 10000000000 ? raw * 1000 : raw;
+            return DateTime.fromMillisecondsSinceEpoch(ms);
+          }
           return DateTime.tryParse('${ts ?? ''}') ??
               DateTime.fromMillisecondsSinceEpoch(0);
         }
@@ -483,7 +496,7 @@ class _DeferredOutstandingPanel extends StatelessWidget {
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        'Deferred pending (${docs.length})',
+                        AppStrings.deferredPending(docs.length),
                         style: const TextStyle(
                           fontWeight: FontWeight.w700,
                           fontSize: 15,
@@ -491,14 +504,14 @@ class _DeferredOutstandingPanel extends StatelessWidget {
                       ),
                       const Spacer(),
                       const Text(
-                        'Oldest first',
+                        AppStrings.oldestFirst,
                         style: TextStyle(fontSize: 12, color: Colors.black54),
                       ),
                     ],
                   ),
                   const SizedBox(height: 4),
                   const Text(
-                    'Original date & time shown. Use edit to add notes.',
+                    AppStrings.deferredNoteHint,
                     style: TextStyle(fontSize: 12, color: Colors.black54),
                   ),
                   const SizedBox(height: 12),

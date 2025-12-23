@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:elfouad_admin/core/app_strings.dart';
 
 /// تعديل كمية عملية بيع extras مع ضبط المخزون والحسابات
 Future<void> updateExtraSaleQuantity({
@@ -11,13 +12,13 @@ Future<void> updateExtraSaleQuantity({
   await db.runTransaction((tx) async {
     // ===== READS =====
     final saleSnap = await tx.get(saleRef);
-    if (!saleSnap.exists) throw 'عملية البيع غير موجودة.';
+    if (!saleSnap.exists) throw AppStrings.extraSaleNotFound;
     final sale = saleSnap.data() as Map<String, dynamic>;
     final type = (sale['type'] ?? '').toString();
-    if (type != 'extra') throw 'العملية ليست من نوع المعمول/التمر.';
+    if (type != 'extra') throw AppStrings.extraSaleWrongType;
 
     final extraId = (sale['extra_id'] ?? '').toString();
-    if (extraId.isEmpty) throw 'extra_id مفقود في العملية.';
+    if (extraId.isEmpty) throw AppStrings.extraSaleMissingId;
 
     final oldQty = (sale['quantity'] is num)
         ? (sale['quantity'] as num).toInt()
@@ -42,14 +43,14 @@ Future<void> updateExtraSaleQuantity({
 
     final extraRef = db.collection('extras').doc(extraId);
     final extraSnap = await tx.get(extraRef);
-    if (!extraSnap.exists) throw 'الصنف غير موجود في extras.';
+    if (!extraSnap.exists) throw AppStrings.extraNotFound;
     final extra = extraSnap.data() as Map<String, dynamic>;
     final curStock = (extra['stock_units'] is num)
         ? (extra['stock_units'] as num).toInt()
         : int.tryParse('${extra['stock_units'] ?? 0}') ?? 0;
 
     if (delta > 0 && curStock < delta) {
-      throw 'المخزون غير كافٍ (المتاح $curStock قطعة)';
+      throw AppStrings.insufficientStockAvailable(curStock);
     }
 
     // ===== WRITES =====

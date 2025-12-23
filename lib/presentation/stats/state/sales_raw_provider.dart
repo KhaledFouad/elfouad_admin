@@ -2,7 +2,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// U?U,O�O� U.O"USO1OO� OU,O'U�O� O"OU,U�OU.U, (O"O_OUSOc 4O� U.O-U,USU<O �+' 4O� U,U,USU^U. OU,O�OU,US) O�U. USO-U^U, O�U,U% UTC U,U,OO3O�O1U,OU..
 final salesRawForMonthProvider =
     FutureProvider.family<List<Map<String, dynamic>>, DateTime>((
       ref,
@@ -12,7 +11,6 @@ final salesRawForMonthProvider =
       final m = month.month;
       final dim = DateUtils.getDaysInMonth(y, m);
 
-      // 4 OU,U?O�O� U.O-U,USU<O O�U. O�O-U^USU, U,U? UTC
       final startUtc = DateTime(y, m, 1, 4).toUtc();
       final endUtc = DateTime(
         y,
@@ -20,6 +18,10 @@ final salesRawForMonthProvider =
         dim,
         4,
       ).add(const Duration(days: 1)).toUtc();
+      final startIso = startUtc.toIso8601String();
+      final endIso = endUtc.toIso8601String();
+      final startMs = startUtc.millisecondsSinceEpoch;
+      final endMs = endUtc.millisecondsSinceEpoch;
 
       final snap = await FirebaseFirestore.instance
           .collection('sales')
@@ -27,6 +29,28 @@ final salesRawForMonthProvider =
           .where('created_at', isLessThan: endUtc)
           .orderBy('created_at', descending: false)
           .get();
+      QuerySnapshot<Map<String, dynamic>>? snapStr;
+      try {
+        snapStr = await FirebaseFirestore.instance
+            .collection('sales')
+            .where('created_at', isGreaterThanOrEqualTo: startIso)
+            .where('created_at', isLessThan: endIso)
+            .orderBy('created_at', descending: false)
+            .get();
+      } catch (_) {
+        snapStr = null;
+      }
+      QuerySnapshot<Map<String, dynamic>>? snapNum;
+      try {
+        snapNum = await FirebaseFirestore.instance
+            .collection('sales')
+            .where('created_at', isGreaterThanOrEqualTo: startMs)
+            .where('created_at', isLessThan: endMs)
+            .orderBy('created_at', descending: false)
+            .get();
+      } catch (_) {
+        snapNum = null;
+      }
 
       QuerySnapshot<Map<String, dynamic>>? snapOrig;
       try {
@@ -44,9 +68,23 @@ final salesRawForMonthProvider =
 
       for (final d in snap.docs) {
         final m = d.data();
-        // U,U^ O-OO"O" O�O-O�U?O, O"OU,U?id:
         m['id'] = d.id;
         combined[d.id] = m;
+      }
+
+      if (snapStr != null) {
+        for (final d in snapStr.docs) {
+          final m = d.data();
+          m['id'] = d.id;
+          combined[d.id] = m;
+        }
+      }
+      if (snapNum != null) {
+        for (final d in snapNum.docs) {
+          final m = d.data();
+          m['id'] = d.id;
+          combined[d.id] = m;
+        }
       }
 
       if (snapOrig != null) {

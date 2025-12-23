@@ -1,4 +1,5 @@
 import 'package:awesome_drawer_bar/awesome_drawer_bar.dart';
+import 'package:elfouad_admin/core/app_strings.dart';
 import 'package:elfouad_admin/presentation/stats/state/stats_period.dart';
 import 'package:elfouad_admin/presentation/stats/widgets/drinks_by_type_table.dart';
 import 'package:flutter/material.dart';
@@ -62,27 +63,44 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                   child: CircularProgressIndicator(),
                 ),
               ),
-              error: (e, _) => Text('تعذر تحميل الملخص: $e'),
+              error: (e, _) =>
+                  Text(AppStrings.loadFailed(AppStrings.summaryLabel, e)),
               data: (bundle) {
                 final v = bundle.kpis;
                 return KpiWrap(
                   items: [
                     Kpi(
-                      'إجمالي المبيعات',
+                      AppStrings.totalSalesLabel,
                       v.sales.toStringAsFixed(2),
                       Icons.attach_money,
                     ),
-                    Kpi('التكلفة', v.cost.toStringAsFixed(2), Icons.factory),
-                    Kpi('الربح', v.profit.toStringAsFixed(2), Icons.trending_up),
-                    Kpi('الأكواب', v.cups.toStringAsFixed(0), Icons.local_cafe),
                     Kpi(
-                      'سناكس',
+                      AppStrings.costLabelDefinite,
+                      v.cost.toStringAsFixed(2),
+                      Icons.factory,
+                    ),
+                    Kpi(
+                      AppStrings.profitLabelDefinite,
+                      v.profit.toStringAsFixed(2),
+                      Icons.trending_up,
+                    ),
+                    Kpi(
+                      AppStrings.cupsLabel,
+                      v.cups.toStringAsFixed(0),
+                      Icons.local_cafe,
+                    ),
+                    Kpi(
+                      AppStrings.snacksLabel,
                       v.units.toStringAsFixed(0),
                       Icons.cookie_rounded,
                     ),
-                    Kpi('جرامات البن', v.grams.toStringAsFixed(0), Icons.scale),
                     Kpi(
-                      'المصروفات',
+                      AppStrings.coffeeGramsLabel,
+                      v.grams.toStringAsFixed(0),
+                      Icons.scale,
+                    ),
+                    Kpi(
+                      AppStrings.expensesTitle,
                       v.expenses.toStringAsFixed(2),
                       Icons.account_balance_wallet,
                     ),
@@ -106,7 +124,7 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                     const Padding(
                       padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                       child: Text(
-                        'مشروبات و سناكس',
+                        AppStrings.drinksAndSnacksTitle,
                         style: TextStyle(fontWeight: FontWeight.w800),
                       ),
                     ),
@@ -118,7 +136,9 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                       ),
                       error: (e, _) => Padding(
                         padding: const EdgeInsets.all(8.0),
-                        child: Text('تعذر تحميل بيانات المشروبات: $e'),
+                        child: Text(
+                          AppStrings.loadFailed(AppStrings.drinksDataLabel, e),
+                        ),
                       ),
                       data: (bundle) {
                         final drinkRows = bundle.drinks
@@ -151,7 +171,7 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                         if (combined.isEmpty) {
                           return const Padding(
                             padding: EdgeInsets.all(8.0),
-                            child: Text('لا توجد بيانات للمدى المختار'),
+                            child: Text(AppStrings.noDataForRange),
                           );
                         }
                         return DrinksByNameTable(rows: combined);
@@ -177,7 +197,7 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                     const Padding(
                       padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                       child: Text(
-                        'أبرز المؤشرات اليومية',
+                        AppStrings.dailyHighlightsTitle,
                         style: TextStyle(fontWeight: FontWeight.w800),
                       ),
                     ),
@@ -189,7 +209,12 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                       ),
                       error: (e, _) => Padding(
                         padding: const EdgeInsets.all(8.0),
-                        child: Text('تعذر تحميل المؤشرات اليومية: $e'),
+                        child: Text(
+                          AppStrings.loadFailed(
+                            AppStrings.dailyHighlightsLabel,
+                            e,
+                          ),
+                        ),
                       ),
                       data: (bundle) =>
                           StatsHighlightsCard(highlights: bundle.highlights),
@@ -214,7 +239,7 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                     const Padding(
                       padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                       child: Text(
-                        'البن حسب الاسم',
+                        AppStrings.beansByNameTitle,
                         style: TextStyle(fontWeight: FontWeight.w800),
                       ),
                     ),
@@ -226,7 +251,9 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                       ),
                       error: (e, _) => Padding(
                         padding: const EdgeInsets.all(8.0),
-                        child: Text('تعذر تحميل بيانات البن: $e'),
+                        child: Text(
+                          AppStrings.loadFailed(AppStrings.beansDataLabel, e),
+                        ),
                       ),
                       data: (bundle) {
                         final rows = bundle.beans
@@ -244,7 +271,7 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                         if (rows.isEmpty) {
                           return const Padding(
                             padding: EdgeInsets.all(8.0),
-                            child: Text('لا توجد بيانات للمدى المختار'),
+                            child: Text(AppStrings.noDataForRange),
                           );
                         }
                         return BeansByNameTable(rows: rows);
@@ -270,7 +297,7 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                     Row(
                       children: [
                         const Text(
-                          'الاتجاهات الزمنية (يومي)',
+                          AppStrings.dailyTrendsTitle,
                           style: TextStyle(fontWeight: FontWeight.w800),
                         ),
                         const Spacer(),
@@ -278,11 +305,11 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                           segments: const [
                             ButtonSegment<bool>(
                               value: false,
-                              label: Text('مبيعات'),
+                              label: Text(AppStrings.salesLabel),
                             ),
                             ButtonSegment<bool>(
                               value: true,
-                              label: Text('ربح'),
+                              label: Text(AppStrings.profitLabel),
                             ),
                           ],
                           selected: <bool>{_profitMode},
@@ -303,7 +330,8 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                         height: 220,
                         child: Center(child: CircularProgressIndicator()),
                       ),
-                      error: (e, _) => Text('تعذر تحميل الترند: $e'),
+                      error: (e, _) =>
+                          Text(AppStrings.loadFailed(AppStrings.trendLabel, e)),
                       data: (bundle) {
                         final t = bundle.trends;
                         return TripleTrendChart(
@@ -348,7 +376,7 @@ class _StatsPageState extends ConsumerState<StatsPage> {
             mainAxisSize: MainAxisSize.min,
             children: [
               IconButton(
-                tooltip: 'الشهر السابق',
+                tooltip: AppStrings.previousMonthTooltip,
                 icon: const Icon(
                   Icons.chevron_left_rounded,
                   color: Colors.white,
@@ -376,7 +404,7 @@ class _StatsPageState extends ConsumerState<StatsPage> {
               ),
               SizedBox(width: MediaQuery.of(context).size.width * 0.05),
               IconButton(
-                tooltip: 'الشهر التالي',
+                tooltip: AppStrings.nextMonthTooltip,
                 icon: const Icon(
                   Icons.chevron_right_rounded,
                   color: Colors.white,

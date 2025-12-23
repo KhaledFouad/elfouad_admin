@@ -1,3 +1,5 @@
+import 'package:elfouad_admin/core/app_strings.dart';
+
 enum GroupMetric { cups, grams }
 
 class GroupRow {
@@ -36,10 +38,11 @@ class GroupRow {
         : (sales / amount);
   }
 
-  String get avgLabel =>
-      metric == GroupMetric.grams ? 'متوسط/كجم' : 'متوسط/كوب';
+  String get avgLabel => metric == GroupMetric.grams
+      ? AppStrings.averagePerKgLabel
+      : AppStrings.averagePerCupLabel;
 
   String get amountText => metric == GroupMetric.grams
-      ? '${amount.toStringAsFixed(0)} جم'
+      ? AppStrings.gramsAmount(amount)
       : amount.toStringAsFixed(0);
 }

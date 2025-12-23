@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:elfouad_admin/core/app_strings.dart';
 import 'package:elfouad_admin/presentation/inventory/providers.dart';
 
 class EditInventorySheet extends StatefulWidget {
@@ -72,31 +73,31 @@ class _EditInventorySheetState extends State<EditInventorySheet> {
             ),
             const SizedBox(height: 10),
 
-            _tf(_name, 'الاسم', TextInputType.text),
+            _tf(_name, AppStrings.nameLabel, TextInputType.text),
             const SizedBox(height: 8),
-            _tf(_variant, 'درجة التحميص (اختياري)', TextInputType.text),
+            _tf(_variant, AppStrings.roastOptionalLabel, TextInputType.text),
             const SizedBox(height: 8),
             _tf(
               _stock,
-              'المخزون (جرامات)',
+              AppStrings.stockGramsLabel,
               const TextInputType.numberWithOptions(decimal: false),
             ),
             const SizedBox(height: 8),
             _tf(
               _sellPerKg,
-              'سعر/كجم',
+              AppStrings.pricePerKgLabel,
               const TextInputType.numberWithOptions(decimal: true),
             ),
             const SizedBox(height: 8),
             _tf(
               _costPerKg,
-              'التكلفة/كجم',
+              AppStrings.costPerKgLabel,
               const TextInputType.numberWithOptions(decimal: true),
             ), // ✅
             const SizedBox(height: 8),
             _tf(
               _minLevel,
-              'حد أدنى تحذيري (جم)',
+              AppStrings.minWarningLevelLabel,
               const TextInputType.numberWithOptions(decimal: false),
             ),
 
@@ -106,7 +107,7 @@ class _EditInventorySheetState extends State<EditInventorySheet> {
                 Expanded(
                   child: OutlinedButton(
                     onPressed: _busy ? null : () => Navigator.pop(context),
-                    child: const Text('إلغاء'),
+                    child: const Text(AppStrings.actionCancel),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -120,7 +121,7 @@ class _EditInventorySheetState extends State<EditInventorySheet> {
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.save),
-                    label: const Text('حفظ'),
+                    label: const Text(AppStrings.actionSave),
                   ),
                 ),
               ],
@@ -167,7 +168,7 @@ class _EditInventorySheetState extends State<EditInventorySheet> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('تعذر الحفظ: $e')));
+      ).showSnackBar(SnackBar(content: Text(AppStrings.saveFailed(e))));
     } finally {
       if (mounted) setState(() => _busy = false);
     }

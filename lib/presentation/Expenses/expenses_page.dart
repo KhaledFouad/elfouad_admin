@@ -1,4 +1,5 @@
 import 'package:awesome_drawer_bar/awesome_drawer_bar.dart';
+import 'package:elfouad_admin/core/app_strings.dart';
 import 'package:elfouad_admin/domain/entities/expense.dart' show Expense;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -31,7 +32,7 @@ class ExpensesPage extends ConsumerWidget {
                 onPressed: () => AwesomeDrawerBar.of(context)?.toggle(),
               ),
               title: const Text(
-                "المصروفات",
+                AppStrings.expensesTitle,
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
                   fontSize: 35,
@@ -43,7 +44,7 @@ class ExpensesPage extends ConsumerWidget {
               backgroundColor: Colors.transparent,
               actions: [
                 IconButton(
-                  tooltip: 'تصفية بالتاريخ',
+                  tooltip: AppStrings.actionFilterByDate,
                   onPressed: () async {
                     final picked = await showDateRangePicker(
                       context: context,
@@ -80,7 +81,7 @@ class ExpensesPage extends ConsumerWidget {
                 ),
                 if (range != todayOperationalRangeLocal())
                   IconButton(
-                    tooltip: 'اليوم التشغيلي',
+                    tooltip: AppStrings.actionOperationalDay,
                     onPressed: () {
                       ref.read(expensesRangeProvider.notifier).state =
                           todayOperationalRangeLocal();
@@ -104,7 +105,7 @@ class ExpensesPage extends ConsumerWidget {
         floatingActionButton: FloatingActionButton.extended(
           onPressed: () => _openEditSheet(context, ref),
           icon: const Icon(Icons.add),
-          label: const Text('مصروف جديد'),
+          label: const Text(AppStrings.expenseNew),
           backgroundColor: kDarkBrown,
           foregroundColor: Colors.white,
         ),
@@ -117,7 +118,7 @@ class ExpensesPage extends ConsumerWidget {
                 children: [
                   _pill(
                     context,
-                    'الإجمالي',
+                    AppStrings.totalLabel,
                     total.toStringAsFixed(2),
                     Icons.account_balance_wallet,
                   ),
@@ -132,11 +133,11 @@ class ExpensesPage extends ConsumerWidget {
               child: list.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (e, _) =>
-                    Center(child: Text('تعذر تحميل المصروفات: $e')),
+                    Center(child: Text(AppStrings.expensesLoadError(e))),
                 data: (items) {
                   if (items.isEmpty) {
                     return const Center(
-                      child: Text('لا يوجد مصروفات في هذا المدى.'),
+                      child: Text(AppStrings.expensesEmptyRange),
                     );
                   }
 
@@ -191,7 +192,7 @@ class ExpensesPage extends ConsumerWidget {
                                   const Spacer(),
                                   _pill(
                                     context,
-                                    'إجمالي اليوم',
+                                    AppStrings.dailyTotalLabel,
                                     dayTotal.toStringAsFixed(2),
                                     Icons.summarize,
                                   ),
@@ -243,13 +244,13 @@ class ExpensesPage extends ConsumerWidget {
                                       ),
                                       const SizedBox(width: 8),
                                       IconButton(
-                                        tooltip: 'تعديل',
+                                        tooltip: AppStrings.actionEdit,
                                         onPressed: () =>
                                             _openEditSheet(context, ref, e),
                                         icon: const Icon(Icons.edit),
                                       ),
                                       IconButton(
-                                        tooltip: 'حذف',
+                                        tooltip: AppStrings.actionDelete,
                                         onPressed: () =>
                                             _deleteExpense(context, ref, e.id),
                                         icon: const Icon(Icons.delete_outline),
@@ -308,16 +309,16 @@ class ExpensesPage extends ConsumerWidget {
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('تأكيد الحذف'),
-        content: const Text('هل تريد حذف هذا المصروف؟ لا يمكن التراجع.'),
+        title: const Text(AppStrings.confirmDeleteTitle),
+        content: const Text(AppStrings.expenseDeleteConfirm),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('إلغاء'),
+            child: const Text(AppStrings.actionCancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('حذف'),
+            child: const Text(AppStrings.actionDelete),
           ),
         ],
       ),
@@ -327,7 +328,7 @@ class ExpensesPage extends ConsumerWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('تم حذف المصروف')));
+        ).showSnackBar(const SnackBar(content: Text(AppStrings.expenseDeleted)));
       }
     }
   }
@@ -403,7 +404,9 @@ class _ExpenseEditSheetState extends ConsumerState<_ExpenseEditSheet> {
             ),
           ),
           Text(
-            widget.expense == null ? 'مصروف جديد' : 'تعديل مصروف',
+            widget.expense == null
+                ? AppStrings.expenseNew
+                : AppStrings.expenseEditTitle,
             style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
           ),
           const SizedBox(height: 12),
@@ -412,7 +415,7 @@ class _ExpenseEditSheetState extends ConsumerState<_ExpenseEditSheet> {
             controller: _titleCtrl,
             textAlign: TextAlign.center,
             decoration: const InputDecoration(
-              labelText: 'العنوان',
+              labelText: AppStrings.titleLabel,
               border: OutlineInputBorder(),
               isDense: true,
             ),
@@ -424,7 +427,7 @@ class _ExpenseEditSheetState extends ConsumerState<_ExpenseEditSheet> {
             textAlign: TextAlign.center,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration: const InputDecoration(
-              labelText: 'المبلغ',
+              labelText: AppStrings.amountLabel,
               border: OutlineInputBorder(),
               isDense: true,
             ),
@@ -437,7 +440,7 @@ class _ExpenseEditSheetState extends ConsumerState<_ExpenseEditSheet> {
             minLines: 1,
             maxLines: 3,
             decoration: const InputDecoration(
-              labelText: 'ملاحظات (اختياري)',
+              labelText: AppStrings.notesOptionalLabel,
               border: OutlineInputBorder(),
               isDense: true,
             ),
@@ -520,7 +523,7 @@ class _ExpenseEditSheetState extends ConsumerState<_ExpenseEditSheet> {
               Expanded(
                 child: OutlinedButton(
                   onPressed: _busy ? null : () => Navigator.pop(context),
-                  child: const Text('إلغاء'),
+                  child: const Text(AppStrings.actionCancel),
                 ),
               ),
               const SizedBox(width: 8),
@@ -541,7 +544,7 @@ class _ExpenseEditSheetState extends ConsumerState<_ExpenseEditSheet> {
                           ),
                         )
                       : const Icon(Icons.save),
-                  label: const Text('حفظ'),
+                  label: const Text(AppStrings.actionSave),
                 ),
               ),
             ],
@@ -556,7 +559,7 @@ class _ExpenseEditSheetState extends ConsumerState<_ExpenseEditSheet> {
     if (_titleCtrl.text.trim().isEmpty) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('من فضلك أدخل العنوان')));
+      ).showSnackBar(const SnackBar(content: Text(AppStrings.enterTitlePrompt)));
       return;
     }
     final amount =
@@ -564,7 +567,9 @@ class _ExpenseEditSheetState extends ConsumerState<_ExpenseEditSheet> {
     if (amount <= 0) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('من فضلك أدخل مبلغ صحيح')));
+      ).showSnackBar(
+        const SnackBar(content: Text(AppStrings.enterValidAmountPrompt)),
+      );
       return;
     }
 
@@ -593,22 +598,22 @@ class _ExpenseEditSheetState extends ConsumerState<_ExpenseEditSheet> {
         );
       }
 
-      if (mounted) Navigator.pop(context);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              widget.expense == null ? 'تم إضافة المصروف' : 'تم تعديل المصروف',
-            ),
+      if (!context.mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            widget.expense == null
+                ? AppStrings.expenseAdded
+                : AppStrings.expenseUpdated,
           ),
-        );
-      }
+        ),
+      );
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('تعذر الحفظ: $e')));
-      }
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(AppStrings.saveFailed(e))));
     } finally {
       if (mounted) setState(() => _busy = false);
     }

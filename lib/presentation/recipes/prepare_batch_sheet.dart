@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:elfouad_admin/core/app_strings.dart';
 
 class PrepareBatchSheet extends StatefulWidget {
   final DocumentSnapshot<Map<String, dynamic>> recipeSnap;
@@ -23,7 +24,7 @@ class _PrepareBatchSheetState extends State<PrepareBatchSheet> {
     final kg = double.tryParse(_kgCtrl.text.replaceAll(',', '.')) ?? 0;
     if (kg <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('اكتب كمية بالكيلوجرام > 0')),
+        const SnackBar(content: Text(AppStrings.enterKgPrompt)),
       );
       return;
     }
@@ -38,7 +39,7 @@ class _PrepareBatchSheetState extends State<PrepareBatchSheet> {
       await db.runTransaction((tx) async {
         // اقرأ آخر نسخة من التوليفة داخل الترانزاكشن
         final snap = await tx.get(recipeRef);
-        if (!snap.exists) throw 'Recipe not found';
+        if (!snap.exists) throw AppStrings.recipeNotFound;
         final m = snap.data() ?? <String, dynamic>{};
         final name = (m['name'] ?? '').toString();
         final comps = (m['components'] as List? ?? const [])
@@ -86,12 +87,12 @@ class _PrepareBatchSheetState extends State<PrepareBatchSheet> {
       Navigator.pop(context);
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('تم تحضير $kg كجم وخصم الخامات')));
+      ).showSnackBar(SnackBar(content: Text(AppStrings.prepareSuccess(kg))));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('تعذّر التحضير: $e')));
+      ).showSnackBar(SnackBar(content: Text(AppStrings.prepareFailed(e))));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -120,7 +121,7 @@ class _PrepareBatchSheetState extends State<PrepareBatchSheet> {
             ),
           ),
           Text(
-            'تحضير كمية — $name',
+            AppStrings.prepareAmountTitle(name),
             style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
           ),
           const SizedBox(height: 12),
@@ -129,7 +130,7 @@ class _PrepareBatchSheetState extends State<PrepareBatchSheet> {
             textAlign: TextAlign.center,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration: const InputDecoration(
-              labelText: 'الكمية بالكيلوجرام',
+              labelText: AppStrings.kgLabel,
               border: OutlineInputBorder(),
               isDense: true,
             ),
@@ -140,7 +141,7 @@ class _PrepareBatchSheetState extends State<PrepareBatchSheet> {
               Expanded(
                 child: OutlinedButton(
                   onPressed: _busy ? null : () => Navigator.pop(context),
-                  child: const Text('إلغاء'),
+                  child: const Text(AppStrings.actionCancel),
                 ),
               ),
               const SizedBox(width: 8),
@@ -154,7 +155,7 @@ class _PrepareBatchSheetState extends State<PrepareBatchSheet> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.check),
-                  label: const Text('تحضير وخصم'),
+                  label: const Text(AppStrings.prepareAndDeductLabel),
                 ),
               ),
             ],

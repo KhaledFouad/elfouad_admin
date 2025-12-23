@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:elfouad_admin/core/app_strings.dart';
 
 import '../utils/sales_history_utils.dart';
 
@@ -18,9 +19,7 @@ class SaleTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final m = doc.data();
-    final createdAt =
-        (m['created_at'] as Timestamp?)?.toDate() ??
-        DateTime.fromMillisecondsSinceEpoch(0);
+    final createdAt = createdAtUtcOf(m).toLocal();
 
     final detectedType = detectType(m);
     final type = (m['type'] ?? detectedType).toString();
@@ -30,11 +29,11 @@ class SaleTile extends StatelessWidget {
     final paid = (m['paid'] ?? (!isDeferred)) == true;
     final dueAmount = numD(m['due_amount']);
 
-    final totalPrice = numD(m['total_price']);
-    final totalCost = numD(m['total_cost']);
-    final profit = numD(m['profit_total']);
-
     final components = extractComponents(m, type);
+    final totals = saleTotalsWithFallback(m, components: components);
+    final totalPrice = totals.price;
+    final totalCost = totals.cost;
+    final profit = totals.profit;
     final eff = effectiveTimeLocal(m);
 
     // الملاحظة (note/notes)
@@ -50,7 +49,7 @@ class SaleTile extends StatelessWidget {
     if (componentsToShow.isEmpty && type == 'extra') {
       final name = (m['name'] ?? '').toString();
       final variant = (m['variant'] ?? '').toString();
-      final unit = (m['unit'] ?? 'piece').toString();
+      final unit = (m['unit'] ?? AppStrings.unitPiece).toString();
       final qty = (m['quantity'] is num)
           ? (m['quantity'] as num).toInt()
           : int.tryParse('${m['quantity'] ?? 0}') ?? 0;
@@ -88,15 +87,27 @@ class SaleTile extends StatelessWidget {
           ),
           if (isCompl) ...[
             const SizedBox(width: 6),
-            _chip('ضيافة', Colors.orange.shade200, Colors.orange.shade50),
+            _chip(
+              AppStrings.complimentaryLabel,
+              Colors.orange.shade200,
+              Colors.orange.shade50,
+            ),
           ],
           if (isDeferred && !paid) ...[
             const SizedBox(width: 6),
-            _chip('أجل', Colors.red.shade200, Colors.red.shade50),
+            _chip(
+              AppStrings.deferredLabel,
+              Colors.red.shade200,
+              Colors.red.shade50,
+            ),
           ],
           if (isDeferred && paid) ...[
             const SizedBox(width: 6),
-            _chip('مدفوع', Colors.green.shade200, Colors.green.shade50),
+            _chip(
+              AppStrings.paidLabel,
+              Colors.green.shade200,
+              Colors.green.shade50,
+            ),
           ],
           const SizedBox(width: 6),
           Text(
@@ -110,19 +121,19 @@ class SaleTile extends StatelessWidget {
         runSpacing: 4,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          _kv('الإجمالي', totalPrice),
-          _kv('التكلفة', totalCost),
-          _kv('الربح', profit),
+          _kv(AppStrings.totalLabel, totalPrice),
+          _kv(AppStrings.costLabelDefinite, totalCost),
+          _kv(AppStrings.profitLabelDefinite, profit),
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               IconButton(
-                tooltip: 'تعديل',
+                tooltip: AppStrings.actionEdit,
                 onPressed: onEdit,
                 icon: const Icon(Icons.edit),
               ),
               IconButton(
-                tooltip: 'حذف',
+                tooltip: AppStrings.actionDelete,
                 onPressed: onDelete,
                 icon: const Icon(Icons.delete_outline),
               ),
@@ -132,7 +143,7 @@ class SaleTile extends StatelessWidget {
       ),
       children: [
         if (componentsToShow.isEmpty)
-          const ListTile(title: Text('— لا توجد تفاصيل مكونات —'))
+          const ListTile(title: Text(AppStrings.noComponentDetails))
         else
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
@@ -193,7 +204,7 @@ class SaleTile extends StatelessWidget {
               bottom: 12,
             ),
             child: Text(
-              'التاريخ الأصلي: ${_fmtDateTime(createdAt)}',
+              AppStrings.originalDate(_fmtDateTime(createdAt)),
               style: const TextStyle(
                 fontSize: 12,
                 color: Colors.black54,
@@ -209,7 +220,7 @@ class SaleTile extends StatelessWidget {
               alignment: Alignment.centerLeft,
               child: FilledButton.icon(
                 style: ButtonStyle(
-                  backgroundColor: MaterialStateProperty.all(
+                  backgroundColor: WidgetStateProperty.all(
                     const Color(0xFF543824),
                   ),
                 ),
@@ -217,18 +228,18 @@ class SaleTile extends StatelessWidget {
                   final ok = await showDialog<bool>(
                     context: context,
                     builder: (_) => AlertDialog(
-                      title: const Text('تأكيد السداد'),
+                      title: const Text(AppStrings.confirmSettlementTitle),
                       content: Text(
-                        'سيتم تثبيت دفع ${totalPrice.toStringAsFixed(2)} جم.\nهل تريد المتابعة؟',
+                        AppStrings.confirmSettlementContent(totalPrice),
                       ),
                       actions: [
                         TextButton(
                           onPressed: () => Navigator.pop(context, false),
-                          child: const Text('إلغاء'),
+                          child: const Text(AppStrings.actionCancel),
                         ),
                         FilledButton(
                           onPressed: () => Navigator.pop(context, true),
-                          child: const Text('تأكيد'),
+                          child: const Text(AppStrings.actionConfirm),
                         ),
                       ],
                     ),
@@ -239,8 +250,7 @@ class SaleTile extends StatelessWidget {
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content:
-                                Text('تمت تسوية العملية المؤجلة بنجاح.'),
+                            content: Text(AppStrings.deferredSettledSuccess),
                           ),
                         );
                       }
@@ -248,7 +258,9 @@ class SaleTile extends StatelessWidget {
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text('تعذر تسوية العملية: $e'),
+                            content: Text(
+                              AppStrings.deferredSettlementFailed(e),
+                            ),
                           ),
                         );
                       }
@@ -256,7 +268,7 @@ class SaleTile extends StatelessWidget {
                   }
                 },
                 icon: const Icon(Icons.payments),
-                label: const Text('تسوية المؤجل'),
+                label: const Text(AppStrings.settleDeferred),
               ),
             ),
           ),
@@ -318,7 +330,7 @@ String titleLine(Map<String, dynamic> m, String type) {
           ? (m['quantity'] as num).toInt()
           : int.tryParse('${m['quantity'] ?? 0}') ?? 0;
       final lbl = labelNV.isNotEmpty ? labelNV : name;
-      return 'سناكس - $q ${lbl.isNotEmpty ? lbl : ''}'.trim();
+      return AppStrings.snacksSaleTitle(q, lbl);
 
     case 'drink':
       final qd = numD(m['quantity']) > 0
@@ -327,28 +339,28 @@ String titleLine(Map<String, dynamic> m, String type) {
       final dn = (m['drink_name'] ?? '').toString();
       final finalName = labelNV.isNotEmpty
           ? labelNV
-          : (dn.isNotEmpty ? dn : 'مشروب');
-      return 'مشروب - $qd $finalName';
+          : (dn.isNotEmpty ? dn : AppStrings.drinkLabel);
+      return AppStrings.drinkSaleTitle(qd, finalName);
 
     case 'single':
       {
         final g = numD(m['grams']).toStringAsFixed(0);
         final lbl = labelNV.isNotEmpty ? labelNV : name;
-        return 'صنف منفرد - $g جم ${lbl.isNotEmpty ? lbl : ''}'.trim();
+        return AppStrings.singleItemTitle(g, lbl);
       }
 
     case 'ready_blend':
       {
         final g = numD(m['grams']).toStringAsFixed(0);
         final lbl = labelNV.isNotEmpty ? labelNV : name;
-        return 'توليفة جاهزة - $g جم ${lbl.isNotEmpty ? lbl : ''}'.trim();
+        return AppStrings.readyBlendTitle(g, lbl);
       }
 
     case 'custom_blend':
-      return 'توليفة العميل';
+      return AppStrings.customBlendTitle;
 
     default:
-      return labelNV.isNotEmpty ? labelNV : 'عملية';
+      return labelNV.isNotEmpty ? labelNV : AppStrings.operationLabel;
   }
 }
 
@@ -363,7 +375,7 @@ Widget componentRow(Map<String, dynamic> c) {
 
   final label = variant.isNotEmpty ? '$name - $variant' : name;
   final qtyText = grams > 0
-      ? '${grams.toStringAsFixed(0)} جم'
+      ? AppStrings.gramsAmount(grams)
       : (qty > 0 ? '$qty ${unit.isEmpty ? "" : unit}' : '');
 
   return ListTile(
@@ -378,12 +390,12 @@ Widget componentRow(Map<String, dynamic> c) {
           Text(qtyText, style: const TextStyle(color: Colors.black54)),
         const SizedBox(width: 12),
         Text(
-          'س:${price.toStringAsFixed(2)}',
+          AppStrings.priceShort(price),
           style: const TextStyle(fontWeight: FontWeight.w600),
         ),
         const SizedBox(width: 8),
         Text(
-          'ت:${cost.toStringAsFixed(2)}',
+          AppStrings.costShort(cost),
           style: const TextStyle(color: Colors.black54),
         ),
       ],

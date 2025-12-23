@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:elfouad_admin/core/app_strings.dart';
 import '../state/stats_period.dart';
 import '../state/stats_data_provider.dart'; // علشان preview
 
@@ -22,10 +23,10 @@ class PeriodChips extends ConsumerWidget {
     final preview = ref.watch(statsThirdsPreviewProvider);
 
     final items = <(StatsPeriod, String)>[
-      (StatsPeriod.firstThird, 'الثلث الأول'),
-      (StatsPeriod.secondThird, 'الثلث الثاني'),
-      (StatsPeriod.thirdThird, 'الثلث الثالث'),
-      (StatsPeriod.fullMonth, 'الشهر'),
+      (StatsPeriod.firstThird, AppStrings.firstThirdLabel),
+      (StatsPeriod.secondThird, AppStrings.secondThirdLabel),
+      (StatsPeriod.thirdThird, AppStrings.thirdThirdLabel),
+      (StatsPeriod.fullMonth, AppStrings.fullMonthLabel),
     ];
 
     return Wrap(

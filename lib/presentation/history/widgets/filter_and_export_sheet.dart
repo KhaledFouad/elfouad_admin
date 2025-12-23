@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:intl/intl.dart';
 import 'package:open_filex/open_filex.dart';
+import 'package:elfouad_admin/core/app_strings.dart';
 
 import '../utils/export_sales_csv.dart'; // تأكد من المسار عندك
 
@@ -99,27 +100,30 @@ class _FilterAndExportSheetState extends State<FilterAndExportSheet> {
       ); // ← لازم ترجع مسار الملف String
 
       final where = await exportSalesCsv(_range);
+      if (!widget.hostContext.mounted) return;
       ScaffoldMessenger.of(widget.hostContext).showSnackBar(
         SnackBar(
-          content: Text('تم الحفظ: $filePath'),
+          content: Text(AppStrings.savedToPath(filePath)),
           duration: const Duration(seconds: 10),
           action: SnackBarAction(
-            label: 'فتح',
+            label: AppStrings.actionOpen,
             onPressed: () => OpenFilex.open(filePath),
           ),
         ),
       );
       await Clipboard.setData(ClipboardData(text: filePath));
+      if (!widget.hostContext.mounted) return;
       ScaffoldMessenger.of(widget.hostContext).showSnackBar(
         const SnackBar(
-          content: Text('تم نسخ مسار الملف إلى الحافظة'),
+          content: Text(AppStrings.filePathCopied),
           duration: Duration(seconds: 3),
         ),
       );
     } catch (e) {
+      if (!widget.hostContext.mounted) return;
       ScaffoldMessenger.of(widget.hostContext).showSnackBar(
         SnackBar(
-          content: Text('تعذّر التصدير: $e'),
+          content: Text(AppStrings.exportFailed(e)),
           duration: const Duration(seconds: 6), // ✅ مدة أطول
         ),
       );
@@ -153,7 +157,7 @@ class _FilterAndExportSheetState extends State<FilterAndExportSheet> {
             ),
           ),
           const Text(
-            'تصفية وتصدير',
+            AppStrings.filterAndExportTitle,
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 12),
@@ -183,7 +187,7 @@ class _FilterAndExportSheetState extends State<FilterAndExportSheet> {
               FilledButton.icon(
                 onPressed: _pickRange,
                 icon: const Icon(Icons.date_range),
-                label: const Text('اختيار المدى'),
+                label: const Text(AppStrings.selectRange),
               ),
             ],
           ),
@@ -196,7 +200,7 @@ class _FilterAndExportSheetState extends State<FilterAndExportSheet> {
                 child: OutlinedButton.icon(
                   onPressed: _apply, // ✅ يقفل الشيت تلقائياً
                   icon: const Icon(Icons.filter_alt),
-                  label: const Text('تطبيق'),
+                  label: const Text(AppStrings.actionApply),
                 ),
               ),
               const SizedBox(width: 8),
@@ -212,7 +216,7 @@ class _FilterAndExportSheetState extends State<FilterAndExportSheet> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.file_download),
-                  label: const Text('تصدير Excel (CSV)'),
+                  label: const Text(AppStrings.exportExcelCsv),
                 ),
               ),
             ],

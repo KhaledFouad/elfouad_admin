@@ -1,6 +1,7 @@
 import 'package:elfouad_admin/presentation/stats/state/stats_data_provider.dart'
     show GroupRow;
 import 'package:flutter/material.dart';
+import 'package:elfouad_admin/core/app_strings.dart';
 
 class BreakdownTable extends StatelessWidget {
   final List<GroupRow> rows;
@@ -21,13 +22,18 @@ class BreakdownTable extends StatelessWidget {
       child: DataTable(
         columns: [
           const DataColumn(
-            label: Text('النوع', style: TextStyle(fontWeight: FontWeight.w800)),
+            label: Text(
+              AppStrings.typeLabel,
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
           ),
-          if (showCups) DataColumn(label: Text('أكواب', style: headerStyle)),
-          if (showGrams) DataColumn(label: Text('جرامات', style: headerStyle)),
-          DataColumn(label: Text('المبيعات', style: headerStyle)),
-          DataColumn(label: Text('التكلفة', style: headerStyle)),
-          DataColumn(label: Text('الربح', style: headerStyle)),
+          if (showCups)
+            DataColumn(label: Text(AppStrings.cupsLabelShort, style: headerStyle)),
+          if (showGrams)
+            DataColumn(label: Text(AppStrings.gramsLabel, style: headerStyle)),
+          DataColumn(label: Text(AppStrings.salesLabelDefinite, style: headerStyle)),
+          DataColumn(label: Text(AppStrings.costLabelDefinite, style: headerStyle)),
+          DataColumn(label: Text(AppStrings.profitLabelDefinite, style: headerStyle)),
         ],
         rows: rows
             .map(

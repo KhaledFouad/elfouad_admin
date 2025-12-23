@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:elfouad_admin/core/app_strings.dart';
 import '../state/stats_data_provider.dart';
 
 class Top5List extends StatelessWidget {
@@ -29,7 +30,7 @@ class Top5List extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  '$title — Top 5',
+                  AppStrings.topFiveTitle(title),
                   style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 8),

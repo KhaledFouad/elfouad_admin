@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:elfouad_admin/core/app_strings.dart';
 import '../state/grind_providers.dart';
 
 class GrindConfirmSheet extends StatefulWidget {
@@ -61,7 +62,7 @@ class _GrindConfirmSheetState extends State<GrindConfirmSheet> {
             const SizedBox(height: 10),
 
             Text(
-              'المتاح: ${r.stockG.toStringAsFixed(0)} جم',
+              AppStrings.availableGrams(r.stockG),
               style: const TextStyle(color: Colors.black54),
             ),
             const SizedBox(height: 8),
@@ -78,7 +79,7 @@ class _GrindConfirmSheetState extends State<GrindConfirmSheet> {
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     onChanged: (_) => setState(() {}),
                     decoration: InputDecoration(
-                      labelText: 'الكمية (جم)',
+                      labelText: AppStrings.amountGramsLabel,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -90,7 +91,7 @@ class _GrindConfirmSheetState extends State<GrindConfirmSheet> {
                 Column(
                   children: [
                     IconButton(
-                      tooltip: '+100 جم',
+                      tooltip: AppStrings.add100GramsTooltip,
                       onPressed: () {
                         final v = _n(_amountCtrl.text);
                         setState(() {
@@ -101,7 +102,7 @@ class _GrindConfirmSheetState extends State<GrindConfirmSheet> {
                       icon: const Icon(Icons.add),
                     ),
                     IconButton(
-                      tooltip: '-100 جم',
+                      tooltip: AppStrings.sub100GramsTooltip,
                       onPressed: () {
                         final v = _n(_amountCtrl.text);
                         setState(() {
@@ -129,7 +130,7 @@ class _GrindConfirmSheetState extends State<GrindConfirmSheet> {
 
                             Navigator.pop(context);
                           },
-                    child: const Text('إلغاء'),
+                    child: const Text(AppStrings.actionCancel),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -148,29 +149,30 @@ class _GrindConfirmSheetState extends State<GrindConfirmSheet> {
                                 grams: grams,
                                 isSpiced: false,
                               );
-                              if (!mounted) return;
+                              if (!context.mounted) return;
                               Navigator.pop(context); // يقفل الشيت
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
-                                  content: Text('تم الخصم من المخزون'),
+                                  content: Text(AppStrings.stockDeducted),
                                 ),
                               );
                             } on StateError catch (e) {
-                              if (!mounted) return;
+                              if (!context.mounted) return;
                               final msg = switch (e.message) {
-                                'empty_stock' =>
-                                  'لا يوجد مخزون متاح لهذا الصنف.',
+                                'empty_stock' => AppStrings.noStockAvailable,
                                 'insufficient_stock' =>
-                                  'الكمية المطلوبة أكبر من المتاح.',
-                                _ => 'تعذر الخصم: ${e.message}',
+                                  AppStrings.quantityExceedsAvailable,
+                                _ => AppStrings.deductFailed(e.message),
                               };
                               ScaffoldMessenger.of(
                                 context,
                               ).showSnackBar(SnackBar(content: Text(msg)));
                             } catch (e) {
-                              if (!mounted) return;
+                              if (!context.mounted) return;
                               ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('تعذر الخصم: $e')),
+                                SnackBar(
+                                  content: Text(AppStrings.deductFailed(e)),
+                                ),
                               );
                             } finally {
                               if (mounted) setState(() => _busy = false);
@@ -184,7 +186,7 @@ class _GrindConfirmSheetState extends State<GrindConfirmSheet> {
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.done_all),
-                    label: const Text('تأكيد الخصم'),
+                    label: const Text(AppStrings.confirmDeduct),
                     style: FilledButton.styleFrom(
                       backgroundColor: const Color(0xFF5E3D28),
                       foregroundColor: Colors.white,

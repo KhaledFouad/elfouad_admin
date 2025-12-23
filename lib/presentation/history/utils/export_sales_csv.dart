@@ -4,20 +4,31 @@ import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:csv/csv.dart';
-import 'package:elfouad_admin/presentation/history/widgets/sale_tile.dart' as U;
 import 'package:file_saver/file_saver.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:elfouad_admin/core/app_strings.dart';
 
 import 'sales_history_utils.dart'
-    as U; // inRangeLocal, effectiveTimeLocal, numD, titleLine, detectType, opDayKeyFromLocal
+    as history_utils; // inRangeLocal, effectiveTimeLocal, numD, titleLine, detectType, opDayKeyFromLocal
 
-double _d(dynamic v) => U.numD(v);
+double _d(dynamic v) => history_utils.numD(v);
 
 String _fmt(DateTime dt) => DateFormat('yyyy-MM-dd HH:mm').format(dt);
 String _fmtDay(DateTime dt) => DateFormat('yyyy-MM-dd').format(dt);
+DateTime _createdAtOf(Map<String, dynamic> m) {
+  final v = m['created_at'];
+  if (v is Timestamp) return v.toDate();
+  if (v is DateTime) return v;
+  if (v is num) {
+    final raw = v.toInt();
+    final ms = raw < 10000000000 ? raw * 1000 : raw;
+    return DateTime.fromMillisecondsSinceEpoch(ms);
+  }
+  return DateTime.tryParse('$v') ?? DateTime.fromMillisecondsSinceEpoch(0);
+}
 
 List<Map<String, dynamic>> _asListMap(dynamic v) {
   if (v is List) {
@@ -35,16 +46,22 @@ String _componentsToText(Map<String, dynamic> m) {
     ..._asListMap(m['components']),
     ..._asListMap(m['items']),
     ..._asListMap(m['lines']),
+    ..._asListMap(m['cart_items']),
+    ..._asListMap(m['order_items']),
+    ..._asListMap(m['products']),
   ];
   if (rows.isEmpty) return '';
   String norm(Map<String, dynamic> c) {
     final name = (c['name'] ?? c['item_name'] ?? c['product_name'] ?? '')
         .toString();
     final variant = (c['variant'] ?? c['roast'] ?? '').toString();
-    final grams = _d(c['grams']);
-    final qty = _d(c['qty']);
-    final price = _d(c['line_total_price']);
-    final cost = _d(c['line_total_cost']);
+    final grams = _d(c['grams'] ?? c['weight'] ?? c['gram']);
+    final qty = _d(c['qty'] ?? c['quantity'] ?? c['count'] ?? c['pieces']);
+    final price = _d(
+      c['line_total_price'] ?? c['total_price'] ?? c['price'] ?? c['amount'],
+    );
+    final cost =
+        _d(c['line_total_cost'] ?? c['total_cost'] ?? c['cost']);
     return '${name.replaceAll(',', '،')}|${variant.replaceAll(',', '،')}|'
         '${grams.toStringAsFixed(0)}|'
         '${qty == qty.roundToDouble() ? qty.toStringAsFixed(0) : qty}|'
@@ -70,7 +87,7 @@ Future<String> _saveBytesSmart({
       mimeType: MimeType.csv, // لبعض الأجهزة يفضل customMimeType: 'text/csv'
       // customMimeType: 'text/csv',
     );
-    return 'Downloads (مدير التنزيلات)';
+    return AppStrings.downloadsLabel;
   } catch (e) {
     // 2) Fallback: احفظ داخل Documents للتطبيق
     final dir = await getApplicationDocumentsDirectory();
@@ -84,11 +101,52 @@ Future<String> _saveBytesSmart({
 /// يصدّر العمليات داخل "effective time" للمدى المحدد إلى CSV.
 /// بيرجع نص بيوضح مكان الحفظ (Downloads أو مسار الملف).
 Future<String> exportSalesCsv(DateTimeRange range) async {
+  final endUtc = range.end.toUtc();
+  final endIso = endUtc.toIso8601String();
+  final endMs = endUtc.millisecondsSinceEpoch;
+
   final snap = await FirebaseFirestore.instance
       .collection('sales')
-      .where('created_at', isLessThan: range.end.toUtc())
+      .where('created_at', isLessThan: endUtc)
       .orderBy('created_at', descending: true)
       .get();
+  QuerySnapshot<Map<String, dynamic>>? snapStr;
+  try {
+    snapStr = await FirebaseFirestore.instance
+        .collection('sales')
+        .where('created_at', isLessThan: endIso)
+        .orderBy('created_at', descending: true)
+        .get();
+  } catch (_) {
+    snapStr = null;
+  }
+  QuerySnapshot<Map<String, dynamic>>? snapNum;
+  try {
+    snapNum = await FirebaseFirestore.instance
+        .collection('sales')
+        .where('created_at', isLessThan: endMs)
+        .orderBy('created_at', descending: true)
+        .get();
+  } catch (_) {
+    snapNum = null;
+  }
+
+  final docsById = <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
+  for (final d in snap.docs) {
+    docsById[d.id] = d;
+  }
+  if (snapStr != null) {
+    for (final d in snapStr.docs) {
+      docsById[d.id] = d;
+    }
+  }
+  if (snapNum != null) {
+    for (final d in snapNum.docs) {
+      docsById[d.id] = d;
+    }
+  }
+  final docs = docsById.values.toList()
+    ..sort((a, b) => _createdAtOf(b.data()).compareTo(_createdAtOf(a.data())));
 
   final rows = <List<dynamic>>[];
 
@@ -120,24 +178,29 @@ Future<String> exportSalesCsv(DateTimeRange range) async {
     'components',
   ]);
 
-  for (final d in snap.docs) {
+  for (final d in docs) {
     final m = d.data();
 
-    final createdAt =
-        (m['created_at'] as Timestamp?)?.toDate() ??
-        DateTime.fromMillisecondsSinceEpoch(0);
+    final totals = history_utils.saleTotalsWithFallback(m);
+    final createdAt = history_utils.createdAtUtcOf(m).toLocal();
     final settledRaw = m['settled_at'];
     final settledAt = settledRaw == null
         ? null
         : (settledRaw is Timestamp
               ? settledRaw.toDate()
-              : DateTime.tryParse('$settledRaw'));
+              : (settledRaw is num
+                    ? DateTime.fromMillisecondsSinceEpoch(
+                      settledRaw < 10000000000
+                          ? settledRaw.toInt() * 1000
+                          : settledRaw.toInt(),
+                    )
+                    : DateTime.tryParse('$settledRaw')));
 
-    final eff = U.effectiveTimeLocal(m);
-    if (!U.inRangeLocal(eff, range)) continue; // نفس منطق الصفحة
+    final eff = history_utils.effectiveTimeLocal(m);
+    if (!history_utils.inRangeLocal(eff, range)) continue; // نفس منطق الصفحة
 
-    final type = (m['type'] ?? U.detectType(m)).toString();
-    final title = U.titleLine(m, type);
+    final type = (m['type'] ?? history_utils.detectType(m)).toString();
+    final title = history_utils.titleLine(m, type);
     final isDeferred = (m['is_deferred'] ?? false) == true;
     final paid = (m['paid'] ?? (!isDeferred)) == true;
 
@@ -149,7 +212,7 @@ Future<String> exportSalesCsv(DateTimeRange range) async {
     final costPerG = costPerKg > 0 ? costPerKg / 1000.0 : _d(m['cost_per_g']);
 
     final note = ((m['note'] ?? m['notes'] ?? '') as Object).toString();
-    final opDay = U.opDayKeyFromLocal(eff);
+    final opDay = history_utils.opDayKeyFromLocal(eff);
 
     rows.add([
       d.id,
@@ -161,9 +224,9 @@ Future<String> exportSalesCsv(DateTimeRange range) async {
       isDeferred ? 1 : 0,
       paid ? 1 : 0,
       _d(m['due_amount']).toStringAsFixed(2),
-      _d(m['total_price']).toStringAsFixed(2),
-      _d(m['total_cost']).toStringAsFixed(2),
-      _d(m['profit_total']).toStringAsFixed(2),
+      totals.price.toStringAsFixed(2),
+      totals.cost.toStringAsFixed(2),
+      totals.profit.toStringAsFixed(2),
       _d(m['quantity']),
       _d(m['grams']),
       pricePerKg,
@@ -181,7 +244,7 @@ Future<String> exportSalesCsv(DateTimeRange range) async {
   }
 
   if (rows.length == 1) {
-    throw Exception('لا توجد عمليات داخل المدى المحدد.');
+    throw Exception(AppStrings.noSalesInRangeForExport);
   }
 
   final csv = const ListToCsvConverter().convert(rows);

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:elfouad_admin/core/app_strings.dart';
 
 class DrinkRow {
   final String name;
@@ -23,7 +24,7 @@ class DrinksByNameTable extends StatelessWidget {
     if (rows.isEmpty) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 12),
-        child: Text('لا توجد بيانات مشروبات ضمن الفترة المختارة'),
+        child: Text(AppStrings.noDrinksData),
       );
     }
 
@@ -37,12 +38,12 @@ class DrinksByNameTable extends StatelessWidget {
           fontWeight: FontWeight.w800,
         ),
         columns: const [
-          DataColumn(label: Text('الاسم')),
-          DataColumn(label: Text('أكواب')),
-          DataColumn(label: Text('المبيعات')),
-          DataColumn(label: Text('التكلفة')),
-          DataColumn(label: Text('الربح')),
-          DataColumn(label: Text('متوسط/كوب')),
+          DataColumn(label: Text(AppStrings.nameLabel)),
+          DataColumn(label: Text(AppStrings.cupsLabelShort)),
+          DataColumn(label: Text(AppStrings.salesLabelDefinite)),
+          DataColumn(label: Text(AppStrings.costLabelDefinite)),
+          DataColumn(label: Text(AppStrings.profitLabelDefinite)),
+          DataColumn(label: Text(AppStrings.averagePerCupLabel)),
         ],
         rows: rows.map((r) {
           return DataRow(

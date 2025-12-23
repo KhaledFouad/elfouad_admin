@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:elfouad_admin/core/app_strings.dart';
 import '../utils/sales_history_utils.dart';
-import '../utils/sales_history_utils.dart' show fetchSpiceRatesForSale;
 
 class SaleEditSheet extends StatefulWidget {
   final DocumentSnapshot<Map<String, dynamic>> snap;
@@ -216,13 +216,13 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
         final extraRef = db.collection('extras').doc(extraId);
         final exSnap = await tx.get(extraRef);
         if (!exSnap.exists) {
-          throw Exception('الصنف غير موجود في extras.');
+          throw Exception(AppStrings.extraNotFound);
         }
         final ex = exSnap.data() as Map<String, dynamic>;
         final cur = _intOf(ex['stock_units'], 0);
 
         if (delta > 0 && cur < delta) {
-          throw Exception('المخزون غير كافٍ ($cur قطعة متاحة).');
+          throw Exception(AppStrings.insufficientStockPieces(cur));
         }
 
         tx.update(extraRef, {
@@ -315,7 +315,7 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
         Navigator.pop(context);
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('تم حفظ التعديل')));
+        ).showSnackBar(const SnackBar(content: Text(AppStrings.editSaved)));
         return;
       }
 
@@ -397,7 +397,7 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
         Navigator.pop(context);
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('تم حفظ التعديل')));
+        ).showSnackBar(const SnackBar(content: Text(AppStrings.editSaved)));
         return;
       }
 
@@ -497,7 +497,7 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
         Navigator.pop(context);
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('تم حفظ التعديل')));
+        ).showSnackBar(const SnackBar(content: Text(AppStrings.editSaved)));
         return;
       }
 
@@ -553,7 +553,7 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
         Navigator.pop(context);
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('تم حفظ التعديل')));
+        ).showSnackBar(const SnackBar(content: Text(AppStrings.editSaved)));
         return;
       }
 
@@ -584,13 +584,13 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
         Navigator.pop(context);
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('تم حفظ التعديل')));
+        ).showSnackBar(const SnackBar(content: Text(AppStrings.editSaved)));
       }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('تعذر الحفظ: $e')));
+      ).showSnackBar(SnackBar(content: Text(AppStrings.saveFailed(e))));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -598,7 +598,9 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final name = (_m['name'] ?? _m['drink_name'] ?? 'عملية بيع').toString();
+    final name =
+        (_m['name'] ?? _m['drink_name'] ?? AppStrings.saleOperationLabel)
+            .toString();
     final createdAt = (_m['created_at'] as Timestamp?)?.toDate();
     final when = createdAt != null
         ? '${createdAt.year}-${createdAt.month.toString().padLeft(2, '0')}-${createdAt.day.toString().padLeft(2, '0')}  '
@@ -655,7 +657,7 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
                     decimal: true,
                   ),
                   decoration: const InputDecoration(
-                    labelText: 'السعر الإجمالي (total_price)',
+                    labelText: AppStrings.totalPriceLabel,
                     border: OutlineInputBorder(),
                     isDense: true,
                   ),
@@ -671,7 +673,7 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
                       decimal: true,
                     ),
                     decoration: const InputDecoration(
-                      labelText: 'عدد الأكواب (quantity)',
+                      labelText: AppStrings.cupsCountLabel,
                       border: OutlineInputBorder(),
                       isDense: true,
                     ),
@@ -684,7 +686,7 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
                     textAlign: TextAlign.center,
                     keyboardType: TextInputType.number,
                     decoration: const InputDecoration(
-                      labelText: 'الكمية بالجرامات (grams)',
+                      labelText: AppStrings.gramsQuantityLabel,
                       border: OutlineInputBorder(),
                       isDense: true,
                     ),
@@ -700,7 +702,7 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
                           textAlign: TextAlign.center,
                           keyboardType: TextInputType.number,
                           decoration: const InputDecoration(
-                            labelText: 'العدد (quantity)',
+                            labelText: AppStrings.quantityLabel,
                             border: OutlineInputBorder(),
                             isDense: true,
                           ),
@@ -710,7 +712,7 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
                       Column(
                         children: [
                           IconButton(
-                            tooltip: 'زيادة',
+                            tooltip: AppStrings.increaseLabel,
                             onPressed: () {
                               final q = _intOf(_qtyCtrl.text, 1) + 1;
                               _qtyCtrl.text = q.toString();
@@ -721,7 +723,7 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
                             icon: const Icon(Icons.add_circle_outline),
                           ),
                           IconButton(
-                            tooltip: 'نقصان',
+                            tooltip: AppStrings.decreaseLabel,
                             onPressed: () {
                               var q = _intOf(_qtyCtrl.text, 1);
                               q = (q > 1) ? q - 1 : 1;
@@ -745,7 +747,7 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
                   textAlign: TextAlign.center,
                   maxLines: 2,
                   decoration: const InputDecoration(
-                    labelText: 'ملاحظة (اختياري)',
+                    labelText: AppStrings.noteOptionalLabel,
                     border: OutlineInputBorder(),
                     isDense: true,
                   ),
@@ -780,7 +782,7 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
                   },
                   contentPadding: EdgeInsets.zero,
                   controlAffinity: ListTileControlAffinity.leading,
-                  title: const Text('ضيافة'),
+                    title: const Text(AppStrings.complimentaryLabel),
                 ),
 
                 // محوّج لأنواع البن فقط (مش للمعمول/التمر)
@@ -791,12 +793,12 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
                     onChanged: (v) => setState(() => _isSpiced = v ?? false),
                     contentPadding: EdgeInsets.zero,
                     controlAffinity: ListTileControlAffinity.leading,
-                    title: const Text('محوّج'),
+                    title: const Text(AppStrings.spicedLabel),
                   ),
 
                 const SizedBox(height: 8),
                 const Text(
-                  'ملاحظة: ربح الأجل غير المدفوع لا يتغير حتى التسوية.',
+                  AppStrings.deferredProfitNote,
                   style: TextStyle(fontSize: 12, color: Colors.black54),
                 ),
                 const SizedBox(height: 12),
@@ -806,7 +808,7 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
                     Expanded(
                       child: OutlinedButton(
                         onPressed: _busy ? null : () => Navigator.pop(context),
-                        child: const Text('إلغاء'),
+                        child: const Text(AppStrings.actionCancel),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -822,7 +824,7 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
                                 ),
                               )
                             : const Icon(Icons.save),
-                        label: const Text('حفظ'),
+                        label: const Text(AppStrings.actionSave),
                       ),
                     ),
                   ],

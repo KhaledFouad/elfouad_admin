@@ -2,6 +2,7 @@
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:elfouad_admin/core/app_strings.dart';
 
 import '../utils/op_day.dart';
 import 'sales_raw_provider.dart';
@@ -132,6 +133,275 @@ double _d(dynamic v) {
   return 0.0;
 }
 
+const Set<String> _knownTypes = {
+  'drink',
+  'single',
+  'ready_blend',
+  'custom_blend',
+  'extra',
+};
+
+bool _isKnownType(String t) => _knownTypes.contains(t);
+
+double? _numIfPresent(Map<String, dynamic> m, String key) {
+  if (!m.containsKey(key)) return null;
+  final v = m[key];
+  if (v == null) return null;
+  return _d(v);
+}
+
+bool _hasAnyKey(Map<String, dynamic> m, List<String> keys) {
+  for (final k in keys) {
+    if (m.containsKey(k) && m[k] != null) return true;
+  }
+  return false;
+}
+
+double _pickNum(Map<String, dynamic> m, List<String> keys) {
+  for (final k in keys) {
+    final v = _numIfPresent(m, k);
+    if (v != null) return v;
+  }
+  return 0.0;
+}
+
+String _pickStr(Map<String, dynamic> m, List<String> keys) {
+  for (final k in keys) {
+    if (!m.containsKey(k)) continue;
+    final v = m[k];
+    if (v == null) continue;
+    return v.toString();
+  }
+  return '';
+}
+
+List<Map<String, dynamic>> _asListMap(dynamic v) {
+  if (v is List) {
+    return v
+        .map(
+          (e) => (e is Map) ? e.cast<String, dynamic>() : <String, dynamic>{},
+        )
+        .toList();
+  }
+  return const [];
+}
+
+List<Map<String, dynamic>> _extractLineItems(Map<String, dynamic> m) {
+  return [
+    ..._asListMap(m['components']),
+    ..._asListMap(m['items']),
+    ..._asListMap(m['lines']),
+    ..._asListMap(m['cart_items']),
+    ..._asListMap(m['order_items']),
+    ..._asListMap(m['products']),
+  ];
+}
+
+Map<String, dynamic> _normalizeLineItem(Map<String, dynamic> c) {
+  final out = Map<String, dynamic>.from(c);
+  final qty = _pickNum(out, ['qty', 'quantity', 'count', 'pieces']);
+  final grams = _pickNum(out, ['grams', 'weight', 'gram', 'total_grams']);
+  final unit = _pickStr(out, ['unit', 'uom', 'unit_name']);
+  const priceKeys = [
+    'line_total_price',
+    'total_price',
+    'price',
+    'line_price',
+    'amount',
+    'total',
+    'subtotal',
+  ];
+  const costKeys = [
+    'line_total_cost',
+    'total_cost',
+    'cost',
+    'line_cost',
+    'cost_amount',
+  ];
+  final hasLinePrice = _hasAnyKey(out, priceKeys);
+  final hasLineCost = _hasAnyKey(out, costKeys);
+  var linePrice = _pickNum(out, priceKeys);
+  var lineCost = _pickNum(out, costKeys);
+  final unitPrice = _pickNum(out, ['unit_price', 'price_per_unit']);
+  final unitCost = _pickNum(out, ['unit_cost', 'cost_per_unit']);
+
+  if (!hasLinePrice && unitPrice > 0 && qty > 0) {
+    linePrice = unitPrice * qty;
+  }
+  if (!hasLineCost && unitCost > 0 && qty > 0) {
+    lineCost = unitCost * qty;
+  }
+
+  final name = _pickStr(
+    out,
+    ['name', 'item_name', 'product_name', 'drink_name', 'single_name', 'blend_name', 'title'],
+  ).trim();
+  final variant = _pickStr(out, ['variant', 'roast', 'size']).trim();
+  final unitValue = unit.isNotEmpty ? unit : (grams > 0 ? 'g' : '');
+
+  if (name.isNotEmpty) {
+    out['name'] = name;
+  } else {
+    out.remove('name');
+  }
+  if (variant.isNotEmpty) {
+    out['variant'] = variant;
+  } else {
+    out.remove('variant');
+  }
+  out['qty'] = qty;
+  out['quantity'] = qty;
+  out['grams'] = grams;
+  if (unitValue.isNotEmpty) {
+    out['unit'] = unitValue;
+  } else {
+    out.remove('unit');
+  }
+  out['line_total_price'] = linePrice;
+  out['line_total_cost'] = lineCost;
+  return out;
+}
+
+String _inferLineType(Map<String, dynamic> c, {String? fallbackType}) {
+  final raw = (c['type'] ?? c['line_type'] ?? c['item_type'] ?? '').toString();
+  if (_isKnownType(raw)) return raw;
+
+  if (c.containsKey('extra_id') || (c['is_extra'] ?? false) == true) {
+    return 'extra';
+  }
+  final unit = (c['unit'] ?? '').toString();
+  if (unit == 'piece') return 'extra';
+
+  if (c.containsKey('drink_id') || c.containsKey('drink_name')) {
+    return 'drink';
+  }
+  if (c.containsKey('blend_id') ||
+      c.containsKey('blend_name') ||
+      c['lines_type'] == 'ready_blend') {
+    return 'ready_blend';
+  }
+  if (c.containsKey('single_id') ||
+      c.containsKey('single_name') ||
+      c['lines_type'] == 'single') {
+    return 'single';
+  }
+
+  final grams = _d(c['grams']);
+  if (grams > 0) return 'single';
+  final qty = _d(c['qty'] ?? c['quantity']);
+  if (qty > 0) return 'drink';
+
+  return fallbackType ?? 'unknown';
+}
+
+Map<String, dynamic> _applyTotalsFallback(
+  Map<String, dynamic> m, {
+  List<Map<String, dynamic>>? lines,
+}) {
+  final out = Map<String, dynamic>.from(m);
+  final isComplimentary = (out['is_complimentary'] ?? false) == true;
+
+  double price = _pickNum(out, ['total_price']);
+  if (price <= 0) {
+    price = _pickNum(out, ['total', 'total_amount', 'amount', 'grand_total']);
+  }
+  double cost = _pickNum(out, ['total_cost']);
+  if (cost <= 0) {
+    cost = _pickNum(out, ['total_cost_amount', 'cost', 'totalCost']);
+  }
+  double profit = _pickNum(out, ['profit_total', 'profit']);
+
+  if (lines != null && lines.isNotEmpty) {
+    final linePrice =
+        lines.fold<double>(0.0, (s, r) => s + _d(r['line_total_price']));
+    final lineCost =
+        lines.fold<double>(0.0, (s, r) => s + _d(r['line_total_cost']));
+    if (price <= 0 && linePrice > 0) price = linePrice;
+    if (cost <= 0 && lineCost > 0) cost = lineCost;
+  }
+
+  if (isComplimentary) {
+    price = 0.0;
+    profit = 0.0;
+  }
+
+  if (profit == 0 && (price > 0 || cost > 0)) {
+    profit = price - cost;
+  }
+
+  if (price > 0 || out.containsKey('total_price')) out['total_price'] = price;
+  if (cost > 0 || out.containsKey('total_cost')) out['total_cost'] = cost;
+  if (profit != 0 || out.containsKey('profit_total')) {
+    out['profit_total'] = profit;
+  }
+  return out;
+}
+
+List<Map<String, dynamic>> _expandCartSales(List<Map<String, dynamic>> data) {
+  final out = <Map<String, dynamic>>[];
+  for (final m in data) {
+    final fixed = _applyTotalsFallback(m);
+    final type = (fixed['type'] ?? '').toString();
+    final rawLines = _extractLineItems(fixed);
+    final isComplimentary = (fixed['is_complimentary'] ?? false) == true;
+
+    if (rawLines.isEmpty || _isKnownType(type)) {
+      out.add(fixed);
+      continue;
+    }
+
+    final lines = rawLines.map(_normalizeLineItem).toList();
+    final lineTotal =
+        lines.fold<double>(0.0, (s, r) => s + _d(r['line_total_price']));
+    final lineCostTotal =
+        lines.fold<double>(0.0, (s, r) => s + _d(r['line_total_cost']));
+    final parentTotal = _d(fixed['total_price']);
+    final tolerance = parentTotal > 0 ? parentTotal * 0.01 : 0.0;
+    final withinTolerance =
+        parentTotal <= 0 || (lineTotal - parentTotal).abs() <= tolerance;
+    final hasLineValue = lineTotal > 0 || lineCostTotal > 0;
+    final shouldExpand = isComplimentary ? lines.isNotEmpty : hasLineValue;
+    if (!shouldExpand || (!isComplimentary && !withinTolerance)) {
+      out.add(_applyTotalsFallback(fixed, lines: lines));
+      continue;
+    }
+
+    final saleId = (fixed['sale_id'] ?? fixed['id'] ?? '').toString();
+    for (final line in lines) {
+      final lineType = _inferLineType(line, fallbackType: type.isNotEmpty ? type : null);
+      final merged = Map<String, dynamic>.from(fixed);
+      merged.addAll(line);
+      merged['type'] = lineType;
+      if (saleId.isNotEmpty) merged['sale_id'] = saleId;
+
+      var linePrice = _d(line['line_total_price']);
+      final lineCost = _d(line['line_total_cost']);
+      if (isComplimentary) {
+        linePrice = 0.0;
+      }
+      merged['total_price'] = linePrice;
+      merged['total_cost'] = lineCost;
+      merged['profit_total'] = linePrice - lineCost;
+
+      if (lineType == 'drink' || lineType == 'extra') {
+        final qty = _d(line['qty'] ?? line['quantity']);
+        if (qty > 0) merged['quantity'] = qty;
+      }
+      if (lineType == 'single' || lineType == 'ready_blend') {
+        final grams = _d(line['grams']);
+        if (grams > 0) merged['grams'] = grams;
+      }
+
+      out.add(merged);
+    }
+  }
+  return out;
+}
+
+List<Map<String, dynamic>> _prepareStatsData(List<Map<String, dynamic>> data) {
+  return _expandCartSales(data);
+}
+
 DateTime _asUtc(dynamic v) {
   if (v is DateTime) return v.toUtc();
   try {
@@ -143,6 +413,11 @@ DateTime _asUtc(dynamic v) {
       if (dt is DateTime) return dt.toUtc();
     }
   } catch (_) {}
+  if (v is num) {
+    final raw = v.toInt();
+    final ms = raw < 10000000000 ? raw * 1000 : raw;
+    return DateTime.fromMillisecondsSinceEpoch(ms, isUtc: true);
+  }
   if (v is String) {
     return DateTime.tryParse(v)?.toUtc() ??
         DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
@@ -205,7 +480,8 @@ final statsSalesProvider = FutureProvider<List<Map<String, dynamic>>>((
   final period = ref.watch(statsSelectedPeriodProvider);
 
   // OO3O-O" OU,O'U?O? U?U,U? U.O?U`Oc U^OO-O_Oc
-  final rawMonth = await ref.watch(salesRawForMonthProvider(month).future);
+  final rawMonth =
+      _prepareStatsData(await ref.watch(salesRawForMonthProvider(month).future));
 
   // U?U,O?O? O"OU,U.O_U% OU,U.O-O3U^O" (4O? ?+' 4O?)
   final r = statsComputeRange(month, period);
@@ -237,7 +513,9 @@ final statsThirdsPreviewProvider =
       ref,
     ) async {
       final month = ref.watch(statsForMonthProvider);
-      final rawMonth = await ref.watch(salesRawForMonthProvider(month).future);
+      final rawMonth = _prepareStatsData(
+        await ref.watch(salesRawForMonthProvider(month).future),
+      );
 
       Kpis kpisForRange(DateTime start, DateTime end) {
         return _buildKpis(rawMonth, const [], startUtc: start, endUtc: end);
@@ -351,7 +629,8 @@ List<GroupRow> _buildExtrasRows(
     final isExtra = type == 'extra' || m.containsKey('extra_id');
     if (!isExtra) continue;
 
-    final name = ('${m['name'] ?? m['extra_name'] ?? 'O3U+OU?O3'}').trim();
+    final name =
+        ('${m['name'] ?? m['extra_name'] ?? AppStrings.noNameLabel}').trim();
     final variant = ('${m['variant'] ?? ''}').trim();
     final key = variant.isEmpty ? name : '$name - $variant';
 
@@ -622,15 +901,29 @@ List<GroupRow> _buildBeansRows(
     String name = (c['name'] ?? c['item_name'] ?? c['product_name'] ?? '')
         .toString();
     String variant = (c['variant'] ?? c['roast'] ?? '').toString();
-    double grams = (c['grams'] is num)
-        ? (c['grams'] as num).toDouble()
-        : _d(c['grams']);
-    double linePrice = (c['line_total_price'] is num)
-        ? (c['line_total_price'] as num).toDouble()
-        : _d(c['line_total_price']);
-    double lineCost = (c['line_total_cost'] is num)
-        ? (c['line_total_cost'] as num).toDouble()
-        : _d(c['line_total_cost']);
+    double grams = _pickNum(c, ['grams', 'weight', 'gram', 'total_grams']);
+    double linePrice = _pickNum(
+      c,
+      [
+        'line_total_price',
+        'total_price',
+        'price',
+        'line_price',
+        'amount',
+        'total',
+        'subtotal',
+      ],
+    );
+    double lineCost = _pickNum(
+      c,
+      [
+        'line_total_cost',
+        'total_cost',
+        'cost',
+        'line_cost',
+        'cost_amount',
+      ],
+    );
     final isSpiced = (c['is_spiced'] ?? fallbackSpiced) == true;
     return {
       'name': name.trim(),

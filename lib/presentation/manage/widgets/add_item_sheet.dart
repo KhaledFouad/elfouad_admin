@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:elfouad_admin/core/app_strings.dart';
 
 enum NewItemType { single, blend, drink, extra }
 
@@ -75,7 +76,7 @@ class _AddItemSheetState extends State<AddItemSheet> {
               ),
             ),
             const Text(
-              'إضافة عنصر جديد',
+              AppStrings.addNewItemTitle,
               style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
             ),
             const SizedBox(height: 10),
@@ -83,10 +84,22 @@ class _AddItemSheetState extends State<AddItemSheet> {
             // تبويب الأنواع
             SegmentedButton<NewItemType>(
               segments: const [
-                ButtonSegment(value: NewItemType.single, label: Text('منفرد')),
-                ButtonSegment(value: NewItemType.blend, label: Text('توليفة')),
-                ButtonSegment(value: NewItemType.drink, label: Text('مشروب')),
-                ButtonSegment(value: NewItemType.extra, label: Text('سناكس')),
+                ButtonSegment(
+                  value: NewItemType.single,
+                  label: Text(AppStrings.singleSegmentLabel),
+                ),
+                ButtonSegment(
+                  value: NewItemType.blend,
+                  label: Text(AppStrings.blendLabel),
+                ),
+                ButtonSegment(
+                  value: NewItemType.drink,
+                  label: Text(AppStrings.drinkLabel),
+                ),
+                ButtonSegment(
+                  value: NewItemType.extra,
+                  label: Text(AppStrings.snacksLabel),
+                ),
               ],
               selected: {_t},
               onSelectionChanged: (s) => setState(() => _t = s.first),
@@ -94,32 +107,36 @@ class _AddItemSheetState extends State<AddItemSheet> {
             const SizedBox(height: 10),
 
             // 🟤 كيبورد نصي لاسم/تحميص
-            _tf(_name, 'الاسم', TextInputType.text),
+            _tf(_name, AppStrings.nameLabel, TextInputType.text),
             const SizedBox(height: 8),
             if (_t == NewItemType.extra) ...[
-              _tf(_category, 'التصنيف (اختياري)', TextInputType.text),
+              _tf(
+                _category,
+                AppStrings.categoryOptionalLabel,
+                TextInputType.text,
+              ),
               const SizedBox(height: 8),
-              _tf(_extraUnit, 'الوحدة (مثال: piece)', TextInputType.text),
+              _tf(_extraUnit, AppStrings.unitExampleLabel, TextInputType.text),
             ] else ...[
-              _tf(_variant, 'درجة التحميص (اختياري)', TextInputType.text),
+              _tf(_variant, AppStrings.roastOptionalLabel, TextInputType.text),
               const SizedBox(height: 8),
             ],
             if (_t == NewItemType.extra) ...[
               _tf(
                 _stock,
-                'المخزون (وحدات)',
+                AppStrings.stockUnitsLabel,
                 const TextInputType.numberWithOptions(decimal: true),
               ),
               const SizedBox(height: 8),
               _tf(
                 _extraPrice,
-                'سعر البيع للوحدة',
+                AppStrings.sellPricePerUnitLabel,
                 const TextInputType.numberWithOptions(decimal: true),
               ),
               const SizedBox(height: 8),
               _tf(
                 _extraCost,
-                'التكلفة للوحدة',
+                AppStrings.costPerUnitShortLabel,
                 const TextInputType.numberWithOptions(decimal: true),
               ),
               const SizedBox(height: 8),
@@ -128,7 +145,7 @@ class _AddItemSheetState extends State<AddItemSheet> {
                 child: SwitchListTile.adaptive(
                   value: _extraActive,
                   onChanged: (v) => setState(() => _extraActive = v),
-                  title: const Text('مفعل؟'),
+                  title: const Text(AppStrings.activeQuestionLabel),
                   contentPadding: EdgeInsets.zero,
                   dense: true,
                 ),
@@ -137,31 +154,31 @@ class _AddItemSheetState extends State<AddItemSheet> {
             ] else if (_t != NewItemType.drink) ...[
               _tf(
                 _stock,
-                'المخزون (جرامات)',
+                AppStrings.stockGramsLabel,
                 const TextInputType.numberWithOptions(decimal: false),
               ),
               const SizedBox(height: 8),
               _tf(
                 _sellPerKg,
-                'السعر/كجم',
+                AppStrings.pricePerKgLabelDefinite,
                 const TextInputType.numberWithOptions(decimal: true),
               ),
               const SizedBox(height: 8),
               _tf(
                 _costPerKg,
-                'التكلفة/كجم',
+                AppStrings.costPerKgLabel,
                 const TextInputType.numberWithOptions(decimal: true),
               ), // ✅
             ] else ...[
               _tf(
                 _sellCup,
-                'سعر الكوب',
+                AppStrings.cupPriceLabel,
                 const TextInputType.numberWithOptions(decimal: true),
               ),
               const SizedBox(height: 8),
               _tf(
                 _costCup,
-                'تكلفة الكوب',
+                AppStrings.cupCostLabel,
                 const TextInputType.numberWithOptions(decimal: true),
               ), // ✅
             ],
@@ -171,7 +188,7 @@ class _AddItemSheetState extends State<AddItemSheet> {
                 Expanded(
                   child: OutlinedButton(
                     onPressed: _busy ? null : () => Navigator.pop(context),
-                    child: const Text('إلغاء'),
+                    child: const Text(AppStrings.actionCancel),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -185,7 +202,7 @@ class _AddItemSheetState extends State<AddItemSheet> {
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.save),
-                    label: const Text('حفظ'),
+                    label: const Text(AppStrings.actionSave),
                   ),
                 ),
               ],
@@ -261,7 +278,7 @@ class _AddItemSheetState extends State<AddItemSheet> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('تعذر الحفظ: $e')));
+      ).showSnackBar(SnackBar(content: Text(AppStrings.saveFailed(e))));
     } finally {
       if (mounted) setState(() => _busy = false);
     }

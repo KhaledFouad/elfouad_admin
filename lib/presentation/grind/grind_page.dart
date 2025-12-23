@@ -1,4 +1,5 @@
 import 'package:awesome_drawer_bar/awesome_drawer_bar.dart';
+import 'package:elfouad_admin/core/app_strings.dart';
 import 'package:elfouad_admin/presentation/grind/state/grind_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -37,7 +38,7 @@ class GrindPage extends ConsumerWidget {
                 onPressed: () => AwesomeDrawerBar.of(context)?.toggle(),
               ),
               title: const Text(
-                "المصروفات",
+                AppStrings.expensesTitle,
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
                   fontSize: 35,
@@ -73,7 +74,7 @@ class GrindPage extends ConsumerWidget {
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
               child: TextField(
                 decoration: InputDecoration(
-                  hintText: 'ابحث باسم الصنف أو درجة التحميص…',
+                  hintText: AppStrings.grindSearchHint,
                   prefixIcon: const Icon(Icons.search),
                   isDense: true,
                   filled: true,
@@ -91,11 +92,11 @@ class GrindPage extends ConsumerWidget {
 
             Expanded(
               child: filtered.isEmpty
-                  ? const Center(child: Text('لا توجد عناصر'))
+                  ? const Center(child: Text(AppStrings.noItems))
                   : ListView.separated(
                       padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
                       itemCount: filtered.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      separatorBuilder: (_, _) => const SizedBox(height: 8),
                       itemBuilder: (_, i) => _ItemCard(row: filtered[i]),
                     ),
             ),
@@ -141,6 +142,7 @@ class _ItemCard extends StatelessWidget {
           ),
           builder: (_) => GrindConfirmSheet(row: row),
         ).whenComplete(() {
+          if (!root.mounted) return;
           // ⬅️ برضه لما الشيت يتقفل، اقفل أي focus عشان الكيبورد مايرجعش
           FocusScope.of(root).unfocus();
         });
@@ -164,7 +166,9 @@ class _ItemCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(
-                row.coll == 'blends' ? 'توليفة' : 'مفردة',
+                row.coll == 'blends'
+                    ? AppStrings.blendLabel
+                    : AppStrings.singleLabel,
                 style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w800,
@@ -196,7 +200,7 @@ class _ItemCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'المتاح: ${row.stockG.toStringAsFixed(0)} جم',
+                    AppStrings.availableGrams(row.stockG),
                     style: const TextStyle(color: Colors.black54, fontSize: 12),
                   ),
                 ],

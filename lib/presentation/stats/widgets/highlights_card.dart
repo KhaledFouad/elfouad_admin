@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:elfouad_admin/core/app_strings.dart';
 
 import '../state/stats_data_provider.dart';
 
@@ -49,12 +50,12 @@ class StatsHighlightsCard extends StatelessWidget {
     if (topSales != null) {
       final subtitleParts = <String>[_formatDay(topSales.day)];
       if (topSales.orders > 0) {
-        subtitleParts.add('${topSales.orders} عملية');
+        subtitleParts.add(AppStrings.operationsCount(topSales.orders));
       }
       tiles.add(
         _buildTile(
           icon: Icons.bar_chart,
-          title: 'أعلى مبيعات يومية',
+          title: AppStrings.topDailySalesTitle,
           value: _formatCurrency(topSales.sales),
           subtitle: subtitleParts.join(' • '),
         ),
@@ -65,12 +66,12 @@ class StatsHighlightsCard extends StatelessWidget {
     if (topProfit != null) {
       final subtitleParts = <String>[_formatDay(topProfit.day)];
       if (topProfit.orders > 0) {
-        subtitleParts.add('${topProfit.orders} عملية');
+        subtitleParts.add(AppStrings.operationsCount(topProfit.orders));
       }
       tiles.add(
         _buildTile(
           icon: Icons.trending_up,
-          title: 'أعلى ربح يومي',
+          title: AppStrings.topDailyProfitTitle,
           value: _formatCurrency(topProfit.profit),
           subtitle: subtitleParts.join(' • '),
         ),
@@ -82,8 +83,8 @@ class StatsHighlightsCard extends StatelessWidget {
       tiles.add(
         _buildTile(
           icon: Icons.local_cafe,
-          title: 'أكثر يوم ازدحامًا',
-          value: '${busiest.servings} وحدة',
+          title: AppStrings.busiestDayTitle,
+          value: AppStrings.unitsCount(busiest.servings),
           subtitle: _formatDay(busiest.day),
         ),
       );
@@ -92,10 +93,10 @@ class StatsHighlightsCard extends StatelessWidget {
     tiles.add(
       _buildTile(
         icon: Icons.calendar_month,
-        title: 'متوسط المبيعات اليومية',
+        title: AppStrings.averageDailySalesTitle,
         value: _formatCurrency(highlights.averageDailySales),
         subtitle: highlights.activeDays > 0
-            ? 'على مدى ${highlights.activeDays} يومًا نشطًا'
+            ? AppStrings.activeDaysSubtitle(highlights.activeDays)
             : null,
       ),
     );
@@ -103,7 +104,7 @@ class StatsHighlightsCard extends StatelessWidget {
     tiles.add(
       _buildTile(
         icon: Icons.coffee_outlined,
-        title: 'متوسط المشروبات/اليوم',
+        title: AppStrings.averageDrinksPerDayTitle,
         value: _formatNumber(highlights.averageDrinksPerDay, decimals: 1),
       ),
     );
@@ -111,7 +112,7 @@ class StatsHighlightsCard extends StatelessWidget {
     tiles.add(
       _buildTile(
         icon: Icons.cookie_outlined,
-        title: 'متوسط السناكس/اليوم',
+        title: AppStrings.averageSnacksPerDayTitle,
         value: _formatNumber(highlights.averageSnacksPerDay, decimals: 1),
       ),
     );
@@ -119,10 +120,10 @@ class StatsHighlightsCard extends StatelessWidget {
     tiles.add(
       _buildTile(
         icon: Icons.point_of_sale,
-        title: 'متوسط العمليات/اليوم',
+        title: AppStrings.averageOrdersPerDayTitle,
         value: _formatNumber(highlights.averageOrdersPerDay, decimals: 1),
         subtitle: highlights.totalOrders > 0
-            ? '${highlights.totalOrders} عملية مدفوعة'
+            ? AppStrings.paidOrdersSubtitle(highlights.totalOrders)
             : null,
       ),
     );

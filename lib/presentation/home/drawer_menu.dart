@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:elfouad_admin/core/app_strings.dart';
 import 'nav_state.dart';
 
 class SideMenu extends ConsumerWidget {
@@ -29,43 +30,43 @@ class SideMenu extends ConsumerWidget {
               const SizedBox(height: 12),
               _MenuItem(
                 icon: Icons.receipt_long,
-                label: 'السجل',
+                label: AppStrings.tabHistory,
                 selected: selected == AppTab.history,
                 onTap: () => _go(context, ref, AppTab.history),
               ),
               _MenuItem(
                 icon: Icons.stacked_line_chart,
-                label: 'الإحصائيات',
+                label: AppStrings.tabStats,
                 selected: selected == AppTab.stats,
                 onTap: () => _go(context, ref, AppTab.stats),
               ),
               _MenuItem(
                 icon: Icons.inventory_2_outlined,
-                label: 'المخزون',
+                label: AppStrings.tabInventory,
                 selected: selected == AppTab.inventory,
                 onTap: () => _go(context, ref, AppTab.inventory),
               ),
               _MenuItem(
                 icon: Icons.edit_note_outlined,
-                label: 'التعديلات',
+                label: AppStrings.tabEdits,
                 selected: selected == AppTab.edits,
                 onTap: () => _go(context, ref, AppTab.edits),
               ),
               _MenuItem(
                 icon: Icons.edit_note_outlined,
-                label: 'تحضير التوليفات',
+                label: AppStrings.tabRecipes,
                 selected: selected == AppTab.recipes,
                 onTap: () => _go(context, ref, AppTab.recipes),
               ),
               _MenuItem(
                 icon: Icons.account_balance_wallet_outlined,
-                label: 'المصروفات',
+                label: AppStrings.tabExpenses,
                 selected: selected == AppTab.expenses,
                 onTap: () => _go(context, ref, AppTab.expenses),
               ),
               _MenuItem(
                 icon: Icons.coffee_outlined,
-                label: 'الطحن',
+                label: AppStrings.tabGrind,
                 selected: selected == AppTab.grind,
                 onTap: () => _go(context, ref, AppTab.grind),
               ),
@@ -74,7 +75,7 @@ class SideMenu extends ConsumerWidget {
               ListTile(
                 leading: const Icon(Icons.close, color: Colors.white),
                 title: const Text(
-                  'إغلاق',
+                  AppStrings.drawerClose,
                   style: TextStyle(color: Colors.white),
                 ),
                 onTap: () => toggleDrawerFromContext(context),
@@ -105,7 +106,7 @@ class _Header extends StatelessWidget {
         child: Icon(Icons.coffee, color: Colors.white),
       ),
       title: const Text(
-        'لوحة إدارة بن الفؤاد',
+        AppStrings.drawerTitle,
         style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
       ),
     );
@@ -127,7 +128,7 @@ class _MenuItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = selected ? Colors.white.withOpacity(.15) : Colors.transparent;
+    final bg = selected ? Colors.white.withAlpha(38) : Colors.transparent;
     final fg = Colors.white;
 
     return Padding(

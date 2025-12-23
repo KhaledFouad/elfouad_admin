@@ -8,10 +8,15 @@ class SaleMapper {
     DateTime createdAt;
     if (ts is Timestamp) {
       createdAt = ts.toDate().toUtc();
-    } else if (ts is String)
+    } else if (ts is String) {
       createdAt = DateTime.parse(ts).toUtc();
-    else
+    } else if (ts is num) {
+      final raw = ts.toInt();
+      final ms = raw < 10000000000 ? raw * 1000 : raw;
+      createdAt = DateTime.fromMillisecondsSinceEpoch(ms, isUtc: true);
+    } else {
       createdAt = DateTime.now().toUtc();
+    }
     double toDoubleValue(dynamic v) =>
         (v is num) ? v.toDouble() : double.tryParse('${v ?? 0}') ?? 0.0;
     return Sale(

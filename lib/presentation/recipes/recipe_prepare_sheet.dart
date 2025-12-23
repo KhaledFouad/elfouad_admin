@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:elfouad_admin/core/app_strings.dart';
 import 'recipes_component.dart';
 
 class RecipePrepareSheet extends StatefulWidget {
@@ -36,7 +37,7 @@ class _RecipePrepareSheetState extends State<RecipePrepareSheet> {
         .get();
 
     if (!snap.exists) {
-      throw 'لم يتم العثور على التوليفة';
+      throw AppStrings.recipeNotFoundMessage;
     }
     final m = snap.data() ?? {};
     _name = (m['name'] ?? '').toString();
@@ -49,7 +50,7 @@ class _RecipePrepareSheetState extends State<RecipePrepareSheet> {
         .toList();
 
     if (_comps.isEmpty) {
-      throw 'لا توجد مكونات في هذه التوليفة';
+      throw AppStrings.recipeNoComponents;
     }
   }
 
@@ -100,23 +101,22 @@ class _RecipePrepareSheetState extends State<RecipePrepareSheet> {
         // موجودة: هنزوّد مخزونها
         destBlendRef = blendsQuery.docs.first.reference;
       } else {
+        if (!context.mounted) return;
         final ok = await showDialog<bool>(
           context: context,
           builder: (_) => AlertDialog(
-            title: const Text('إنشاء توليفة جديدة؟'),
+            title: const Text(AppStrings.createBlendTitle),
             content: Text(
-              'لا توجد توليفة جاهزة باسم "$_name" وتحميص "$_variant".\n'
-              'سيتم إنشاء توليفة جديدة وإضافة ${totalKg.toStringAsFixed(2)} كجم إلى مخزونها.\n'
-              'هل تريد المتابعة؟',
+              AppStrings.createBlendContent(_name, _variant, totalKg),
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context, false),
-                child: const Text('إلغاء'),
+                child: const Text(AppStrings.actionCancel),
               ),
               FilledButton(
                 onPressed: () => Navigator.pop(context, true),
-                child: const Text('إنشاء'),
+                child: const Text(AppStrings.actionCreate),
               ),
             ],
           ),
@@ -153,7 +153,7 @@ class _RecipePrepareSheetState extends State<RecipePrepareSheet> {
               .doc(c.itemId);
 
           final snap = await tx.get(ref);
-          if (!snap.exists) throw 'مكوّن غير موجود: ${c.name}';
+          if (!snap.exists) throw AppStrings.componentNotFound(c.name);
           final m = snap.data() ?? {};
           final currentStock = _numOf(m, [
             'stock',
@@ -163,8 +163,11 @@ class _RecipePrepareSheetState extends State<RecipePrepareSheet> {
           ]);
 
           if (currentStock - grams < -0.0001) {
-            throw 'مخزون غير كافٍ في "${c.name}${c.variant.isEmpty ? '' : ' — ${c.variant}'}": '
-                'متاح ${currentStock.toStringAsFixed(0)} جم';
+            throw AppStrings.insufficientStockForComponent(
+              c.name,
+              c.variant,
+              currentStock,
+            );
           }
           newStocks[ref] = currentStock - grams; // احفظ الرصيد الجديد
         }
@@ -211,7 +214,7 @@ class _RecipePrepareSheetState extends State<RecipePrepareSheet> {
       });
 
       if (!mounted) return;
-      _doneMsg = 'تم تحضير $_name — ${totalKg.toStringAsFixed(2)} كجم';
+      _doneMsg = AppStrings.recipePreparedMessage(_name, totalKg);
       _done = true;
       ScaffoldMessenger.of(
         context,
@@ -220,7 +223,7 @@ class _RecipePrepareSheetState extends State<RecipePrepareSheet> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('فشل التحضير: $e')));
+      ).showSnackBar(SnackBar(content: Text(AppStrings.prepareFailedAlt(e))));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -245,7 +248,7 @@ class _RecipePrepareSheetState extends State<RecipePrepareSheet> {
             if (s.hasError) {
               return SizedBox(
                 height: 160,
-                child: Center(child: Text('تعذر التحميل: ${s.error}')),
+                child: Center(child: Text(AppStrings.loadFailedSimple(s.error!))),
               );
             }
 
@@ -257,7 +260,7 @@ class _RecipePrepareSheetState extends State<RecipePrepareSheet> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  'تحضير: $_name',
+                  AppStrings.prepareTitle(_name),
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(height: 10),
@@ -291,7 +294,7 @@ class _RecipePrepareSheetState extends State<RecipePrepareSheet> {
                           decimal: true,
                         ),
                         decoration: const InputDecoration(
-                          labelText: 'الكمية (كجم)',
+                          labelText: AppStrings.kgAmountShortLabel,
                           isDense: true,
                           border: OutlineInputBorder(),
                         ),
@@ -311,7 +314,7 @@ class _RecipePrepareSheetState extends State<RecipePrepareSheet> {
                         borderRadius: BorderRadius.circular(10),
                         color: Colors.brown.shade50,
                       ),
-                      child: Text('جم: ${gramsTotal.toStringAsFixed(0)}'),
+                      child: Text(AppStrings.gramsInlineLabel(gramsTotal)),
                     ),
                   ],
                 ),
@@ -319,14 +322,14 @@ class _RecipePrepareSheetState extends State<RecipePrepareSheet> {
 
                 Container(
                   decoration: BoxDecoration(
-                    color: Colors.brown.shade50.withOpacity(.5),
+                    color: Colors.brown.shade50.withAlpha(128),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('المكونات:'),
+                      const Text(AppStrings.componentsLabel),
                       const SizedBox(height: 6),
                       ..._comps.map((c) {
                         final grams = ((kg * 1000) * (c.percent / 100)).round();
@@ -336,8 +339,12 @@ class _RecipePrepareSheetState extends State<RecipePrepareSheet> {
                             const Text('•  '),
                             Expanded(
                               child: Text(
-                                '${c.name}${c.variant.isEmpty ? '' : ' — ${c.variant}'}  '
-                                '(${c.percent.toStringAsFixed(1)}%)  ≈ $grams جم',
+                                AppStrings.componentPercentLine(
+                                  c.name,
+                                  c.variant,
+                                  c.percent,
+                                  grams,
+                                ),
                               ),
                             ),
                           ],
@@ -353,7 +360,7 @@ class _RecipePrepareSheetState extends State<RecipePrepareSheet> {
                     Expanded(
                       child: OutlinedButton(
                         onPressed: _busy ? null : () => Navigator.pop(context),
-                        child: const Text('إغلاق'),
+                        child: const Text(AppStrings.actionClose),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -370,7 +377,9 @@ class _RecipePrepareSheetState extends State<RecipePrepareSheet> {
                               )
                             : const Icon(Icons.scale_outlined),
                         label: Text(
-                          _done ? 'تحضير دفعة أخرى' : 'تحضير التوليفة',
+                          _done
+                              ? AppStrings.prepareAnotherBatch
+                              : AppStrings.prepareBlendLabel,
                         ),
                       ),
                     ),

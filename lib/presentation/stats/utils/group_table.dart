@@ -1,5 +1,6 @@
 import 'package:elfouad_admin/presentation/stats/utils/group_row.dart';
 import 'package:flutter/material.dart';
+import 'package:elfouad_admin/core/app_strings.dart';
 
 class GroupTable extends StatelessWidget {
   final String title;
@@ -16,7 +17,7 @@ class GroupTable extends StatelessWidget {
         child: rows.isEmpty
             ? const SizedBox(
                 height: 100,
-                child: Center(child: Text('لا توجد بيانات لهذا القسم')),
+                child: Center(child: Text(AppStrings.noDataForSection)),
               )
             : Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -39,12 +40,12 @@ class GroupTable extends StatelessWidget {
                       dataRowMinHeight: 36,
                       dataRowMaxHeight: 48,
                       columns: const [
-                        DataColumn(label: Text('الفئة')),
-                        DataColumn(label: Text('الكمية')),
-                        DataColumn(label: Text('المبيعات')),
-                        DataColumn(label: Text('التكلفة')),
-                        DataColumn(label: Text('الربح')),
-                        DataColumn(label: Text('المتوسط')),
+                        DataColumn(label: Text(AppStrings.groupCategoryLabel)),
+                        DataColumn(label: Text(AppStrings.quantityLabelShort)),
+                        DataColumn(label: Text(AppStrings.salesLabelDefinite)),
+                        DataColumn(label: Text(AppStrings.costLabelDefinite)),
+                        DataColumn(label: Text(AppStrings.profitLabelDefinite)),
+                        DataColumn(label: Text(AppStrings.averageLabel)),
                       ],
                       rows: rows.map((r) {
                         return DataRow(
@@ -65,7 +66,7 @@ class GroupTable extends StatelessWidget {
                             DataCell(
                               Text(
                                 '${r.avg.toStringAsFixed(2)}'
-                                '${r.metric == GroupMetric.grams ? ' /كجم' : ' /كوب'}',
+                                '${r.metric == GroupMetric.grams ? AppStrings.avgPerKgSuffix : AppStrings.avgPerCupSuffix}',
                               ),
                             ),
                           ],

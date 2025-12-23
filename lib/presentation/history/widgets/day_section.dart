@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:elfouad_admin/core/app_strings.dart';
 import 'sale_tile.dart';
 
 class DaySection extends StatelessWidget {
@@ -56,18 +57,18 @@ class DaySection extends StatelessWidget {
                 children: [
                   _pill(
                     Icons.receipt_long,
-                    'عدد العمليات',
+                    AppStrings.operationsCountLabel,
                     saleCount,
-                    suffix: 'عملية',
+                    suffix: AppStrings.operationSuffix,
                     decimals: 0,
                   ),
-                  _pill(Icons.attach_money, 'مبيعات', sumPrice),
-                  _pill(Icons.factory, 'تكلفة', sumCost),
-                  _pill(Icons.trending_up, 'ربح', sumProfit),
-                  _pill(Icons.local_cafe, 'مشروبات', cups),
-                  _pill(Icons.scale, 'جرام بن', grams),
+                  _pill(Icons.attach_money, AppStrings.salesLabel, sumPrice),
+                  _pill(Icons.factory, AppStrings.costLabel, sumCost),
+                  _pill(Icons.trending_up, AppStrings.profitLabel, sumProfit),
+                  _pill(Icons.local_cafe, AppStrings.drinksLabel, cups),
+                  _pill(Icons.scale, AppStrings.gramsCoffeeLabel, grams),
                   if (extrasPieces > 0)
-                    _pill(Icons.cookie_outlined, 'سناكس', extrasPieces),
+                    _pill(Icons.cookie_outlined, AppStrings.snacksLabel, extrasPieces),
                 ],
               ),
               const Divider(height: 18),
@@ -92,12 +93,13 @@ class DaySection extends StatelessWidget {
     String? suffix,
     int? decimals,
   }) {
-    final isGrams = label.contains('جرام') || label.contains('جم');
+    final isGrams = label.contains(AppStrings.gramsKeyword) ||
+        label.contains(AppStrings.gramsShortKeyword);
     final isPieces =
-        label.contains('معمول') ||
-        label.contains('تمر') ||
-        label.contains('سناكس') ||
-        label.contains('عدد');
+        label.contains(AppStrings.maamoulKeyword) ||
+        label.contains(AppStrings.datesKeyword) ||
+        label.contains(AppStrings.snacksLabel) ||
+        label.contains(AppStrings.countKeyword);
     final fraction =
         decimals ?? ((isGrams || isPieces || v is int) ? 0 : 2);
     final valueText = v.toStringAsFixed(fraction);

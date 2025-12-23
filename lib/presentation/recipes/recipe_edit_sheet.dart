@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:elfouad_admin/core/app_strings.dart';
 import 'package:elfouad_admin/presentation/recipes/recipes_component.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -67,7 +68,7 @@ class _RecipeEditSheetState extends ConsumerState<RecipeEditSheet> {
     if (_busy) return;
     if (!_validToSave) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('أكمل البيانات: الاسم + التحميص + 100%')),
+        const SnackBar(content: Text(AppStrings.recipeCompletePrompt)),
       );
       return;
     }
@@ -94,15 +95,15 @@ class _RecipeEditSheetState extends ConsumerState<RecipeEditSheet> {
       Navigator.pop(context);
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('تم حفظ التوليفة')));
+      ).showSnackBar(const SnackBar(content: Text(AppStrings.recipeSaved)));
     } on FirebaseException catch (e) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('تعذر الحفظ: ${e.message}')));
+      ).showSnackBar(SnackBar(content: Text(AppStrings.saveFailed(e.message ?? e))));
     } catch (e) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('تعذر الحفظ: $e')));
+      ).showSnackBar(SnackBar(content: Text(AppStrings.saveFailed(e))));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -117,7 +118,9 @@ class _RecipeEditSheetState extends ConsumerState<RecipeEditSheet> {
       builder: (_) {
         final search = TextEditingController();
         return AlertDialog(
-          title: Text(coll == 'singles' ? 'اختر صنف منفرد' : 'اختر توليفة'),
+          title: Text(
+            coll == 'singles' ? AppStrings.pickSingleItem : AppStrings.pickBlend,
+          ),
           content: SizedBox(
             width: 460,
             height: 520,
@@ -126,7 +129,7 @@ class _RecipeEditSheetState extends ConsumerState<RecipeEditSheet> {
                 TextField(
                   controller: search,
                   decoration: const InputDecoration(
-                    hintText: 'بحث بالاسم/الفاريانت',
+                    hintText: AppStrings.searchByNameVariant,
                     prefixIcon: Icon(Icons.search),
                     isDense: true,
                     border: OutlineInputBorder(),
@@ -138,7 +141,8 @@ class _RecipeEditSheetState extends ConsumerState<RecipeEditSheet> {
                   child: source.when(
                     loading: () =>
                         const Center(child: CircularProgressIndicator()),
-                    error: (e, _) => Center(child: Text('تعذر التحميل: $e')),
+                    error: (e, _) =>
+                        Center(child: Text(AppStrings.loadFailedSimple(e))),
                     data: (rows) {
                       final q = search.text.trim().toLowerCase();
                       final filtered = q.isEmpty
@@ -148,7 +152,7 @@ class _RecipeEditSheetState extends ConsumerState<RecipeEditSheet> {
                               return t.contains(q);
                             }).toList();
                       if (filtered.isEmpty) {
-                        return const Center(child: Text('لا نتائج'));
+                        return const Center(child: Text(AppStrings.noResults));
                       }
                       return ListView.builder(
                         itemCount: filtered.length,
@@ -164,9 +168,9 @@ class _RecipeEditSheetState extends ConsumerState<RecipeEditSheet> {
                             subtitle: Wrap(
                               spacing: 8,
                               children: [
-                                Text('مخزون: ${r.stockG.toStringAsFixed(0)}جم'),
+                                Text(AppStrings.stockGramsInline(r.stockG)),
                                 Text(
-                                  'سعر/كجم: ${r.sellPerKg.toStringAsFixed(2)}',
+                                  AppStrings.pricePerKgInline(r.sellPerKg),
                                 ),
                               ],
                             ),
@@ -183,7 +187,7 @@ class _RecipeEditSheetState extends ConsumerState<RecipeEditSheet> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('إلغاء'),
+              child: const Text(AppStrings.actionCancel),
             ),
           ],
         );
@@ -230,7 +234,9 @@ class _RecipeEditSheetState extends ConsumerState<RecipeEditSheet> {
             ),
           ),
           Text(
-            widget.recipeId == null ? 'توليفة جديدة' : 'تعديل توليفة',
+            widget.recipeId == null
+                ? AppStrings.newRecipeTitle
+                : AppStrings.editRecipeTitle,
             style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
           ),
           const SizedBox(height: 12),
@@ -243,7 +249,7 @@ class _RecipeEditSheetState extends ConsumerState<RecipeEditSheet> {
                   controller: _name,
                   textAlign: TextAlign.center,
                   decoration: const InputDecoration(
-                    labelText: 'اسم التوليفة',
+                    labelText: AppStrings.recipeNameLabel,
                     border: OutlineInputBorder(),
                     isDense: true,
                   ),
@@ -257,8 +263,8 @@ class _RecipeEditSheetState extends ConsumerState<RecipeEditSheet> {
                   controller: _variant,
                   textAlign: TextAlign.center,
                   decoration: const InputDecoration(
-                    labelText: 'التحميص',
-                    hintText: 'مثال: وسط',
+                    labelText: AppStrings.roastLabel,
+                    hintText: AppStrings.roastExampleHint,
                     border: OutlineInputBorder(),
                     isDense: true,
                   ),
@@ -274,7 +280,7 @@ class _RecipeEditSheetState extends ConsumerState<RecipeEditSheet> {
               Expanded(
                 child: OutlinedButton.icon(
                   icon: const Icon(Icons.add),
-                  label: const Text('إضافة صنف منفرد'),
+                  label: const Text(AppStrings.addSingleItem),
                   onPressed: () => _pickItem(coll: 'singles', source: singles),
                 ),
               ),
@@ -282,7 +288,7 @@ class _RecipeEditSheetState extends ConsumerState<RecipeEditSheet> {
               Expanded(
                 child: OutlinedButton.icon(
                   icon: const Icon(Icons.add),
-                  label: const Text('إضافة توليفة جاهزة'),
+                  label: const Text(AppStrings.addReadyBlend),
                   onPressed: () => _pickItem(coll: 'blends', source: blends),
                 ),
               ),
@@ -303,7 +309,7 @@ class _RecipeEditSheetState extends ConsumerState<RecipeEditSheet> {
                 const Icon(Icons.percent),
                 const SizedBox(width: 8),
                 Text(
-                  'المجموع: $_sumPercentInt%   •   المتبقي: $_remainingInt%',
+                  AppStrings.percentSummary(_sumPercentInt, _remainingInt),
                   style: TextStyle(
                     fontWeight: FontWeight.w800,
                     color: (_sumPercentInt == 100) ? Colors.green : Colors.red,
@@ -318,7 +324,7 @@ class _RecipeEditSheetState extends ConsumerState<RecipeEditSheet> {
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 14),
               child: Text(
-                'أضف مكونات للتوليفة',
+                AppStrings.addComponentsPrompt,
                 style: TextStyle(color: Colors.brown.shade300),
               ),
             ),
@@ -381,7 +387,7 @@ class _RecipeEditSheetState extends ConsumerState<RecipeEditSheet> {
                           ),
                           IconButton(
                             icon: const Icon(Icons.delete_outline),
-                            tooltip: 'حذف',
+                            tooltip: AppStrings.actionDelete,
                             onPressed: () => setState(() => _comps.removeAt(i)),
                           ),
                         ],
@@ -436,7 +442,7 @@ class _RecipeEditSheetState extends ConsumerState<RecipeEditSheet> {
               Expanded(
                 child: OutlinedButton(
                   onPressed: _busy ? null : () => Navigator.pop(context),
-                  child: const Text('إلغاء'),
+                  child: const Text(AppStrings.actionCancel),
                 ),
               ),
               const SizedBox(width: 8),
@@ -450,7 +456,7 @@ class _RecipeEditSheetState extends ConsumerState<RecipeEditSheet> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.save),
-                  label: const Text('حفظ'),
+                  label: const Text(AppStrings.actionSave),
                 ),
               ),
             ],

@@ -1,6 +1,7 @@
 import 'package:awesome_drawer_bar/awesome_drawer_bar.dart'
     show AwesomeDrawerBar;
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:elfouad_admin/core/app_strings.dart';
 import 'package:flutter/material.dart';
 
 import 'recipe_edit_sheet.dart';
@@ -64,16 +65,16 @@ class _RecipesListPageState extends State<RecipesListPage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('حذف التوليفة'),
-        content: Text('هل تريد حذف "$displayName"؟ لا يمكن التراجع.'),
+        title: const Text(AppStrings.deleteRecipeTitle),
+        content: Text(AppStrings.deleteRecipeConfirm(displayName)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('إلغاء'),
+            child: const Text(AppStrings.actionCancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('حذف'),
+            child: const Text(AppStrings.actionDelete),
           ),
         ],
       ),
@@ -84,7 +85,7 @@ class _RecipesListPageState extends State<RecipesListPage> {
     if (!mounted) return;
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(SnackBar(content: Text('تم حذف "$displayName"')));
+    ).showSnackBar(SnackBar(content: Text(AppStrings.recipeDeleted(displayName))));
   }
 
   void _openEdit([String? recipeId]) {
@@ -132,7 +133,7 @@ class _RecipesListPageState extends State<RecipesListPage> {
                 onPressed: () => AwesomeDrawerBar.of(context)?.toggle(),
               ),
               title: const Text(
-                " تحضير التوليفات",
+                AppStrings.recipesTitle,
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
                   fontSize: 35,
@@ -158,7 +159,7 @@ class _RecipesListPageState extends State<RecipesListPage> {
         floatingActionButton: FloatingActionButton.extended(
           onPressed: () => _openEdit(),
           icon: const Icon(Icons.add),
-          label: const Text('توليفة جديدة'),
+          label: const Text(AppStrings.newRecipeTitle),
         ),
         body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
           stream: _recipesStream(),
@@ -167,18 +168,18 @@ class _RecipesListPageState extends State<RecipesListPage> {
               return const Center(child: CircularProgressIndicator());
             }
             if (s.hasError) {
-              return Center(child: Text('تعذر التحميل: ${s.error}'));
+              return Center(child: Text(AppStrings.loadFailedSimple(s.error!)));
             }
 
             final docs = s.data?.docs ?? [];
             if (docs.isEmpty) {
-              return const Center(child: Text('لا توجد توليفات بعد.'));
+              return const Center(child: Text(AppStrings.noRecipesYet));
             }
 
             return ListView.separated(
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 100),
               itemCount: docs.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              separatorBuilder: (_, _) => const SizedBox(height: 8),
               itemBuilder: (_, i) {
                 final d = docs[i];
                 final m = d.data();
@@ -209,14 +210,14 @@ class _RecipesListPageState extends State<RecipesListPage> {
                     ),
                     childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
                     title: Text(
-                      title.isEmpty ? 'بدون اسم' : title,
+                      title.isEmpty ? AppStrings.unnamedLabel : title,
                       style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
                     subtitle: Text(
-                      'المكوّنات: ${comps.length}',
+                      AppStrings.componentsCount(comps.length),
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
                         color: sum == 100 ? Colors.green : Colors.red,
@@ -237,7 +238,12 @@ class _RecipesListPageState extends State<RecipesListPage> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 const Text('• '),
-                                Text('$t  (%${c.percent.toStringAsFixed(1)})'),
+                                Text(
+                                  AppStrings.componentPercentSummary(
+                                    t,
+                                    c.percent,
+                                  ),
+                                ),
                               ],
                             );
                           }).toList(),
@@ -263,13 +269,13 @@ class _RecipesListPageState extends State<RecipesListPage> {
                               const Icon(Icons.payments_outlined, size: 18),
                               const SizedBox(width: 6),
                               Text(
-                                'سعر/كجم: ${pc.pricePerKg.toStringAsFixed(2)}',
+                                AppStrings.pricePerKgInline(pc.pricePerKg),
                               ),
                               const SizedBox(width: 18),
                               const Icon(Icons.calculate_outlined, size: 18),
                               const SizedBox(width: 6),
                               Text(
-                                'تكلفة/كجم: ${pc.costPerKg.toStringAsFixed(2)}',
+                                AppStrings.costPerKgInline(pc.costPerKg),
                               ),
                             ],
                           );
@@ -284,19 +290,19 @@ class _RecipesListPageState extends State<RecipesListPage> {
                           Expanded(
                             child: FilledButton.icon(
                               icon: const Icon(Icons.scale_outlined),
-                              label: const Text('تحضير التوليفة'),
+                              label: const Text(AppStrings.prepareBlendLabel),
                               onPressed: () => _openPrepare(d.id),
                             ),
                           ),
                           const SizedBox(width: 8),
                           IconButton.filledTonal(
-                            tooltip: 'تعديل',
+                            tooltip: AppStrings.actionEdit,
                             icon: const Icon(Icons.edit),
                             onPressed: () => _openEdit(d.id),
                           ),
                           const SizedBox(width: 6),
                           IconButton.filledTonal(
-                            tooltip: 'حذف',
+                            tooltip: AppStrings.actionDelete,
                             icon: const Icon(Icons.delete_outline),
                             onPressed: () => _deleteRecipe(d.id, title),
                           ),
