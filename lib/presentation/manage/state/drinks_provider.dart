@@ -1,5 +1,7 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 class DrinkRow {
   final String id;
@@ -36,10 +38,58 @@ DrinkRow _fromDoc(QueryDocumentSnapshot<Map<String, dynamic>> d) {
   );
 }
 
-final drinksStreamProvider = StreamProvider<List<DrinkRow>>((ref) async* {
-  final q = FirebaseFirestore.instance.collection('drinks').orderBy('name');
-  yield* q.snapshots().map((s) => s.docs.map(_fromDoc).toList());
-});
+class DrinksState {
+  final List<DrinkRow> items;
+  final bool loading;
+  final Object? error;
+
+  const DrinksState({
+    required this.items,
+    required this.loading,
+    required this.error,
+  });
+
+  DrinksState copyWith({
+    List<DrinkRow>? items,
+    bool? loading,
+    Object? error,
+  }) {
+    return DrinksState(
+      items: items ?? this.items,
+      loading: loading ?? this.loading,
+      error: error,
+    );
+  }
+}
+
+class DrinksCubit extends Cubit<DrinksState> {
+  DrinksCubit({FirebaseFirestore? firestore})
+      : _firestore = firestore ?? FirebaseFirestore.instance,
+        super(const DrinksState(items: [], loading: true, error: null)) {
+    _sub = _firestore
+        .collection('drinks')
+        .orderBy('name')
+        .snapshots()
+        .map((s) => s.docs.map(_fromDoc).toList())
+        .listen(
+          (items) => emit(
+            state.copyWith(items: items, loading: false, error: null),
+          ),
+          onError: (e, _) => emit(
+            state.copyWith(loading: false, error: e),
+          ),
+        );
+  }
+
+  final FirebaseFirestore _firestore;
+  StreamSubscription<List<DrinkRow>>? _sub;
+
+  @override
+  Future<void> close() async {
+    await _sub?.cancel();
+    return super.close();
+  }
+}
 
 Future<void> updateDrinkRow(
   DrinkRow d, {

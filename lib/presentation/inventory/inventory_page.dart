@@ -2,18 +2,19 @@ import 'package:awesome_drawer_bar/awesome_drawer_bar.dart';
 import 'package:elfouad_admin/core/app_strings.dart';
 import 'package:elfouad_admin/presentation/inventory/providers.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'widgets/inventory_tile.dart';
 
-class InventoryPage extends ConsumerWidget {
+class InventoryPage extends StatelessWidget {
   const InventoryPage({super.key});
   static const route = '/inventory';
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final max = ref.watch(inventoryMaxStockProvider);
-    final list = ref.watch(inventoryListForTabProvider);
-    final tab = ref.watch(inventoryTabProvider);
+  Widget build(BuildContext context) {
+    final state = context.watch<InventoryCubit>().state;
+    final max = state.maxStock;
+    final list = state.listForTab;
+    final tab = state.tab;
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -64,15 +65,20 @@ class InventoryPage extends ConsumerWidget {
                     Wrap(
                       spacing: 8,
                       children: [
-                        _chip(ref, AppStrings.inventoryAll, InventoryTab.all, tab),
                         _chip(
-                          ref,
+                          context,
+                          AppStrings.inventoryAll,
+                          InventoryTab.all,
+                          tab,
+                        ),
+                        _chip(
+                          context,
                           AppStrings.inventorySingles,
                           InventoryTab.singles,
                           tab,
                         ),
                         _chip(
-                          ref,
+                          context,
                           AppStrings.inventoryBlends,
                           InventoryTab.blends,
                           tab,
@@ -127,40 +133,20 @@ class InventoryPage extends ConsumerWidget {
     );
   }
 
-  Widget _chip(WidgetRef ref, String label, InventoryTab me, InventoryTab cur) {
+  Widget _chip(
+    BuildContext context,
+    String label,
+    InventoryTab me,
+    InventoryTab cur,
+  ) {
     final selected = me == cur;
     return ChoiceChip(
       label: Text(label),
       selected: selected,
-      onSelected: (_) => ref.read(inventoryTabProvider.notifier).state = me,
+      onSelected: (_) => context.read<InventoryCubit>().setTab(me),
       labelStyle: TextStyle(
         fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
       ),
     );
   }
 }
-  // PreferredSizeWidget _bar(BuildContext context) {
-  //   return PreferredSize(
-  //     preferredSize: const Size.fromHeight(72),
-  //     child: ClipRRect(
-  //       borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
-  //       child: BrandedAppBar(title: 'المخزون'),
-  //     ),
-  //   );
-  // }
-
-  // void _openEdit(BuildContext context, InventoryRow r) {
-  //   showModalBottomSheet(
-  //     context: context,
-  //     useSafeArea: true,
-  //     isScrollControlled: true,
-  //     shape: const RoundedRectangleBorder(
-  //       borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
-  //     ),
-  //     builder: (_) => EditInventorySheet(row: r),
-  //   );
-  // }
-
-  // Future<void> _confirmDelete(BuildContext context, InventoryRow r) async {
-  //   final ok = await showDialog<bool>(
-  //     context: context

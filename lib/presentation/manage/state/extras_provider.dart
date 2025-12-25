@@ -1,5 +1,7 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 class ExtraRow {
   final String id;
@@ -43,10 +45,58 @@ ExtraRow _fromDoc(QueryDocumentSnapshot<Map<String, dynamic>> d) {
   );
 }
 
-final extrasStreamProvider = StreamProvider<List<ExtraRow>>((ref) async* {
-  final q = FirebaseFirestore.instance.collection('extras').orderBy('name');
-  yield* q.snapshots().map((s) => s.docs.map(_fromDoc).toList());
-});
+class ExtrasState {
+  final List<ExtraRow> items;
+  final bool loading;
+  final Object? error;
+
+  const ExtrasState({
+    required this.items,
+    required this.loading,
+    required this.error,
+  });
+
+  ExtrasState copyWith({
+    List<ExtraRow>? items,
+    bool? loading,
+    Object? error,
+  }) {
+    return ExtrasState(
+      items: items ?? this.items,
+      loading: loading ?? this.loading,
+      error: error,
+    );
+  }
+}
+
+class ExtrasCubit extends Cubit<ExtrasState> {
+  ExtrasCubit({FirebaseFirestore? firestore})
+      : _firestore = firestore ?? FirebaseFirestore.instance,
+        super(const ExtrasState(items: [], loading: true, error: null)) {
+    _sub = _firestore
+        .collection('extras')
+        .orderBy('name')
+        .snapshots()
+        .map((s) => s.docs.map(_fromDoc).toList())
+        .listen(
+          (items) => emit(
+            state.copyWith(items: items, loading: false, error: null),
+          ),
+          onError: (e, _) => emit(
+            state.copyWith(loading: false, error: e),
+          ),
+        );
+  }
+
+  final FirebaseFirestore _firestore;
+  StreamSubscription<List<ExtraRow>>? _sub;
+
+  @override
+  Future<void> close() async {
+    await _sub?.cancel();
+    return super.close();
+  }
+}
 
 Future<void> deleteExtra(String id) =>
     FirebaseFirestore.instance.collection('extras').doc(id).delete();

@@ -1,5 +1,5 @@
 name: elfouad_admin
-description: "A new Flutter project."
+description: "Elfouad_Admin Application"
 publish_to: 'none'
 
 version: 1.0.0+1
@@ -14,45 +14,44 @@ dependencies:
     sdk: flutter
 
   # UI
-  cupertino_icons: ^1.0.8
-  google_fonts: ^6.2.1
-  salomon_bottom_bar: ^3.3.2
-  google_nav_bar: ^5.0.6
-  awesome_drawer_bar: ^1.0.0   # أو آخر إصدار متاح
-   # اختياري (لو عايز تبدّل الستايل)
+  cupertino_icons: 
+  google_fonts: 
+  salomon_bottom_bar: 
+  google_nav_bar: 
+  awesome_drawer_bar:   
+   
 
   # State & Routing
-  flutter_riverpod: ^3.0.0
-  go_router: ^16.2.1
+  flutter_bloc: 
+  go_router: 
 
   # Firebase
-  firebase_core: ^4.1.0
-  cloud_firestore: ^6.0.1
-  shared_preferences: ^2.5.3
+  firebase_core:
+  cloud_firestore: 
+  shared_preferences: 
 
   # Charts/Data
-  fl_chart: ^1.1.0
-  csv: ^6.0.0
-  intl: ^0.20.2
-  file_saver: ^0.2.8
-  path_provider: ^2.1.4
-  open_filex: ^4.4.0
-  clipboard: ^0.1.3 
-  excel: ^2.1.0
+  fl_chart: 
+  csv: 
+  intl: 
+  file_saver: 
+  path_provider:
+  open_filex: 
+  clipboard: 
+  excel: 
   share_plus:
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
-  flutter_launcher_icons: ^0.13.1  # أو آخر إصدار
+  flutter_launcher_icons: 
 
 flutter_launcher_icons:
   android: true
-  image_path: assets/icon/app_icon.png                # اللوجو الأساسي
-  adaptive_icon_background: "#FFFFFF"         # خلفية للأيقونة المتكيّفة (اختياري لكن مُستحسن)
-  adaptive_icon_foreground: assets/icon/app_icon.png   # ممكن نفس الصورة لو مش عامل layers
-  # adaptive_icon_monochrome: assets/icon-mono.png   # اختياري لأندرويد 13+
+  image_path: assets/icon/app_icon.png             
+  adaptive_icon_background: "#FFFFFF"         
+  adaptive_icon_foreground: assets/icon/app_icon.png  
 
 flutter:
   uses-material-design: true
@@ -60,4 +59,3 @@ flutter:
   # To add assets to your application, add an assets section, like this:
   assets:
     - assets/
-

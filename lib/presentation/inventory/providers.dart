@@ -1,27 +1,26 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
-// شيل أي import لـ legacy.dart من أي ملف—مش محتاجينه هنا.
-
-// تبويب المخزون
+// ????? ???????
 enum InventoryTab { all, singles, blends, extras, drinks }
 
-// تحويل آمن لأرقام
+// ????? ??? ??????
 double _d(dynamic v) {
   if (v is num) return v.toDouble();
   return double.tryParse('${v ?? ''}'.replaceAll(',', '.')) ?? 0.0;
 }
 
-// صف موحّد للأصناف المنفردة والتوليفات
+// ?? ????? ??????? ???????? ??????????
 class InventoryRow {
   final String id;
   final String name;
-  final String variant; // درجة التحميص
-  final double stockG; // جرامات
-  final double minLevelG; // حد أدنى تحذيري
-  final double sellPerKg; // سعر/كجم
-  final double costPerKg; // تكلفة/كجم
+  final String variant; // ???? ???????
+  final double stockG; // ??????
+  final double minLevelG; // ?? ???? ??????
+  final double sellPerKg; // ???/???
+  final double costPerKg; // ?????/???
   final String coll; // 'singles' | 'blends'
   final DocumentReference<Map<String, dynamic>> ref;
 
@@ -67,7 +66,7 @@ class ExtraInventoryRow {
 }
 
 double _stockGFrom(Map<String, dynamic> m) {
-  // ترتيب التفضيل: stock ثم باقي الأسماء الشائعة
+  // ????? ???????: stock ?? ???? ??????? ???????
   final keys = [
     'stock',
     'stock_grams',
@@ -98,7 +97,7 @@ InventoryRow _fromDoc(DocumentSnapshot<Map<String, dynamic>> d) {
     id: d.id,
     name: '${m['name'] ?? ''}',
     variant: '${m['variant'] ?? ''}',
-    stockG: _stockGFrom(m), // ← هنا التعديل
+    stockG: _stockGFrom(m), // ??? ???????
     minLevelG: _d(m['minLevel']),
     sellPerKg: sell,
     costPerKg: cost,
@@ -180,7 +179,7 @@ ExtraInventoryRow _extraFromDoc(QueryDocumentSnapshot<Map<String, dynamic>> d) {
   );
 }
 
-// helper: sort محليًا (الاسم ثم التحميص)
+// helper: sort ?????? (????? ?? ???????)
 List<InventoryRow> _sortByNameVariant(Iterable<InventoryRow> it) {
   final list = it.toList();
   list.sort((a, b) {
@@ -191,77 +190,166 @@ List<InventoryRow> _sortByNameVariant(Iterable<InventoryRow> it) {
   return list;
 }
 
-// Streams للأصناف المنفردة — (ترتيب من الذاكرة)
-final singlesStreamProvider = StreamProvider<List<InventoryRow>>((ref) {
-  return FirebaseFirestore.instance
-      .collection('singles')
-      .orderBy('name')
-      .snapshots()
-      .map((s) => _sortByNameVariant(s.docs.map(_fromDoc)));
-});
+class InventoryState {
+  final InventoryTab tab;
+  final List<InventoryRow> singles;
+  final List<InventoryRow> blends;
+  final List<ExtraInventoryRow> extras;
+  final bool loadingSingles;
+  final bool loadingBlends;
+  final bool loadingExtras;
+  final Object? error;
 
-// Streams للتوليفات — (ترتيب من الذاكرة)
-final blendsStreamProvider = StreamProvider<List<InventoryRow>>((ref) {
-  return FirebaseFirestore.instance
-      .collection('blends')
-      .orderBy('name')
-      .snapshots()
-      .map((s) => _sortByNameVariant(s.docs.map(_fromDoc)));
-});
+  const InventoryState({
+    required this.tab,
+    required this.singles,
+    required this.blends,
+    required this.extras,
+    required this.loadingSingles,
+    required this.loadingBlends,
+    required this.loadingExtras,
+    required this.error,
+  });
 
-final extrasInventoryStreamProvider = StreamProvider<List<ExtraInventoryRow>>((
-  ref,
-) {
-  return FirebaseFirestore.instance
-      .collection('extras')
-      .orderBy('name')
-      .snapshots()
-      .map((s) => s.docs.map(_extraFromDoc).toList());
-});
-
-// تبويب الصفحة الحالي
-final inventoryTabProvider = StateProvider<InventoryTab>(
-  (_) => InventoryTab.all,
-);
-
-List<InventoryRow> _safe(AsyncValue<List<InventoryRow>> a) =>
-    a.maybeWhen(data: (v) => v, orElse: () => const <InventoryRow>[]);
-
-// القائمة حسب التبويب (Blends أولًا في "الكل")
-final inventoryListForTabProvider = Provider<List<InventoryRow>>((ref) {
-  final tab = ref.watch(inventoryTabProvider);
-  final singlesA = ref.watch(singlesStreamProvider);
-  final blendsA = ref.watch(blendsStreamProvider);
-
-  final singles = _safe(singlesA);
-  final blends = _safe(blendsA);
-
-  switch (tab) {
-    case InventoryTab.singles:
-      return singles;
-    case InventoryTab.blends:
-      return blends;
-    case InventoryTab.extras:
-      return const <InventoryRow>[];
-    case InventoryTab.drinks:
-      return const <InventoryRow>[]; // المشروبات خارج إدارة الجرامات
-    case InventoryTab.all:
-      return [...blends, ...singles]; // التوليفات أولًا
+  List<InventoryRow> get listForTab {
+    switch (tab) {
+      case InventoryTab.singles:
+        return singles;
+      case InventoryTab.blends:
+        return blends;
+      case InventoryTab.extras:
+        return const <InventoryRow>[];
+      case InventoryTab.drinks:
+        return const <InventoryRow>[]; // ????????? ???? ????? ????????
+      case InventoryTab.all:
+        return [...blends, ...singles];
+    }
   }
-});
 
-// أكبر مخزون (للـ progress bar)
-final inventoryMaxStockProvider = Provider<double>((ref) {
-  final singles = _safe(ref.watch(singlesStreamProvider));
-  final blends = _safe(ref.watch(blendsStreamProvider));
-  double max = 0;
-  for (final r in [...singles, ...blends]) {
-    if (r.stockG > max) max = r.stockG;
+  double get maxStock {
+    double max = 0;
+    for (final r in [...singles, ...blends]) {
+      if (r.stockG > max) max = r.stockG;
+    }
+    return max <= 0 ? 1 : max;
   }
-  return max <= 0 ? 1 : max;
-});
 
-// CRUD (تخصّص أصلي للـ singles/blends — السناكس عادة مش هنعدّلها من هنا)
+  bool get loading => loadingSingles || loadingBlends || loadingExtras;
+
+  InventoryState copyWith({
+    InventoryTab? tab,
+    List<InventoryRow>? singles,
+    List<InventoryRow>? blends,
+    List<ExtraInventoryRow>? extras,
+    bool? loadingSingles,
+    bool? loadingBlends,
+    bool? loadingExtras,
+    Object? error,
+  }) {
+    return InventoryState(
+      tab: tab ?? this.tab,
+      singles: singles ?? this.singles,
+      blends: blends ?? this.blends,
+      extras: extras ?? this.extras,
+      loadingSingles: loadingSingles ?? this.loadingSingles,
+      loadingBlends: loadingBlends ?? this.loadingBlends,
+      loadingExtras: loadingExtras ?? this.loadingExtras,
+      error: error,
+    );
+  }
+}
+
+class InventoryCubit extends Cubit<InventoryState> {
+  InventoryCubit({FirebaseFirestore? firestore})
+      : _firestore = firestore ?? FirebaseFirestore.instance,
+        super(
+          const InventoryState(
+            tab: InventoryTab.all,
+            singles: [],
+            blends: [],
+            extras: [],
+            loadingSingles: true,
+            loadingBlends: true,
+            loadingExtras: true,
+            error: null,
+          ),
+        ) {
+    _subscribe();
+  }
+
+  final FirebaseFirestore _firestore;
+  StreamSubscription<List<InventoryRow>>? _singlesSub;
+  StreamSubscription<List<InventoryRow>>? _blendsSub;
+  StreamSubscription<List<ExtraInventoryRow>>? _extrasSub;
+
+  void setTab(InventoryTab tab) => emit(state.copyWith(tab: tab));
+
+  void _subscribe() {
+    _singlesSub = _firestore
+        .collection('singles')
+        .orderBy('name')
+        .snapshots()
+        .map((s) => _sortByNameVariant(s.docs.map(_fromDoc)))
+        .listen(
+          (rows) => emit(
+            state.copyWith(
+              singles: rows,
+              loadingSingles: false,
+              error: null,
+            ),
+          ),
+          onError: (e, _) => emit(
+            state.copyWith(loadingSingles: false, error: e),
+          ),
+        );
+
+    _blendsSub = _firestore
+        .collection('blends')
+        .orderBy('name')
+        .snapshots()
+        .map((s) => _sortByNameVariant(s.docs.map(_fromDoc)))
+        .listen(
+          (rows) => emit(
+            state.copyWith(
+              blends: rows,
+              loadingBlends: false,
+              error: null,
+            ),
+          ),
+          onError: (e, _) => emit(
+            state.copyWith(loadingBlends: false, error: e),
+          ),
+        );
+
+    _extrasSub = _firestore
+        .collection('extras')
+        .orderBy('name')
+        .snapshots()
+        .map((s) => s.docs.map(_extraFromDoc).toList())
+        .listen(
+          (rows) => emit(
+            state.copyWith(
+              extras: rows,
+              loadingExtras: false,
+              error: null,
+            ),
+          ),
+          onError: (e, _) => emit(
+            state.copyWith(loadingExtras: false, error: e),
+          ),
+        );
+  }
+
+  @override
+  Future<void> close() async {
+    await _singlesSub?.cancel();
+    await _blendsSub?.cancel();
+    await _extrasSub?.cancel();
+    return super.close();
+  }
+}
+
+// CRUD (????? ???? ??? singles/blends - ??????? ???? ?? ???????? ?? ???)
 Future<void> updateInventoryRow(
   InventoryRow r, {
   String? name,
@@ -277,9 +365,9 @@ Future<void> updateInventoryRow(
 
   if (stockG != null) {
     if (r.isExtra) {
-      data['stock_units'] = stockG; // لو Extra نكتب في stock_units
+      data['stock_units'] = stockG; // ?? Extra ???? ?? stock_units
     } else {
-      data['stock'] = stockG; // وإلا نكتب في stock (جرامات)
+      data['stock'] = stockG; // ???? ???? ?? stock (??????)
     }
   }
 
@@ -288,7 +376,7 @@ Future<void> updateInventoryRow(
     if (costPerKg != null) data['costPricePerKg'] = costPerKg;
     if (minLevelG != null) data['minLevel'] = minLevelG;
   } else {
-    if (minLevelG != null) data['min_units'] = minLevelG; // حد أدنى للقطع
+    if (minLevelG != null) data['min_units'] = minLevelG; // ?? ???? ?????
   }
 
   await r.ref.update(data);

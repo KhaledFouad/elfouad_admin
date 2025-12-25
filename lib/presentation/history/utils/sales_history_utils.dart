@@ -424,6 +424,21 @@ String _fmtDateTimeLocal(DateTime? dt) {
   return '$y-$m-$d $h:$mm';
 }
 
+CellValue _cellValue(dynamic v) {
+  if (v == null) return TextCellValue('');
+  if (v is CellValue) return v;
+  if (v is String) return TextCellValue(v);
+  if (v is int) return IntCellValue(v);
+  if (v is double) return DoubleCellValue(v);
+  if (v is num) return DoubleCellValue(v.toDouble());
+  if (v is bool) return BoolCellValue(v);
+  if (v is DateTime) return TextCellValue(v.toIso8601String());
+  return TextCellValue(v.toString());
+}
+
+List<CellValue?> _cells(List<dynamic> values) =>
+    values.map(_cellValue).toList(growable: false);
+
 /// يبني الـ Excel بصفحتين:
 /// 1) Sales: مستوى العملية
 /// 2) Lines: تفصيل المكونات (لو موجودة)
@@ -436,7 +451,7 @@ Uint8List _buildExcelBytes({
   final s2 = excel['Lines'];
 
   // رؤوس الجداول
-  s1.appendRow([
+  s1.appendRow(_cells([
     'sale_id',
     'created_at',
     'effective_time',
@@ -455,10 +470,10 @@ Uint8List _buildExcelBytes({
     'is_spiced',
     'spice_amount',
     'notes',
-  ]);
+  ]));
 
   for (final m in sales) {
-    s1.appendRow([
+    s1.appendRow(_cells([
       _safeStr(m['id']),
       _safeStr(m['created_at']),
       _safeStr(m['effective_time']),
@@ -471,16 +486,16 @@ Uint8List _buildExcelBytes({
       _numD(m['total_price']),
       _numD(m['total_cost']),
       _numD(m['profit_total']),
-      (m['is_deferred'] == true) ? '1' : '0',
-      (m['paid'] == true) ? '1' : '0',
+      (m['is_deferred'] == true) ? 1 : 0,
+      (m['paid'] == true) ? 1 : 0,
       _numD(m['due_amount']),
-      (m['is_spiced'] == true) ? '1' : '0',
+      (m['is_spiced'] == true) ? 1 : 0,
       _numD(m['spice_amount']),
       _safeStr(m['notes']),
-    ]);
+    ]));
   }
 
-  s2.appendRow([
+  s2.appendRow(_cells([
     'sale_id',
     'row_idx',
     'name',
@@ -490,10 +505,10 @@ Uint8List _buildExcelBytes({
     'grams',
     'line_total_price',
     'line_total_cost',
-  ]);
+  ]));
 
   for (final r in lines) {
-    s2.appendRow([
+    s2.appendRow(_cells([
       _safeStr(r['sale_id']),
       _numD(r['row_idx']),
       _safeStr(r['name']),
@@ -503,7 +518,7 @@ Uint8List _buildExcelBytes({
       _numD(r['grams']),
       _numD(r['line_total_price']),
       _numD(r['line_total_cost']),
-    ]);
+    ]));
   }
 
   excel.setDefaultSheet('Sales');
@@ -732,7 +747,7 @@ Future<void> exportSalesExcelFromFilter(
     // حفظ مباشر في Downloads — بدون اختيار مجلد (يمنع "Dialog was null")
     final savedPath = await FileSaver.instance.saveFile(
       name: fileName,
-      ext: 'xlsx',
+      fileExtension: 'xlsx',
       bytes: bytes,
       mimeType: MimeType.microsoftExcel,
     );

@@ -1,5 +1,7 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 double _d(dynamic v) {
   if (v is num) return v.toDouble();
@@ -35,89 +37,133 @@ InventoryRow _fromDoc(DocumentSnapshot<Map<String, dynamic>> d) {
   );
 }
 
-final singlesStreamProvider = StreamProvider<List<InventoryRow>>((ref) {
-  return FirebaseFirestore.instance
-      .collection('singles')
-      .orderBy('name') // 👈 شيل orderBy('variant')
-      .snapshots()
-      .map((s) {
-        final list = s.docs.map(_fromDoc).toList();
-        list.sort((a, b) {
-          final c = a.name.compareTo(b.name);
-          if (c != 0) return c;
-          return a.variant.compareTo(b.variant);
-        });
-        return list;
-      })
-      .handleError((e, st) {
-        // اختياري: سجّل الخطأ بدل ما يقطع الستريم
-        // debugPrint('singles stream error: $e');
-      });
-});
-
-final blendsStreamProvider = StreamProvider<List<InventoryRow>>((ref) {
-  return FirebaseFirestore.instance
-      .collection('blends')
-      .orderBy('name') // 👈 شيل orderBy('variant')
-      .snapshots()
-      .map((s) {
-        final list = s.docs.map(_fromDoc).toList();
-        list.sort((a, b) {
-          final c = a.name.compareTo(b.name);
-          if (c != 0) return c;
-          return a.variant.compareTo(b.variant);
-        });
-        return list;
-      })
-      .handleError((e, st) {
-        // debugPrint('blends stream error: $e');
-      });
-});
-
 int _blendRank(String name) {
   final n = name.trim();
-  if (n.contains('اسبيشيال')) return 0;
-  if (n.contains('مخصوص')) return 1;
-  if (n.contains('كلاسيك')) return 2;
-  if (n.contains('اسبريسو') || n.contains('اسبرسو')) return 3;
+  if (n.contains('????????')) return 0;
+  if (n.contains('?????')) return 1;
+  if (n.contains('??????')) return 2;
+  if (n.contains('???????') || n.contains('??????')) return 3;
   return 4;
 }
 
-final grindListProvider = Provider<List<InventoryRow>>((ref) {
-  final singlesA = ref.watch(singlesStreamProvider);
-  final blendsA = ref.watch(blendsStreamProvider);
+class GrindState {
+  final List<InventoryRow> items;
+  final String query;
+  final bool loading;
+  final Object? error;
 
-  final singles = singlesA.maybeWhen(
-    data: (v) => [...v],
-    orElse: () => <InventoryRow>[],
-  );
-  final blends = blendsA.maybeWhen(
-    data: (v) => [...v],
-    orElse: () => <InventoryRow>[],
-  );
-
-  blends.sort((a, b) {
-    final r = _blendRank(a.name).compareTo(_blendRank(b.name));
-    if (r != 0) return r;
-    final c = a.name.compareTo(b.name);
-    if (c != 0) return c;
-    return a.variant.compareTo(b.variant);
+  const GrindState({
+    required this.items,
+    required this.query,
+    required this.loading,
+    required this.error,
   });
 
-  singles.sort((a, b) {
-    final c = a.name.compareTo(b.name);
-    if (c != 0) return c;
-    return a.variant.compareTo(b.variant);
-  });
+  List<InventoryRow> get filtered {
+    final q = query.trim().toLowerCase();
+    if (q.isEmpty) return items;
+    return items.where((r) {
+      final t = '${r.name} ${r.variant}'.toLowerCase();
+      return t.contains(q);
+    }).toList();
+  }
 
-  return [...blends, ...singles];
-});
+  GrindState copyWith({
+    List<InventoryRow>? items,
+    String? query,
+    bool? loading,
+    Object? error,
+  }) {
+    return GrindState(
+      items: items ?? this.items,
+      query: query ?? this.query,
+      loading: loading ?? this.loading,
+      error: error,
+    );
+  }
+}
 
-/// خصم آمن داخل ترانزاكشن (يمنع الخصم لو المخزون صفر أو أقل من المطلوب)
+class GrindCubit extends Cubit<GrindState> {
+  GrindCubit({FirebaseFirestore? firestore})
+      : _firestore = firestore ?? FirebaseFirestore.instance,
+        super(
+          const GrindState(items: [], query: '', loading: true, error: null),
+        ) {
+    _subscribe();
+  }
+
+  final FirebaseFirestore _firestore;
+  StreamSubscription<List<InventoryRow>>? _singlesSub;
+  StreamSubscription<List<InventoryRow>>? _blendsSub;
+
+  void setQuery(String q) => emit(state.copyWith(query: q));
+
+  void _subscribe() {
+    _singlesSub = _firestore
+        .collection('singles')
+        .orderBy('name')
+        .snapshots()
+        .map((s) => s.docs.map(_fromDoc).toList())
+        .listen(
+          (rows) => _emitCombined(singles: rows),
+          onError: (e, _) => emit(
+            state.copyWith(loading: false, error: e),
+          ),
+        );
+
+    _blendsSub = _firestore
+        .collection('blends')
+        .orderBy('name')
+        .snapshots()
+        .map((s) => s.docs.map(_fromDoc).toList())
+        .listen(
+          (rows) => _emitCombined(blends: rows),
+          onError: (e, _) => emit(
+            state.copyWith(loading: false, error: e),
+          ),
+        );
+  }
+
+  void _emitCombined({List<InventoryRow>? singles, List<InventoryRow>? blends}) {
+    final nextSingles = singles ?? state.items.where((i) => i.coll == 'singles').toList();
+    final nextBlends = blends ?? state.items.where((i) => i.coll == 'blends').toList();
+
+    nextBlends.sort((a, b) {
+      final r = _blendRank(a.name).compareTo(_blendRank(b.name));
+      if (r != 0) return r;
+      final c = a.name.compareTo(b.name);
+      if (c != 0) return c;
+      return a.variant.compareTo(b.variant);
+    });
+
+    nextSingles.sort((a, b) {
+      final c = a.name.compareTo(b.name);
+      if (c != 0) return c;
+      return a.variant.compareTo(b.variant);
+    });
+
+    emit(
+      state.copyWith(
+        items: [...nextBlends, ...nextSingles],
+        loading: false,
+        error: null,
+      ),
+    );
+  }
+
+  @override
+  Future<void> close() async {
+    await _singlesSub?.cancel();
+    await _blendsSub?.cancel();
+    return super.close();
+  }
+}
+
+/// ??? ??? ???? ????????? (???? ????? ?? ??????? ??? ?? ??? ?? ???????)
 Future<void> grindAndDeduct({
   required InventoryRow item,
   required double grams,
-  required bool isSpiced, // احتفظنا به للتوافق
+  required bool isSpiced, // ??????? ?? ???????
 }) async {
   if (grams <= 0) return;
 

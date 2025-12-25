@@ -2,25 +2,17 @@ import 'package:awesome_drawer_bar/awesome_drawer_bar.dart';
 import 'package:elfouad_admin/core/app_strings.dart';
 import 'package:elfouad_admin/presentation/grind/state/grind_providers.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'state/grind_ui_state.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'widgets/grind_confirm_sheet.dart';
 
-class GrindPage extends ConsumerWidget {
+class GrindPage extends StatelessWidget {
   const GrindPage({super.key});
   static const route = '/grind';
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final items = ref.watch(grindListProvider);
-    final q = ref.watch(grindSearchProvider);
-
-    final filtered = q.trim().isEmpty
-        ? items
-        : items.where((r) {
-            final s = '${r.name} ${r.variant}'.toLowerCase();
-            return s.contains(q.toLowerCase());
-          }).toList();
+  Widget build(BuildContext context) {
+    final state = context.watch<GrindCubit>().state;
+    final filtered = state.filtered;
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -63,7 +55,7 @@ class GrindPage extends ConsumerWidget {
         ),
         body: Column(
           children: [
-            // شريط علوي: البحث بس
+            // ???? ????: ????? ??
             Container(
               decoration: const BoxDecoration(
                 color: Color(0xFFF7EFE8),
@@ -83,22 +75,24 @@ class GrindPage extends ConsumerWidget {
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                onChanged: (t) =>
-                    ref.read(grindSearchProvider.notifier).state = t,
-                controller: TextEditingController(text: q)
-                  ..selection = TextSelection.collapsed(offset: q.length),
+                onChanged: (t) => context.read<GrindCubit>().setQuery(t),
+                controller: TextEditingController(text: state.query)
+                  ..selection =
+                      TextSelection.collapsed(offset: state.query.length),
               ),
             ),
 
             Expanded(
-              child: filtered.isEmpty
-                  ? const Center(child: Text(AppStrings.noItems))
-                  : ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-                      itemCount: filtered.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 8),
-                      itemBuilder: (_, i) => _ItemCard(row: filtered[i]),
-                    ),
+              child: state.loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : filtered.isEmpty
+                      ? const Center(child: Text(AppStrings.noItems))
+                      : ListView.separated(
+                          padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                          itemCount: filtered.length,
+                          separatorBuilder: (_, _) => const SizedBox(height: 8),
+                          itemBuilder: (_, i) => _ItemCard(row: filtered[i]),
+                        ),
             ),
           ],
         ),
@@ -115,9 +109,9 @@ class _ItemCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final title = row.variant.trim().isEmpty
         ? row.name
-        : '${row.name} — ${row.variant}';
+        : '${row.name} - ${row.variant}';
 
-    // تقدير بسيط للماكس عشان البار يبقى مفهوم
+    // ????? ???? ?????? ???? ????? ???? ?????
     double maxBar(double x) {
       if (x <= 500) return 500;
       if (x <= 2000) return 2000;
@@ -131,7 +125,7 @@ class _ItemCard extends StatelessWidget {
       onTap: () {
         final root = context;
 
-        FocusScope.of(root).unfocus(); // ⬅️ اقفل أي كيبورد مفتوح
+        FocusScope.of(root).unfocus(); // ?? ???? ?? ?????? ?????
 
         showModalBottomSheet(
           context: context,
@@ -143,7 +137,6 @@ class _ItemCard extends StatelessWidget {
           builder: (_) => GrindConfirmSheet(row: row),
         ).whenComplete(() {
           if (!root.mounted) return;
-          // ⬅️ برضه لما الشيت يتقفل، اقفل أي focus عشان الكيبورد مايرجعش
           FocusScope.of(root).unfocus();
         });
       },

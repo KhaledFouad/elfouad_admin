@@ -1,16 +1,17 @@
+import 'package:awesome_drawer_bar/awesome_drawer_bar.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:elfouad_admin/core/app_strings.dart';
 import 'nav_state.dart';
 
-class SideMenu extends ConsumerWidget {
+class SideMenu extends StatelessWidget {
   const SideMenu({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final selected = ref.watch(navIndexProvider);
+  Widget build(BuildContext context) {
+    final selected = context.watch<NavCubit>().state;
 
-    // خلفية متدرجة + Material فوقها عشان ListTile
+    // ????? ?????? + Material ????? ???? ListTile
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -32,43 +33,43 @@ class SideMenu extends ConsumerWidget {
                 icon: Icons.receipt_long,
                 label: AppStrings.tabHistory,
                 selected: selected == AppTab.history,
-                onTap: () => _go(context, ref, AppTab.history),
+                onTap: () => _go(context, AppTab.history),
               ),
               _MenuItem(
                 icon: Icons.stacked_line_chart,
                 label: AppStrings.tabStats,
                 selected: selected == AppTab.stats,
-                onTap: () => _go(context, ref, AppTab.stats),
+                onTap: () => _go(context, AppTab.stats),
               ),
               _MenuItem(
                 icon: Icons.inventory_2_outlined,
                 label: AppStrings.tabInventory,
                 selected: selected == AppTab.inventory,
-                onTap: () => _go(context, ref, AppTab.inventory),
+                onTap: () => _go(context, AppTab.inventory),
               ),
               _MenuItem(
                 icon: Icons.edit_note_outlined,
                 label: AppStrings.tabEdits,
                 selected: selected == AppTab.edits,
-                onTap: () => _go(context, ref, AppTab.edits),
+                onTap: () => _go(context, AppTab.edits),
               ),
               _MenuItem(
                 icon: Icons.edit_note_outlined,
                 label: AppStrings.tabRecipes,
                 selected: selected == AppTab.recipes,
-                onTap: () => _go(context, ref, AppTab.recipes),
+                onTap: () => _go(context, AppTab.recipes),
               ),
               _MenuItem(
                 icon: Icons.account_balance_wallet_outlined,
                 label: AppStrings.tabExpenses,
                 selected: selected == AppTab.expenses,
-                onTap: () => _go(context, ref, AppTab.expenses),
+                onTap: () => _go(context, AppTab.expenses),
               ),
               _MenuItem(
                 icon: Icons.coffee_outlined,
                 label: AppStrings.tabGrind,
                 selected: selected == AppTab.grind,
-                onTap: () => _go(context, ref, AppTab.grind),
+                onTap: () => _go(context, AppTab.grind),
               ),
 
               const Divider(height: 24),
@@ -78,7 +79,7 @@ class SideMenu extends ConsumerWidget {
                   AppStrings.drawerClose,
                   style: TextStyle(color: Colors.white),
                 ),
-                onTap: () => toggleDrawerFromContext(context),
+                onTap: () => AwesomeDrawerBar.of(context)?.toggle(),
               ),
             ],
           ),
@@ -87,9 +88,9 @@ class SideMenu extends ConsumerWidget {
     );
   }
 
-  void _go(BuildContext context, WidgetRef ref, AppTab tab) {
-    ref.read(navIndexProvider.notifier).state = tab;
-    toggleDrawerFromContext(context); // يقفل الدروار
+  void _go(BuildContext context, AppTab tab) {
+    context.read<NavCubit>().setTab(tab);
+    AwesomeDrawerBar.of(context)?.toggle(); // ???? ???????
   }
 }
 

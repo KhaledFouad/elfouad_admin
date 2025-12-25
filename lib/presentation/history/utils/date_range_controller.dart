@@ -1,25 +1,20 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/legacy.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
-/// Holds the chosen DateTimeRange (4am→4am). null = "today operational".
-class DateRangeController extends StateNotifier<DateTimeRange?> {
-  DateRangeController() : super(_todayRange4amLocal());
+/// Holds the chosen DateTimeRange (4am-4am).
+class DateRangeCubit extends Cubit<DateTimeRange> {
+  DateRangeCubit() : super(_todayRange4amLocal());
 
   /// Public: set a specific range (already aligned to 4am).
-  void setRange(DateTimeRange? range) => state = range ?? _todayRange4amLocal();
+  void setRange(DateTimeRange? range) =>
+      emit(range ?? _todayRange4amLocal());
 
   /// Public: clear to "today operational".
-  void clear() => state = _todayRange4amLocal();
+  void clear() => emit(_todayRange4amLocal());
 
-  /// Compute 4am→4am range for today based on local time.
+  /// Compute 4am-4am range for today based on local time.
   static DateTimeRange today() => _todayRange4amLocal();
 }
-
-/// Riverpod provider
-final dateRangeProvider =
-    StateNotifierProvider<DateRangeController, DateTimeRange?>(
-      (ref) => DateRangeController(),
-    );
 
 /// ==== helpers (local to this file) ====
 DateTimeRange _todayRange4amLocal() {

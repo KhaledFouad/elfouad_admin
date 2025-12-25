@@ -1,11 +1,11 @@
 // ignore_for_file: unused_element
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:elfouad_admin/core/app_strings.dart';
 
 import '../utils/op_day.dart';
-import 'sales_raw_provider.dart';
 import 'stats_period.dart';
 
 /// ============ Models ============
@@ -472,68 +472,127 @@ bool _inFinancialRange(Map<String, dynamic> m, DateTime start, DateTime end) =>
     _inRangeUtc(_financialUtc(m), start, end);
 
 /// ============ RAW الشهري + فلترة الثلث/الشهر ============
-
-final statsSalesProvider = FutureProvider<List<Map<String, dynamic>>>((
-  ref,
+Future<List<Map<String, dynamic>>> _fetchSalesRawForMonth(
+  DateTime month,
 ) async {
-  final month = ref.watch(statsForMonthProvider);
-  final period = ref.watch(statsSelectedPeriodProvider);
+  final y = month.year;
+  final m = month.month;
+  final dim = DateUtils.getDaysInMonth(y, m);
 
-  // OO3O-O" OU,O'U?O? U?U,U? U.O?U`Oc U^OO-O_Oc
-  final rawMonth =
-      _prepareStatsData(await ref.watch(salesRawForMonthProvider(month).future));
+  final startUtc = DateTime(y, m, 1, 4).toUtc();
+  final endUtc = DateTime(
+    y,
+    m,
+    dim,
+    4,
+  ).add(const Duration(days: 1)).toUtc();
+  final startIso = startUtc.toIso8601String();
+  final endIso = endUtc.toIso8601String();
+  final startMs = startUtc.millisecondsSinceEpoch;
+  final endMs = endUtc.millisecondsSinceEpoch;
 
-  // U?U,O?O? O"OU,U.O_U% OU,U.O-O3U^O" (4O? ?+' 4O?)
-  final r = statsComputeRange(month, period);
+  final snap = await FirebaseFirestore.instance
+      .collection('sales')
+      .where('created_at', isGreaterThanOrEqualTo: startUtc)
+      .where('created_at', isLessThan: endUtc)
+      .orderBy('created_at', descending: false)
+      .get();
+  QuerySnapshot<Map<String, dynamic>>? snapStr;
+  try {
+    snapStr = await FirebaseFirestore.instance
+        .collection('sales')
+        .where('created_at', isGreaterThanOrEqualTo: startIso)
+        .where('created_at', isLessThan: endIso)
+        .orderBy('created_at', descending: false)
+        .get();
+  } catch (_) {
+    snapStr = null;
+  }
+  QuerySnapshot<Map<String, dynamic>>? snapNum;
+  try {
+    snapNum = await FirebaseFirestore.instance
+        .collection('sales')
+        .where('created_at', isGreaterThanOrEqualTo: startMs)
+        .where('created_at', isLessThan: endMs)
+        .orderBy('created_at', descending: false)
+        .get();
+  } catch (_) {
+    snapNum = null;
+  }
+
+  QuerySnapshot<Map<String, dynamic>>? snapOrig;
+  try {
+    snapOrig = await FirebaseFirestore.instance
+        .collection('sales')
+        .where('original_created_at', isGreaterThanOrEqualTo: startUtc)
+        .where('original_created_at', isLessThan: endUtc)
+        .orderBy('original_created_at', descending: false)
+        .get();
+  } catch (_) {
+    snapOrig = null;
+  }
+
+  final combined = <String, Map<String, dynamic>>{};
+
+  for (final d in snap.docs) {
+    final m = d.data();
+    m['id'] = d.id;
+    combined[d.id] = m;
+  }
+
+  if (snapStr != null) {
+    for (final d in snapStr.docs) {
+      final m = d.data();
+      m['id'] = d.id;
+      combined[d.id] = m;
+    }
+  }
+  if (snapNum != null) {
+    for (final d in snapNum.docs) {
+      final m = d.data();
+      m['id'] = d.id;
+      combined[d.id] = m;
+    }
+  }
+
+  if (snapOrig != null) {
+    for (final d in snapOrig.docs) {
+      final m = d.data();
+      m['id'] = d.id;
+      combined[d.id] = m;
+    }
+  }
+
+  return combined.values.toList();
+}
+
+List<Map<String, dynamic>> _filterStatsSales(
+  List<Map<String, dynamic>> rawMonth, {
+  required DateTime startUtc,
+  required DateTime endUtc,
+}) {
   return rawMonth.where((m) {
-    final inProd = _inProductionRange(m, r.startUtc, r.endUtc);
-    final inFin = _inFinancialRange(m, r.startUtc, r.endUtc);
+    final inProd = _inProductionRange(m, startUtc, endUtc);
+    final inFin = _inFinancialRange(m, startUtc, endUtc);
     final isDeferred = (m['is_deferred'] ?? false) == true;
     final paid = (m['paid'] ?? (!isDeferred)) == true;
     if (isDeferred && !paid) return inProd;
     return inProd || inFin;
   }).toList();
-});
-final statsExpensesProvider = FutureProvider<List<Map<String, dynamic>>>((
-  ref,
-) async {
-  final r = ref.watch(statsRangeProvider);
+}
+
+Future<List<Map<String, dynamic>>> _fetchStatsExpenses({
+  required DateTime startUtc,
+  required DateTime endUtc,
+}) async {
   final snap = await FirebaseFirestore.instance
       .collection('expenses')
-      .where('created_at', isGreaterThanOrEqualTo: r.startUtc)
-      .where('created_at', isLessThan: r.endUtc)
+      .where('created_at', isGreaterThanOrEqualTo: startUtc)
+      .where('created_at', isLessThan: endUtc)
       .get();
 
   return snap.docs.map((d) => d.data()).toList();
-});
-
-/// Preview للأثلاث/الشهر — **يستثني الأجل غير المدفوع** ويقرأ الربح من الداتا
-final statsThirdsPreviewProvider =
-    FutureProvider<({Kpis third1, Kpis third2, Kpis third3, Kpis month})>((
-      ref,
-    ) async {
-      final month = ref.watch(statsForMonthProvider);
-      final rawMonth = _prepareStatsData(
-        await ref.watch(salesRawForMonthProvider(month).future),
-      );
-
-      Kpis kpisForRange(DateTime start, DateTime end) {
-        return _buildKpis(rawMonth, const [], startUtc: start, endUtc: end);
-      }
-
-      final r1 = statsComputeRange(month, StatsPeriod.firstThird);
-      final r2 = statsComputeRange(month, StatsPeriod.secondThird);
-      final r3 = statsComputeRange(month, StatsPeriod.thirdThird);
-      final rm = statsComputeRange(month, StatsPeriod.fullMonth);
-
-      return (
-        third1: kpisForRange(r1.startUtc, r1.endUtc),
-        third2: kpisForRange(r2.startUtc, r2.endUtc),
-        third3: kpisForRange(r3.startUtc, r3.endUtc),
-        month: kpisForRange(rm.startUtc, rm.endUtc),
-      );
-    });
-
+}
 /// ============ KPIs (الربح من الداتا + استبعاد الأجل غير المدفوع) ============
 Kpis _buildKpis(
   List<Map<String, dynamic>> data,
@@ -599,18 +658,6 @@ Kpis _buildKpis(
   );
 }
 
-final statsKpisProvider = FutureProvider<Kpis>((ref) async {
-  final range = ref.watch(statsRangeProvider);
-  final data = await ref.watch(statsSalesProvider.future);
-  final expensesList = await ref.watch(statsExpensesProvider.future);
-  return _buildKpis(
-    data,
-    expensesList,
-    startUtc: range.startUtc,
-    endUtc: range.endUtc,
-  );
-});
-
 /// ============ Extras (Snacks: U.O1U.U^U,/O?U.O?) by name ============
 List<GroupRow> _buildExtrasRows(
   List<Map<String, dynamic>> data, {
@@ -654,12 +701,6 @@ List<GroupRow> _buildExtrasRows(
   final list = map.values.toList()..sort((a, b) => b.sales.compareTo(a.sales));
   return list;
 }
-
-final extrasByNameProvider = FutureProvider<List<GroupRow>>((ref) async {
-  final data = await ref.watch(statsSalesProvider.future);
-  final range = ref.watch(statsRangeProvider);
-  return _buildExtrasRows(data, startUtc: range.startUtc, endUtc: range.endUtc);
-});
 
 StatsHighlights _buildHighlights(
   List<Map<String, dynamic>> data, {
@@ -818,12 +859,6 @@ StatsHighlights _buildHighlights(
   );
 }
 
-final statsHighlightsProvider = FutureProvider<StatsHighlights>((ref) async {
-  final data = await ref.watch(statsSalesProvider.future);
-  final range = ref.watch(statsRangeProvider);
-  return _buildHighlights(data, startUtc: range.startUtc, endUtc: range.endUtc);
-});
-
 /// ============ Drinks/Beans by name ============
 
 List<GroupRow> _buildDrinksRows(
@@ -868,12 +903,6 @@ List<GroupRow> _buildDrinksRows(
   final list = map.values.toList()..sort((a, b) => b.sales.compareTo(a.sales));
   return list;
 }
-
-final drinksByNameProvider = FutureProvider<List<GroupRow>>((ref) async {
-  final data = await ref.watch(statsSalesProvider.future);
-  final range = ref.watch(statsRangeProvider);
-  return _buildDrinksRows(data, startUtc: range.startUtc, endUtc: range.endUtc);
-});
 
 /// USU?U?U`U? "O?U^U,USU?Oc OU,O1U.USU," U^USO?U.O1 U?U, U.U?U^U`U+ O"OO3U.U?U? (name - variant)
 List<GroupRow> _buildBeansRows(
@@ -1061,12 +1090,6 @@ List<GroupRow> _buildBeansRows(
   return list;
 }
 
-final beansByNameProvider = FutureProvider<List<GroupRow>>((ref) async {
-  final data = await ref.watch(statsSalesProvider.future);
-  final range = ref.watch(statsRangeProvider);
-  return _buildBeansRows(data, startUtc: range.startUtc, endUtc: range.endUtc);
-});
-
 /// ============ Trends (مدفوع فقط + الربح من الداتا) ============
 
 class TrendsBundle {
@@ -1139,59 +1162,197 @@ TrendsBundle _buildTrends(
   );
 }
 
-final statsTrendsProvider = FutureProvider<TrendsBundle>((ref) async {
-  final data = await ref.watch(statsSalesProvider.future);
-  final range = ref.watch(statsRangeProvider);
-  return _buildTrends(data, startUtc: range.startUtc, endUtc: range.endUtc);
-});
-
-final statsOverviewProvider = FutureProvider<StatsOverview>((ref) async {
-  final data = await ref.watch(statsSalesProvider.future);
-  final expenses = await ref.watch(statsExpensesProvider.future);
-  final range = ref.watch(statsRangeProvider);
-  return StatsOverview(
-    kpis: _buildKpis(
-      data,
-      expenses,
-      startUtc: range.startUtc,
-      endUtc: range.endUtc,
-    ),
-    drinks: _buildDrinksRows(
-      data,
-      startUtc: range.startUtc,
-      endUtc: range.endUtc,
-    ),
-    beans: _buildBeansRows(
-      data,
-      startUtc: range.startUtc,
-      endUtc: range.endUtc,
-    ),
-    extras: _buildExtrasRows(
-      data,
-      startUtc: range.startUtc,
-      endUtc: range.endUtc,
-    ),
-    trends: _buildTrends(data, startUtc: range.startUtc, endUtc: range.endUtc),
-    highlights: _buildHighlights(
-      data,
-      startUtc: range.startUtc,
-      endUtc: range.endUtc,
-    ),
-  );
-});
-// Refresh لكل الداتا من السورس
-Future<void> refreshStatsProviders(WidgetRef ref) async {
-  ref.invalidate(statsSalesProvider);
-  ref.invalidate(statsExpensesProvider);
-  ref.invalidate(statsKpisProvider);
-  ref.invalidate(drinksByNameProvider);
-  ref.invalidate(beansByNameProvider);
-  ref.invalidate(statsTrendsProvider);
-  ref.invalidate(extrasByNameProvider);
-  ref.invalidate(statsHighlightsProvider);
-  ref.invalidate(statsOverviewProvider);
-
-  // كمان بنعمل invalidate للكاش الخام الشهري (family)
-  ref.invalidate(salesRawForMonthProvider);
-  await Future.delayed(const Duration(milliseconds: 1));
+class ThirdsPreview {
+  final Kpis firstThird;
+  final Kpis secondThird;
+  final Kpis thirdThird;
+  final Kpis month;
+  const ThirdsPreview({
+    required this.firstThird,
+    required this.secondThird,
+    required this.thirdThird,
+    required this.month,
+  });
 }
+
+class StatsState {
+  final DateTime month;
+  final StatsPeriod period;
+  final StatsOverview? overview;
+  final ThirdsPreview? preview;
+  final bool loading;
+  final bool previewLoading;
+  final Object? error;
+  final Object? previewError;
+
+  const StatsState({
+    required this.month,
+    required this.period,
+    required this.overview,
+    required this.preview,
+    required this.loading,
+    required this.previewLoading,
+    required this.error,
+    required this.previewError,
+  });
+
+  StatsState copyWith({
+    DateTime? month,
+    StatsPeriod? period,
+    StatsOverview? overview,
+    ThirdsPreview? preview,
+    bool? loading,
+    bool? previewLoading,
+    Object? error,
+    Object? previewError,
+  }) {
+    return StatsState(
+      month: month ?? this.month,
+      period: period ?? this.period,
+      overview: overview ?? this.overview,
+      preview: preview ?? this.preview,
+      loading: loading ?? this.loading,
+      previewLoading: previewLoading ?? this.previewLoading,
+      error: error,
+      previewError: previewError,
+    );
+  }
+}
+
+class StatsCubit extends Cubit<StatsState> {
+  StatsCubit()
+      : super(
+          StatsState(
+            month: defaultStatsMonth(),
+            period: defaultStatsPeriod(),
+            overview: null,
+            preview: null,
+            loading: true,
+            previewLoading: true,
+            error: null,
+            previewError: null,
+          ),
+        ) {
+    _loadMonth(state.month, state.period);
+  }
+
+  List<Map<String, dynamic>> _rawMonth = const [];
+
+  Future<void> refresh() => _loadMonth(state.month, state.period);
+
+  Future<void> setMonth(DateTime month) =>
+      _loadMonth(DateTime(month.year, month.month, 1), state.period);
+
+  Future<void> setPeriod(StatsPeriod period) async {
+    emit(state.copyWith(period: period, loading: true, error: null));
+    await _computeOverview(period, state.month);
+  }
+
+  Future<void> _loadMonth(DateTime month, StatsPeriod period) async {
+    emit(
+      state.copyWith(
+        month: month,
+        period: period,
+        loading: true,
+        previewLoading: true,
+        error: null,
+        previewError: null,
+      ),
+    );
+    try {
+      _rawMonth = _prepareStatsData(await _fetchSalesRawForMonth(month));
+      final preview = _buildThirdsPreview(_rawMonth, month);
+      emit(
+        state.copyWith(
+          preview: preview,
+          previewLoading: false,
+          previewError: null,
+        ),
+      );
+      await _computeOverview(period, month);
+    } catch (e) {
+      emit(
+        state.copyWith(
+          loading: false,
+          previewLoading: false,
+          error: e,
+          previewError: e,
+        ),
+      );
+    }
+  }
+
+  Future<void> _computeOverview(StatsPeriod period, DateTime month) async {
+    try {
+      final range = statsComputeRange(month, period);
+      final data = _filterStatsSales(
+        _rawMonth,
+        startUtc: range.startUtc,
+        endUtc: range.endUtc,
+      );
+      final expenses = await _fetchStatsExpenses(
+        startUtc: range.startUtc,
+        endUtc: range.endUtc,
+      );
+      final overview = StatsOverview(
+        kpis: _buildKpis(
+          data,
+          expenses,
+          startUtc: range.startUtc,
+          endUtc: range.endUtc,
+        ),
+        drinks: _buildDrinksRows(
+          data,
+          startUtc: range.startUtc,
+          endUtc: range.endUtc,
+        ),
+        beans: _buildBeansRows(
+          data,
+          startUtc: range.startUtc,
+          endUtc: range.endUtc,
+        ),
+        extras: _buildExtrasRows(
+          data,
+          startUtc: range.startUtc,
+          endUtc: range.endUtc,
+        ),
+        trends: _buildTrends(
+          data,
+          startUtc: range.startUtc,
+          endUtc: range.endUtc,
+        ),
+        highlights: _buildHighlights(
+          data,
+          startUtc: range.startUtc,
+          endUtc: range.endUtc,
+        ),
+      );
+      emit(state.copyWith(overview: overview, loading: false, error: null));
+    } catch (e) {
+      emit(state.copyWith(loading: false, error: e));
+    }
+  }
+
+  ThirdsPreview _buildThirdsPreview(
+    List<Map<String, dynamic>> rawMonth,
+    DateTime month,
+  ) {
+    Kpis kpisForRange(DateTime start, DateTime end) {
+      return _buildKpis(rawMonth, const [], startUtc: start, endUtc: end);
+    }
+
+    final r1 = statsComputeRange(month, StatsPeriod.firstThird);
+    final r2 = statsComputeRange(month, StatsPeriod.secondThird);
+    final r3 = statsComputeRange(month, StatsPeriod.thirdThird);
+    final rm = statsComputeRange(month, StatsPeriod.fullMonth);
+
+    return ThirdsPreview(
+      firstThird: kpisForRange(r1.startUtc, r1.endUtc),
+      secondThird: kpisForRange(r2.startUtc, r2.endUtc),
+      thirdThird: kpisForRange(r3.startUtc, r3.endUtc),
+      month: kpisForRange(rm.startUtc, rm.endUtc),
+    );
+  }
+}
+
+

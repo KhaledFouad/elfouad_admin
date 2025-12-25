@@ -4,38 +4,33 @@ import 'package:elfouad_admin/core/app_strings.dart';
 import 'package:elfouad_admin/presentation/inventory/providers.dart';
 import 'package:elfouad_admin/presentation/manage/product_edit_sheet.dart'
     show ProductEditSheet;
+import 'package:elfouad_admin/presentation/manage/state/drinks_provider.dart';
+import 'package:elfouad_admin/presentation/manage/state/extras_provider.dart';
+import 'package:elfouad_admin/presentation/manage/state/manage_tab_cubit.dart';
 import 'package:elfouad_admin/presentation/manage/widgets/extra_edit_sheet.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart' show StateProvider;
-import 'state/drinks_provider.dart';
-// NOTE: لم نعد نستخدم الشيتات القديمة هنا
-// import 'widgets/drink_edit_sheet.dart';
-// import '../inventory/widgets/edit_inventory_sheet.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'widgets/add_item_sheet.dart';
-import 'state/extras_provider.dart';
 
-enum ManageTab { all, drinks, singles, blends, extras }
-
-final manageTabProvider = StateProvider<ManageTab>((_) => ManageTab.all);
-
-class ManagePage extends ConsumerWidget {
+class ManagePage extends StatelessWidget {
   const ManagePage({super.key});
   static const route = '/manage';
   static const kDarkBrown = Color(0xFF543824);
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final tab = ref.watch(manageTabProvider);
-    final drinks = ref.watch(drinksStreamProvider);
-    final singles = ref.watch(singlesStreamProvider);
-    final blends = ref.watch(blendsStreamProvider);
-    final extras = ref.watch(extrasStreamProvider);
+  Widget build(BuildContext context) {
+    final tab = context.watch<ManageTabCubit>().state;
+    final drinksState = context.watch<DrinksCubit>().state;
+    final inventoryState = context.watch<InventoryCubit>().state;
+    final extrasState = context.watch<ExtrasCubit>().state;
 
-    Widget drinks0() => drinks.when(
-      loading: _loading,
-      error: _err(AppStrings.drinksLabelDefinite),
-      data: (rows) => Column(
+    Widget drinks0() {
+      if (drinksState.loading) return _loading();
+      if (drinksState.error != null) {
+        return _err(AppStrings.drinksLabelDefinite)(drinksState.error!, StackTrace.empty);
+      }
+      final rows = drinksState.items;
+      return Column(
         children: rows
             .map(
               (d) => Card(
@@ -71,7 +66,7 @@ class ManagePage extends ConsumerWidget {
                         onPressed: () => _openProductEditor(
                           context,
                           collection: 'drinks',
-                          id: d.id, // عندك d.id مستخدم أصلًا في الحذف
+                          id: d.id,
                         ),
                       ),
                       IconButton(
@@ -85,10 +80,10 @@ class ManagePage extends ConsumerWidget {
               ),
             )
             .toList(),
-      ),
-    );
+      );
+    }
 
-    // خليه يعرف الـ collection علشان يفتح الـ ProductEditSheet
+    // ???? ???? ??? collection ????? ???? ??? ProductEditSheet
     Widget invList(String collection, List<InventoryRow> rows) =>
         ListView.separated(
           shrinkWrap: true,
@@ -104,7 +99,7 @@ class ManagePage extends ConsumerWidget {
               child: ListTile(
                 key: ValueKey('${collection}_${r.id}'),
                 title: Text(
-                  r.variant.isEmpty ? r.name : '${r.name} — ${r.variant}',
+                  r.variant.isEmpty ? r.name : '${r.name} - ${r.variant}',
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
@@ -147,21 +142,38 @@ class ManagePage extends ConsumerWidget {
           },
         );
 
-    Widget singles0() => singles.when(
-      loading: _loading,
-      error: _err(AppStrings.inventorySingles),
-      data: (rows) => invList('singles', rows),
-    );
+    Widget singles0() {
+      if (inventoryState.loadingSingles) return _loading();
+      if (inventoryState.error != null) {
+        return _err(AppStrings.inventorySingles)(
+          inventoryState.error!,
+          StackTrace.empty,
+        );
+      }
+      return invList('singles', inventoryState.singles);
+    }
 
-    Widget blends0() => blends.when(
-      loading: _loading,
-      error: _err(AppStrings.inventoryBlends),
-      data: (rows) => invList('blends', rows),
-    );
-    Widget extras0() => extras.when(
-      loading: _loading,
-      error: _err(AppStrings.extrasLabel),
-      data: (rows) => ListView.separated(
+    Widget blends0() {
+      if (inventoryState.loadingBlends) return _loading();
+      if (inventoryState.error != null) {
+        return _err(AppStrings.inventoryBlends)(
+          inventoryState.error!,
+          StackTrace.empty,
+        );
+      }
+      return invList('blends', inventoryState.blends);
+    }
+
+    Widget extras0() {
+      if (extrasState.loading) return _loading();
+      if (extrasState.error != null) {
+        return _err(AppStrings.extrasLabel)(
+          extrasState.error!,
+          StackTrace.empty,
+        );
+      }
+      final rows = extrasState.items;
+      return ListView.separated(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
         itemCount: rows.length,
@@ -194,7 +206,11 @@ class ManagePage extends ConsumerWidget {
                     AppStrings.sellPriceLabel,
                     _fmtNum(e.priceSell),
                   ),
-                  _pill(Icons.money_off, AppStrings.costLabelDefinite, _fmtNum(e.costUnit)),
+                  _pill(
+                    Icons.money_off,
+                    AppStrings.costLabelDefinite,
+                    _fmtNum(e.costUnit),
+                  ),
                   if (!e.active)
                     _pill(
                       Icons.pause_circle_filled,
@@ -221,8 +237,8 @@ class ManagePage extends ConsumerWidget {
             ),
           );
         },
-      ),
-    );
+      );
+    }
 
     Widget content() {
       switch (tab) {
@@ -297,16 +313,31 @@ class ManagePage extends ConsumerWidget {
             Wrap(
               spacing: 8,
               children: [
-                _mChip(ref, AppStrings.inventoryAll, ManageTab.all, tab),
-                _mChip(ref, AppStrings.drinksLabelDefinite, ManageTab.drinks, tab),
+                _mChip(context, AppStrings.inventoryAll, ManageTab.all, tab),
                 _mChip(
-                  ref,
+                  context,
+                  AppStrings.drinksLabelDefinite,
+                  ManageTab.drinks,
+                  tab,
+                ),
+                _mChip(
+                  context,
                   AppStrings.inventorySingles,
                   ManageTab.singles,
                   tab,
                 ),
-                _mChip(ref, AppStrings.inventoryBlends, ManageTab.blends, tab),
-                _mChip(ref, AppStrings.snacksLabel, ManageTab.extras, tab),
+                _mChip(
+                  context,
+                  AppStrings.inventoryBlends,
+                  ManageTab.blends,
+                  tab,
+                ),
+                _mChip(
+                  context,
+                  AppStrings.snacksLabel,
+                  ManageTab.extras,
+                  tab,
+                ),
               ],
             ),
             const SizedBox(height: 8),
@@ -317,21 +348,21 @@ class ManagePage extends ConsumerWidget {
           onPressed: tab == ManageTab.extras
               ? null
               : () => showModalBottomSheet(
-                  context: context,
-                  useSafeArea: true,
-                  isScrollControlled: true,
-                  shape: const RoundedRectangleBorder(
-                    borderRadius: BorderRadius.vertical(
-                      top: Radius.circular(18),
+                    context: context,
+                    useSafeArea: true,
+                    isScrollControlled: true,
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.vertical(
+                        top: Radius.circular(18),
+                      ),
+                    ),
+                    builder: (_) => AddItemSheet(
+                      initialType: _newTypeForTab(tab),
                     ),
                   ),
-                  builder: (_) =>
-                      AddItemSheet(initialType: _newTypeForTab(tab)),
-                ),
           icon: const Icon(Icons.add),
           label: const Text(AppStrings.actionAdd),
           tooltip: AppStrings.addNewItemTooltip,
-
           backgroundColor: kDarkBrown,
           foregroundColor: Colors.white,
         ),
@@ -340,22 +371,27 @@ class ManagePage extends ConsumerWidget {
   }
 
   Widget _loading() => const Padding(
-    padding: EdgeInsets.symmetric(vertical: 16),
-    child: Center(child: CircularProgressIndicator()),
-  );
+        padding: EdgeInsets.symmetric(vertical: 16),
+        child: Center(child: CircularProgressIndicator()),
+      );
 
   Widget Function(Object, StackTrace) _err(String where) =>
       (e, _) => Padding(
-        padding: const EdgeInsets.all(12),
-        child: Text(AppStrings.loadFailed(where, e)),
-      );
+            padding: const EdgeInsets.all(12),
+            child: Text(AppStrings.loadFailed(where, e)),
+          );
 
-  Widget _mChip(WidgetRef ref, String label, ManageTab me, ManageTab cur) {
+  Widget _mChip(
+    BuildContext context,
+    String label,
+    ManageTab me,
+    ManageTab cur,
+  ) {
     final selected = me == cur;
     return ChoiceChip(
       label: Text(label),
       selected: selected,
-      onSelected: (_) => ref.read(manageTabProvider.notifier).state = me,
+      onSelected: (_) => context.read<ManageTabCubit>().setTab(me),
       labelStyle: TextStyle(
         fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
       ),
@@ -417,9 +453,9 @@ class ManagePage extends ConsumerWidget {
     if (ok == true) {
       await deleteDrink(id);
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text(AppStrings.deleteSuccess)));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(AppStrings.deleteSuccess)),
+        );
       }
     }
   }
@@ -445,9 +481,9 @@ class ManagePage extends ConsumerWidget {
     if (ok == true) {
       await deleteExtra(e.id);
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text(AppStrings.deleteSuccess)));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(AppStrings.deleteSuccess)),
+        );
       }
     }
   }
@@ -463,7 +499,7 @@ Future<void> _confirmDeleteInventory(
       title: const Text(AppStrings.deleteItemTitle),
       content: Text(
         AppStrings.deleteItemConfirm(
-          '${r.name}${r.variant.isEmpty ? '' : ' — ${r.variant}'}',
+          '${r.name}${r.variant.isEmpty ? '' : ' - ${r.variant}'}',
         ),
       ),
       actions: [
@@ -481,9 +517,9 @@ Future<void> _confirmDeleteInventory(
   if (ok == true) {
     await deleteInventoryRow(r);
     if (context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text(AppStrings.deleteSuccess)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(AppStrings.deleteSuccess)),
+      );
     }
   }
 }
@@ -503,7 +539,7 @@ class _Section extends StatelessWidget {
   }
 }
 
-// يفتح المحرّر العام بعد ما يجيب الـ Doc
+// ???? ??????? ????? ??? ?? ???? ??? Doc
 Future<void> _openProductEditor(
   BuildContext context, {
   required String collection, // 'drinks' | 'singles' | 'blends'

@@ -1,20 +1,30 @@
 import 'dart:async' show unawaited;
 import 'package:elfouad_admin/core/firestore_tuning.dart'
     show configureFirestore;
+import 'package:elfouad_admin/presentation/Expenses/state/expenses_providers.dart';
+import 'package:elfouad_admin/presentation/grind/state/grind_providers.dart';
+import 'package:elfouad_admin/presentation/history/state/history_cubit.dart';
+import 'package:elfouad_admin/presentation/history/utils/date_range_controller.dart';
 import 'package:elfouad_admin/presentation/home/app_shell.dart';
+import 'package:elfouad_admin/presentation/home/nav_state.dart';
+import 'package:elfouad_admin/presentation/inventory/providers.dart';
+import 'package:elfouad_admin/presentation/manage/state/drinks_provider.dart';
+import 'package:elfouad_admin/presentation/manage/state/extras_provider.dart';
+import 'package:elfouad_admin/presentation/manage/state/manage_tab_cubit.dart';
+import 'package:elfouad_admin/presentation/stats/state/stats_data_provider.dart';
 import 'package:elfouad_admin/services/archive/auto_archiver.dart.dart'
     show runAutoArchiveIfNeeded;
 import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'services/firebase_options.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:elfouad_admin/core/app_strings.dart';
 
-const _primaryHex = 0xFF543824; // بني غامق
-const _accentHex = 0xFFC49A6C; // بيج  اتح
+const _primaryHex = 0xFF543824;
+const _accentHex = 0xFFC49A6C;
 
 Future<void> _initFirebase() async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
@@ -22,7 +32,7 @@ Future<void> _initFirebase() async {
 }
 
 Future<void> _scheduleAutoArchive() async {
-  if (!kReleaseMode) return; // keep dev builds snappy
+  if (!kReleaseMode) return;
   await Future<void>.delayed(const Duration(seconds: 8));
   unawaited(
     runAutoArchiveIfNeeded(
@@ -37,7 +47,24 @@ Future<void> _scheduleAutoArchive() async {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await _initFirebase();
-  runApp(const ProviderScope(child: MyApp()));
+  runApp(
+    MultiBlocProvider(
+      providers: [
+        BlocProvider(create: (_) => NavCubit()),
+        BlocProvider(create: (_) => DateRangeCubit()),
+        BlocProvider(create: (_) => HistoryCubit()),
+        BlocProvider(create: (_) => DeferredCubit()),
+        BlocProvider(create: (_) => ExpensesCubit()),
+        BlocProvider(create: (_) => InventoryCubit()),
+        BlocProvider(create: (_) => DrinksCubit()),
+        BlocProvider(create: (_) => ExtrasCubit()),
+        BlocProvider(create: (_) => ManageTabCubit()),
+        BlocProvider(create: (_) => GrindCubit()),
+        BlocProvider(create: (_) => StatsCubit()),
+      ],
+      child: const MyApp(),
+    ),
+  );
   unawaited(_scheduleAutoArchive());
 }
 
@@ -90,8 +117,7 @@ ThemeData _lightTheme() {
       ),
     ),
     chipTheme: base.chipTheme.copyWith(
-      // ignore: deprecated_member_use
-      color: WidgetStateProperty.all(secondary.withOpacity(0.15)),
+      color: WidgetStateProperty.all(secondary.withAlpha(38)),
     ),
   );
 }

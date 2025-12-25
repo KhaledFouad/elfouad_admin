@@ -1,21 +1,21 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:elfouad_admin/core/app_strings.dart';
+import 'package:elfouad_admin/presentation/inventory/providers.dart';
 import 'package:elfouad_admin/presentation/recipes/recipes_component.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:elfouad_admin/presentation/inventory/providers.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
-class RecipeEditSheet extends ConsumerStatefulWidget {
-  final String? recipeId; // null => جديد
+class RecipeEditSheet extends StatefulWidget {
+  final String? recipeId; // null => ????
   const RecipeEditSheet({super.key, this.recipeId});
 
   @override
-  ConsumerState<RecipeEditSheet> createState() => _RecipeEditSheetState();
+  State<RecipeEditSheet> createState() => _RecipeEditSheetState();
 }
 
-class _RecipeEditSheetState extends ConsumerState<RecipeEditSheet> {
+class _RecipeEditSheetState extends State<RecipeEditSheet> {
   final _name = TextEditingController();
-  final _variant = TextEditingController(); // جديد
+  final _variant = TextEditingController(); // ????
   bool _busy = false;
 
   List<RecipeComponent> _comps = [];
@@ -41,7 +41,7 @@ class _RecipeEditSheetState extends ConsumerState<RecipeEditSheet> {
     final m = doc.data();
     if (m != null) {
       _name.text = (m['name'] ?? '').toString();
-      _variant.text = (m['variant'] ?? '').toString(); // جديد
+      _variant.text = (m['variant'] ?? '').toString(); // ????
       _comps = ((m['components'] ?? []) as List)
           .map(
             (e) => (e is Map) ? e.cast<String, dynamic>() : <String, dynamic>{},
@@ -53,14 +53,14 @@ class _RecipeEditSheetState extends ConsumerState<RecipeEditSheet> {
   }
 
   int get _sumPercentInt => _comps.fold<int>(
-    0,
-    (s, c) => s + (c.percent.isNaN ? 0 : c.percent.round()),
-  );
+        0,
+        (s, c) => s + (c.percent.isNaN ? 0 : c.percent.round()),
+      );
   int get _remainingInt => (100 - _sumPercentInt);
 
   bool get _validToSave =>
       _name.text.trim().isNotEmpty &&
-      _variant.text.trim().isNotEmpty && // لازم للتحضير
+      _variant.text.trim().isNotEmpty && // ???? ???????
       _comps.isNotEmpty &&
       _sumPercentInt == 100;
 
@@ -78,7 +78,7 @@ class _RecipeEditSheetState extends ConsumerState<RecipeEditSheet> {
       final now = FieldValue.serverTimestamp();
       final payload = {
         'name': _name.text.trim(),
-        'variant': _variant.text.trim(), // جديد
+        'variant': _variant.text.trim(), // ????
         'components': _comps.map((c) => c.toMap()).toList(),
         'updated_at': now,
         if (widget.recipeId == null) 'created_at': now,
@@ -97,13 +97,13 @@ class _RecipeEditSheetState extends ConsumerState<RecipeEditSheet> {
         context,
       ).showSnackBar(const SnackBar(content: Text(AppStrings.recipeSaved)));
     } on FirebaseException catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(AppStrings.saveFailed(e.message ?? e))));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppStrings.saveFailed(e.message ?? e))),
+      );
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(AppStrings.saveFailed(e))));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppStrings.saveFailed(e))),
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -111,7 +111,8 @@ class _RecipeEditSheetState extends ConsumerState<RecipeEditSheet> {
 
   Future<void> _pickItem({
     required String coll, // 'singles' | 'blends'
-    required AsyncValue<List<InventoryRow>> source,
+    required List<InventoryRow> source,
+    required bool loading,
   }) async {
     final chosen = await showDialog<InventoryRow>(
       context: context,
@@ -138,48 +139,51 @@ class _RecipeEditSheetState extends ConsumerState<RecipeEditSheet> {
                 ),
                 const SizedBox(height: 8),
                 Expanded(
-                  child: source.when(
-                    loading: () =>
-                        const Center(child: CircularProgressIndicator()),
-                    error: (e, _) =>
-                        Center(child: Text(AppStrings.loadFailedSimple(e))),
-                    data: (rows) {
-                      final q = search.text.trim().toLowerCase();
-                      final filtered = q.isEmpty
-                          ? rows
-                          : rows.where((r) {
-                              final t = '${r.name} ${r.variant}'.toLowerCase();
-                              return t.contains(q);
-                            }).toList();
-                      if (filtered.isEmpty) {
-                        return const Center(child: Text(AppStrings.noResults));
-                      }
-                      return ListView.builder(
-                        itemCount: filtered.length,
-                        itemBuilder: (_, i) {
-                          final r = filtered[i];
-                          return ListTile(
-                            title: Text(
-                              r.variant.isEmpty
-                                  ? r.name
-                                  : '${r.name} — ${r.variant}',
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            subtitle: Wrap(
-                              spacing: 8,
-                              children: [
-                                Text(AppStrings.stockGramsInline(r.stockG)),
-                                Text(
-                                  AppStrings.pricePerKgInline(r.sellPerKg),
-                                ),
-                              ],
-                            ),
-                            onTap: () => Navigator.pop(context, r),
-                          );
-                        },
-                      );
-                    },
-                  ),
+                  child: loading
+                      ? const Center(child: CircularProgressIndicator())
+                      : Builder(
+                          builder: (context) {
+                            final q = search.text.trim().toLowerCase();
+                            final filtered = q.isEmpty
+                                ? source
+                                : source.where((r) {
+                                    final t =
+                                        '${r.name} ${r.variant}'.toLowerCase();
+                                    return t.contains(q);
+                                  }).toList();
+                            if (filtered.isEmpty) {
+                              return const Center(
+                                child: Text(AppStrings.noResults),
+                              );
+                            }
+                            return ListView.builder(
+                              itemCount: filtered.length,
+                              itemBuilder: (_, i) {
+                                final r = filtered[i];
+                                return ListTile(
+                                  title: Text(
+                                    r.variant.isEmpty
+                                        ? r.name
+                                        : '${r.name} - ${r.variant}',
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  subtitle: Wrap(
+                                    spacing: 8,
+                                    children: [
+                                      Text(
+                                        AppStrings.stockGramsInline(r.stockG),
+                                      ),
+                                      Text(
+                                        AppStrings.pricePerKgInline(r.sellPerKg),
+                                      ),
+                                    ],
+                                  ),
+                                  onTap: () => Navigator.pop(context, r),
+                                );
+                              },
+                            );
+                          },
+                        ),
                 ),
               ],
             ),
@@ -211,8 +215,9 @@ class _RecipeEditSheetState extends ConsumerState<RecipeEditSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final singles = ref.watch(singlesStreamProvider);
-    final blends = ref.watch(blendsStreamProvider);
+    final inventoryState = context.watch<InventoryCubit>().state;
+    final singles = inventoryState.singles;
+    final blends = inventoryState.blends;
 
     return SingleChildScrollView(
       padding: EdgeInsets.only(
@@ -241,7 +246,7 @@ class _RecipeEditSheetState extends ConsumerState<RecipeEditSheet> {
           ),
           const SizedBox(height: 12),
 
-          // الاسم + التحميص
+          // ????? + ???????
           Row(
             children: [
               Expanded(
@@ -281,7 +286,11 @@ class _RecipeEditSheetState extends ConsumerState<RecipeEditSheet> {
                 child: OutlinedButton.icon(
                   icon: const Icon(Icons.add),
                   label: const Text(AppStrings.addSingleItem),
-                  onPressed: () => _pickItem(coll: 'singles', source: singles),
+                  onPressed: () => _pickItem(
+                    coll: 'singles',
+                    source: singles,
+                    loading: inventoryState.loadingSingles,
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
@@ -289,7 +298,11 @@ class _RecipeEditSheetState extends ConsumerState<RecipeEditSheet> {
                 child: OutlinedButton.icon(
                   icon: const Icon(Icons.add),
                   label: const Text(AppStrings.addReadyBlend),
-                  onPressed: () => _pickItem(coll: 'blends', source: blends),
+                  onPressed: () => _pickItem(
+                    coll: 'blends',
+                    source: blends,
+                    loading: inventoryState.loadingBlends,
+                  ),
                 ),
               ),
             ],
@@ -351,7 +364,7 @@ class _RecipeEditSheetState extends ConsumerState<RecipeEditSheet> {
 
               final title = c.variant.isEmpty
                   ? c.name
-                  : '${c.name} — ${c.variant}';
+                  : '${c.name} - ${c.variant}';
 
               return Card(
                 elevation: 0,
@@ -417,7 +430,7 @@ class _RecipeEditSheetState extends ConsumerState<RecipeEditSheet> {
                               onChanged: (v) {
                                 final x =
                                     double.tryParse(v.replaceAll(',', '.')) ??
-                                    c.percent;
+                                        c.percent;
                                 updatePercent(x);
                               },
                               decoration: const InputDecoration(

@@ -83,7 +83,7 @@ Future<String> _saveBytesSmart({
     await FileSaver.instance.saveFile(
       name: baseNameNoExt,
       bytes: bytes,
-      ext: ext,
+      fileExtension: ext,
       mimeType: MimeType.csv, // لبعض الأجهزة يفضل customMimeType: 'text/csv'
       // customMimeType: 'text/csv',
     );

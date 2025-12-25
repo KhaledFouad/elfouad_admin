@@ -1,27 +1,24 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:elfouad_admin/core/app_strings.dart';
-import '../state/stats_period.dart';
-import '../state/stats_data_provider.dart'; // علشان preview
+import 'package:elfouad_admin/presentation/stats/state/stats_data_provider.dart';
+import 'package:elfouad_admin/presentation/stats/state/stats_period.dart';
+import 'package:flutter/material.dart';
 
-class PeriodChips extends ConsumerWidget {
+class PeriodChips extends StatelessWidget {
   const PeriodChips({
     super.key,
     required this.forMonth,
     required this.selected,
+    required this.preview,
     required this.onSelected,
-    required Null Function(dynamic _) onRangeChange,
   });
 
   final DateTime forMonth;
   final StatsPeriod selected;
+  final ThirdsPreview? preview;
   final ValueChanged<StatsPeriod> onSelected;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // مجرد قراءة عشان نحسب preview للأثلاث
-    final preview = ref.watch(statsThirdsPreviewProvider);
-
+  Widget build(BuildContext context) {
     final items = <(StatsPeriod, String)>[
       (StatsPeriod.firstThird, AppStrings.firstThirdLabel),
       (StatsPeriod.secondThird, AppStrings.secondThirdLabel),
@@ -37,15 +34,15 @@ class PeriodChips extends ConsumerWidget {
         final label = e.$2;
 
         String trailing = '';
-        preview.whenData((v) {
+        if (preview != null) {
           final k = switch (p) {
-            StatsPeriod.firstThird => v.third1,
-            StatsPeriod.secondThird => v.third2,
-            StatsPeriod.thirdThird => v.third3,
-            StatsPeriod.fullMonth => v.month,
+            StatsPeriod.firstThird => preview!.firstThird,
+            StatsPeriod.secondThird => preview!.secondThird,
+            StatsPeriod.thirdThird => preview!.thirdThird,
+            StatsPeriod.fullMonth => preview!.month,
           };
-          trailing = k.sales.toStringAsFixed(0); // ممكن تخليها cups/grams.. الخ
-        });
+          trailing = k.sales.toStringAsFixed(0);
+        }
 
         return ChoiceChip(
           label: Row(

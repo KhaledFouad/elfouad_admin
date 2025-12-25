@@ -2,53 +2,62 @@ import 'package:awesome_drawer_bar/awesome_drawer_bar.dart';
 import 'package:elfouad_admin/presentation/home/drawer_menu.dart';
 import 'package:elfouad_admin/presentation/recipes/recipes_list_page.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'nav_state.dart';
 
-// بدّل المحتويات حسب تبويباتك
-class NavShell extends ConsumerWidget {
+// ???? ????????? ??? ????????
+class NavShell extends StatefulWidget {
   const NavShell({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final ctrl = ref.watch(drawerControllerProvider);
-    final tab = ref.watch(navIndexProvider);
+  State<NavShell> createState() => _NavShellState();
+}
 
-    Widget screenFor(AppTab t) {
-      switch (t) {
-        case AppTab.history:
-          return const HistoryScreen(); // سجّل
-        case AppTab.stats:
-          return const StatsScreen(); // إحصائيات
-        case AppTab.inventory:
-          return const InventoryScreen(); // مخزون
-        case AppTab.edits:
-          return const EditsScreen(); // تعديلات
-        case AppTab.expenses:
-          return const ExpensesScreen(); // مصروفات
-        case AppTab.grind:
-          return const GrindPage(); // طحن
-        case AppTab.recipes:
-          return const RecipesListPage(); // توليفات
-      }
-    }
+class _NavShellState extends State<NavShell> {
+  final AwesomeDrawerBarController _drawerController =
+      AwesomeDrawerBarController();
 
-    return AwesomeDrawerBar(
-      controller: ctrl,
-      menuScreen: SideMenu(), // 👈 القائمة
-      mainScreen: Scaffold(
-        // 👈 لازم Scaffold هنا
-        body: screenFor(tab),
-      ),
-      // اختياري: ضبط سلوك الأنيميشن والعرض
-      slideWidth: MediaQuery.sizeOf(context).width * 0.78,
-      shadowColor: Colors.black54,
-      backgroundColor: const Color(0xFF543824),
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<NavCubit, AppTab>(
+      builder: (context, tab) {
+        Widget screenFor(AppTab t) {
+          switch (t) {
+            case AppTab.history:
+              return const HistoryScreen(); // ????
+            case AppTab.stats:
+              return const StatsScreen(); // ????????
+            case AppTab.inventory:
+              return const InventoryScreen(); // ?????
+            case AppTab.edits:
+              return const EditsScreen(); // ???????
+            case AppTab.expenses:
+              return const ExpensesScreen(); // ???????
+            case AppTab.grind:
+              return const GrindPage(); // ???
+            case AppTab.recipes:
+              return const RecipesListPage(); // ???????
+          }
+        }
+
+        return AwesomeDrawerBar(
+          controller: _drawerController,
+          menuScreen: const SideMenu(), // ?? ???????
+          mainScreen: Scaffold(
+            // ?? ???? Scaffold ???
+            body: screenFor(tab),
+          ),
+          // ???????: ??? ???? ????????? ??????
+          slideWidth: MediaQuery.sizeOf(context).width * 0.78,
+          shadowColor: Colors.black54,
+          backgroundColor: const Color(0xFF543824),
+        );
+      },
     );
   }
 }
 
-/// أمثلة شاشات (بدّلها بشاشاتك)
+/// ????? ????? (?????? ???????)
 class HistoryScreen extends StatelessWidget {
   const HistoryScreen({super.key});
   @override

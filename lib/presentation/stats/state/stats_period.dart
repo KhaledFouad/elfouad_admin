@@ -1,25 +1,21 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 
-/// تقسيم الإحصائيات
+/// ????? ??????????
 enum StatsPeriod { firstThird, secondThird, thirdThird, fullMonth }
 
-/// الشهر المعروض (افتراضي: الشهر الحالي)
-final statsForMonthProvider = StateProvider<DateTime>((ref) {
-  final now = DateTime.now();
-  return DateTime(now.year, now.month, 1); // أول يوم في الشهر (محلي)
-});
+DateTime defaultStatsMonth([DateTime? now]) {
+  final d = now ?? DateTime.now();
+  return DateTime(d.year, d.month, 1);
+}
 
-/// الثلث الافتراضي: الثلث الذي أنت فيه الآن
-final statsSelectedPeriodProvider = StateProvider<StatsPeriod>((ref) {
-  final d = DateTime.now().day;
-  if (d <= 10) return StatsPeriod.firstThird;
-  if (d <= 20) return StatsPeriod.secondThird;
+StatsPeriod defaultStatsPeriod([DateTime? now]) {
+  final d = now ?? DateTime.now();
+  if (d.day <= 10) return StatsPeriod.firstThird;
+  if (d.day <= 20) return StatsPeriod.secondThird;
   return StatsPeriod.thirdThird;
-});
+}
 
-/// يحسب مدى UTC لليوم التشغيلي 4 ص → 4 ص
+/// ???? ??? UTC ????? ???????? 4 ? – 4 ?
 ({DateTime startUtc, DateTime endUtc}) statsComputeRange(
   DateTime month,
   StatsPeriod p,
@@ -32,7 +28,7 @@ final statsSelectedPeriodProvider = StateProvider<StatsPeriod>((ref) {
     case StatsPeriod.firstThird:
       local = DateTimeRange(
         start: DateTime(y, m, 1, 4),
-        end: DateTime(y, m, 11, 4), // حصري
+        end: DateTime(y, m, 11, 4), // ????
       );
       break;
     case StatsPeriod.secondThird:
@@ -56,12 +52,3 @@ final statsSelectedPeriodProvider = StateProvider<StatsPeriod>((ref) {
   }
   return (startUtc: local.start.toUtc(), endUtc: local.end.toUtc());
 }
-
-/// مزوّد المدى النهائي المعتمد في كل الاستعلامات
-final statsRangeProvider = Provider<({DateTime startUtc, DateTime endUtc})>((
-  ref,
-) {
-  final month = ref.watch(statsForMonthProvider);
-  final p = ref.watch(statsSelectedPeriodProvider);
-  return statsComputeRange(month, p);
-});

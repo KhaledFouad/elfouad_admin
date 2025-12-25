@@ -101,26 +101,27 @@ class _RecipePrepareSheetState extends State<RecipePrepareSheet> {
         // موجودة: هنزوّد مخزونها
         destBlendRef = blendsQuery.docs.first.reference;
       } else {
-        if (!context.mounted) return;
+        if (!mounted) return;
         final ok = await showDialog<bool>(
           context: context,
-          builder: (_) => AlertDialog(
+          builder: (dialogContext) => AlertDialog(
             title: const Text(AppStrings.createBlendTitle),
             content: Text(
               AppStrings.createBlendContent(_name, _variant, totalKg),
             ),
             actions: [
               TextButton(
-                onPressed: () => Navigator.pop(context, false),
+                onPressed: () => Navigator.pop(dialogContext, false),
                 child: const Text(AppStrings.actionCancel),
               ),
               FilledButton(
-                onPressed: () => Navigator.pop(context, true),
+                onPressed: () => Navigator.pop(dialogContext, true),
                 child: const Text(AppStrings.actionCreate),
               ),
             ],
           ),
         );
+        if (!mounted) return;
 
         if (ok != true) {
           if (mounted) setState(() => _busy = false);
