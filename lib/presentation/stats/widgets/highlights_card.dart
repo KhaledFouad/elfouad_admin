@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:elfouad_admin/core/app_strings.dart';
 
-import '../state/stats_data_provider.dart';
+import '../models/stats_models.dart';
 
 class StatsHighlightsCard extends StatelessWidget {
   final StatsHighlights highlights;

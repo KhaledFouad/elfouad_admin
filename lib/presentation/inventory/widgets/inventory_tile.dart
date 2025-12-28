@@ -1,6 +1,7 @@
-import 'package:elfouad_admin/presentation/inventory/providers.dart';
 import 'package:flutter/material.dart';
 import 'package:elfouad_admin/core/app_strings.dart';
+import 'package:elfouad_admin/presentation/inventory/models/extra_inventory_row.dart';
+import 'package:elfouad_admin/presentation/inventory/models/inventory_row.dart';
 
 class InventoryTile extends StatelessWidget {
   final String title;

@@ -1,15 +1,16 @@
 import 'dart:async' show unawaited;
 import 'package:elfouad_admin/core/firestore_tuning.dart'
     show configureFirestore;
-import 'package:elfouad_admin/presentation/Expenses/state/expenses_providers.dart';
+import 'package:elfouad_admin/presentation/Expenses/bloc/expenses_cubit.dart';
 import 'package:elfouad_admin/presentation/grind/state/grind_providers.dart';
 import 'package:elfouad_admin/presentation/home/app_shell.dart';
 import 'package:elfouad_admin/presentation/home/nav_state.dart';
-import 'package:elfouad_admin/presentation/inventory/providers.dart';
-import 'package:elfouad_admin/presentation/manage/state/drinks_provider.dart';
-import 'package:elfouad_admin/presentation/manage/state/extras_provider.dart';
-import 'package:elfouad_admin/presentation/manage/state/manage_tab_cubit.dart';
-import 'package:elfouad_admin/presentation/stats/state/stats_data_provider.dart';
+import 'package:elfouad_admin/presentation/inventory/bloc/inventory_cubit.dart';
+import 'package:elfouad_admin/presentation/manage/bloc/drinks_cubit.dart';
+import 'package:elfouad_admin/presentation/manage/bloc/extras_cubit.dart';
+import 'package:elfouad_admin/presentation/manage/bloc/manage_tab_cubit.dart';
+import 'package:elfouad_admin/presentation/recipes/bloc/recipes_cubit.dart';
+import 'package:elfouad_admin/presentation/stats/bloc/stats_cubit.dart';
 import 'package:elfouad_admin/services/archive/auto_archiver.dart.dart'
     show runAutoArchiveIfNeeded;
 import 'package:flutter/foundation.dart' show kReleaseMode;
@@ -51,6 +52,7 @@ void main() async {
       providers: [
         BlocProvider(create: (_) => NavCubit()),
         BlocProvider(create: (_) => ExpensesCubit()),
+        BlocProvider(create: (_) => RecipesCubit()),
         BlocProvider(create: (_) => InventoryCubit()),
         BlocProvider(create: (_) => DrinksCubit()),
         BlocProvider(create: (_) => ExtrasCubit()),

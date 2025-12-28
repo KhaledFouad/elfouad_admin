@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:elfouad_admin/core/app_strings.dart';
-import '../state/drinks_provider.dart';
+import '../models/drink_row.dart';
+import '../utils/drinks_crud.dart';
 
 class DrinkEditSheet extends StatefulWidget {
   final DrinkRow drink;

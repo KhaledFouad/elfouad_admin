@@ -61,6 +61,10 @@ class _SalesHistoryView extends StatelessWidget {
     final summaryForDisplay = summary != null && salesOverride != null
         ? summary.copyWith(sales: salesOverride)
         : summary;
+    final rangeDays = state.range.end.difference(state.range.start).inDays;
+    final showOverallSummary = summaryForDisplay != null && rangeDays > 1;
+    final showSummaryLoading =
+        summaryForDisplay == null && state.isSummaryLoading && rangeDays > 1;
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -96,15 +100,14 @@ class _SalesHistoryView extends StatelessWidget {
                             physics: const AlwaysScrollableScrollPhysics(),
                             padding: listPadding,
                             children: [
-                              if (summaryForDisplay != null)
+                              if (showOverallSummary)
                                 Padding(
                                   padding: const EdgeInsets.only(bottom: 12),
                                   child: _HistorySummary(
-                                    summary: summaryForDisplay,
+                                    summary: summaryForDisplay!,
                                   ),
                                 ),
-                              if (summaryForDisplay == null &&
-                                  state.isSummaryLoading)
+                              if (showSummaryLoading)
                                 const Padding(
                                   padding: EdgeInsets.only(bottom: 12),
                                   child: Center(
@@ -373,6 +376,7 @@ class _CreditFab extends StatelessWidget {
       clipBehavior: Clip.none,
       children: [
         FloatingActionButton.extended(
+          heroTag: 'history_fab',
           onPressed: onTap,
           icon: const Icon(Icons.account_balance_wallet_rounded),
           label: const Text(AppStrings.titleCreditAccounts),

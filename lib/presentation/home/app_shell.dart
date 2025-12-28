@@ -1,16 +1,16 @@
 import 'package:awesome_drawer_bar/awesome_drawer_bar.dart';
-import 'package:elfouad_admin/presentation/Expenses/expenses_page.dart';
+import 'package:elfouad_admin/presentation/Expenses/pages/expenses_page.dart';
 import 'package:elfouad_admin/presentation/grind/grind_page.dart';
 import 'package:elfouad_admin/presentation/home/drawer_menu.dart';
-import 'package:elfouad_admin/presentation/manage/products_manage_page.dart';
-import 'package:elfouad_admin/presentation/recipes/recipes_list_page.dart'
+import 'package:elfouad_admin/presentation/manage/pages/products_manage_page.dart';
+import 'package:elfouad_admin/presentation/recipes/pages/recipes_list_page.dart'
     show RecipesListPage;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'nav_state.dart';
 import 'package:elfouad_admin/presentation/History/pages/sales_history_page.dart';
-import '../../presentation/inventory/inventory_page.dart';
-import '../../presentation/stats/stats_page.dart';
+import '../../presentation/inventory/pages/inventory_page.dart';
+import '../../presentation/stats/pages/stats_page.dart';
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key});

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:elfouad_admin/core/app_strings.dart';
-import '../state/stats_data_provider.dart';
+import '../models/stats_models.dart';
 
 class Top5List extends StatelessWidget {
   final String titleLeft, unitLeft, titleRight, unitRight;

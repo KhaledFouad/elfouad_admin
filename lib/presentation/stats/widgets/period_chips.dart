@@ -1,6 +1,6 @@
 import 'package:elfouad_admin/core/app_strings.dart';
-import 'package:elfouad_admin/presentation/stats/state/stats_data_provider.dart';
-import 'package:elfouad_admin/presentation/stats/state/stats_period.dart';
+import 'package:elfouad_admin/presentation/stats/models/stats_models.dart';
+import 'package:elfouad_admin/presentation/stats/models/stats_period.dart';
 import 'package:flutter/material.dart';
 
 class PeriodChips extends StatelessWidget {

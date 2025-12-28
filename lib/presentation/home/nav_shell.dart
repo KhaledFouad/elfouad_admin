@@ -1,6 +1,6 @@
 import 'package:awesome_drawer_bar/awesome_drawer_bar.dart';
 import 'package:elfouad_admin/presentation/home/drawer_menu.dart';
-import 'package:elfouad_admin/presentation/recipes/recipes_list_page.dart';
+import 'package:elfouad_admin/presentation/recipes/pages/recipes_list_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'nav_state.dart';
