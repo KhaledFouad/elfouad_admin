@@ -26,6 +26,8 @@ class InventoryPage extends StatelessWidget {
               bottom: Radius.circular(24),
             ),
             child: AppBar(
+              centerTitle: true,
+
               automaticallyImplyLeading: false,
               leading: IconButton(
                 icon: const Icon(Icons.menu, color: Colors.white),
@@ -111,20 +113,17 @@ class InventoryPage extends StatelessWidget {
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
                 sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      final r = list[index];
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: InventoryTile.coffee(
-                          key: ValueKey(r.id),
-                          row: r,
-                          maxStockForBar: max,
-                        ),
-                      );
-                    },
-                    childCount: list.length,
-                  ),
+                  delegate: SliverChildBuilderDelegate((context, index) {
+                    final r = list[index];
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: InventoryTile.coffee(
+                        key: ValueKey(r.id),
+                        row: r,
+                        maxStockForBar: max,
+                      ),
+                    );
+                  }, childCount: list.length),
                 ),
               ),
           ],

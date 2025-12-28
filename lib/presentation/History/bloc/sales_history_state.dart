@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../models/sale_record.dart';
 import '../models/sales_day_group.dart';
 import '../models/credit_account.dart';
+import '../models/history_summary.dart';
 import '../utils/sale_utils.dart';
 
 class SalesHistoryState extends Equatable {
@@ -18,6 +19,9 @@ class SalesHistoryState extends Equatable {
     required this.isLoadingMore,
     required this.hasMore,
     required this.isRangeTotalLoading,
+    required this.summary,
+    required this.summaryByDay,
+    required this.isSummaryLoading,
     required this.creditAccounts,
     required this.isCreditLoading,
     required this.creditUnpaidCount,
@@ -34,6 +38,9 @@ class SalesHistoryState extends Equatable {
         isLoadingMore: false,
         hasMore: true,
         isRangeTotalLoading: true,
+        summary: null,
+        summaryByDay: const {},
+        isSummaryLoading: false,
         creditAccounts: const [],
         isCreditLoading: false,
         creditUnpaidCount: 0,
@@ -49,6 +56,9 @@ class SalesHistoryState extends Equatable {
   final bool isLoadingMore;
   final bool hasMore;
   final bool isRangeTotalLoading;
+  final HistorySummary? summary;
+  final Map<String, HistorySummary> summaryByDay;
+  final bool isSummaryLoading;
   final List<CreditCustomerAccount> creditAccounts;
   final bool isCreditLoading;
   final int creditUnpaidCount;
@@ -67,6 +77,9 @@ class SalesHistoryState extends Equatable {
     bool? isLoadingMore,
     bool? hasMore,
     bool? isRangeTotalLoading,
+    Object? summary = _unset,
+    Map<String, HistorySummary>? summaryByDay,
+    bool? isSummaryLoading,
     List<CreditCustomerAccount>? creditAccounts,
     bool? isCreditLoading,
     int? creditUnpaidCount,
@@ -83,6 +96,11 @@ class SalesHistoryState extends Equatable {
       hasMore: hasMore ?? this.hasMore,
       isRangeTotalLoading:
           isRangeTotalLoading ?? this.isRangeTotalLoading,
+      summary: identical(summary, _unset)
+          ? this.summary
+          : summary as HistorySummary?,
+      summaryByDay: summaryByDay ?? this.summaryByDay,
+      isSummaryLoading: isSummaryLoading ?? this.isSummaryLoading,
       creditAccounts: creditAccounts ?? this.creditAccounts,
       isCreditLoading: isCreditLoading ?? this.isCreditLoading,
       creditUnpaidCount: creditUnpaidCount ?? this.creditUnpaidCount,
@@ -104,6 +122,9 @@ class SalesHistoryState extends Equatable {
         isLoadingMore,
         hasMore,
         isRangeTotalLoading,
+        summary,
+        summaryByDay,
+        isSummaryLoading,
         creditAccounts,
         isCreditLoading,
         creditUnpaidCount,

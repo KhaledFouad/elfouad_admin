@@ -1,24 +1,33 @@
 import 'package:flutter/material.dart';
 import 'package:elfouad_admin/core/app_strings.dart';
 
+import '../models/history_summary.dart';
 import '../models/sales_day_group.dart';
 import 'sale_tile.dart';
+import 'summary_pill.dart';
 
 class HistoryDaySection extends StatelessWidget {
   const HistoryDaySection({
     super.key,
     required this.group,
     this.overrideTotal,
+    this.summary,
     this.showTotalLoading = false,
   });
 
   final SalesDayGroup group;
   final double? overrideTotal;
+  final HistorySummary? summary;
   final bool showTotalLoading;
 
   @override
   Widget build(BuildContext context) {
-    final summaryValue = overrideTotal ?? group.totalPaid;
+    final baseSummary =
+        summary ?? HistorySummary.fromRecords(group.entries);
+    final daySummary = overrideTotal != null
+        ? baseSummary.copyWith(sales: overrideTotal)
+        : baseSummary;
+    final salesLoading = showTotalLoading && overrideTotal == null;
 
     return Card(
       elevation: 3,
@@ -36,10 +45,44 @@ class HistoryDaySection extends StatelessWidget {
                     fontWeight: FontWeight.w800,
                   ),
                 ),
-                const Spacer(),
-                _SummaryPill(
-                  value: summaryValue,
-                  isLoading: showTotalLoading && overrideTotal == null,
+              ],
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                SummaryPill(
+                  icon: Icons.attach_money,
+                  label: AppStrings.salesLabel,
+                  value: daySummary.sales.toStringAsFixed(2),
+                  isLoading: salesLoading,
+                ),
+                SummaryPill(
+                  icon: Icons.factory,
+                  label: AppStrings.costLabel,
+                  value: daySummary.cost.toStringAsFixed(2),
+                ),
+                SummaryPill(
+                  icon: Icons.trending_up,
+                  label: AppStrings.profitLabel,
+                  value: daySummary.profit.toStringAsFixed(2),
+                ),
+                SummaryPill(
+                  icon: Icons.local_cafe,
+                  label: AppStrings.drinksLabel,
+                  value: daySummary.drinks.toString(),
+                ),
+                SummaryPill(
+                  icon: Icons.cookie_rounded,
+                  label: AppStrings.snacksLabel,
+                  value: daySummary.snacks.toString(),
+                ),
+                SummaryPill(
+                  icon: Icons.scale,
+                  label: AppStrings.gramsCoffeeLabel,
+                  value: daySummary.grams.toStringAsFixed(0),
                 ),
               ],
             ),
@@ -47,43 +90,6 @@ class HistoryDaySection extends StatelessWidget {
             ...group.entries.map((sale) => SaleTile(record: sale)),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _SummaryPill extends StatelessWidget {
-  const _SummaryPill({required this.value, this.isLoading = false});
-
-  final double value;
-  final bool isLoading;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.brown.shade50,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.brown.shade200),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.attach_money, size: 16),
-          const SizedBox(width: 4),
-          if (isLoading)
-            const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          else
-            Text(
-              AppStrings.salesAmount(value),
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-        ],
       ),
     );
   }

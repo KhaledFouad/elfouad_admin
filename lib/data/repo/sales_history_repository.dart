@@ -20,6 +20,32 @@ class SalesHistoryRepository {
 
   static const int pageSize = 30;
 
+  Stream<QuerySnapshot<Map<String, dynamic>>> watchCreatedInRange(
+    DateTimeRange range,
+  ) {
+    return _firestore
+        .collection('sales')
+        .where(
+          'created_at',
+          isGreaterThanOrEqualTo: Timestamp.fromDate(range.start),
+        )
+        .where('created_at', isLessThan: Timestamp.fromDate(range.end))
+        .snapshots();
+  }
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> watchSettledInRange(
+    DateTimeRange range,
+  ) {
+    return _firestore
+        .collection('sales')
+        .where(
+          'settled_at',
+          isGreaterThanOrEqualTo: Timestamp.fromDate(range.start),
+        )
+        .where('settled_at', isLessThan: Timestamp.fromDate(range.end))
+        .snapshots();
+  }
+
   // صفحة واحدة (للـ List مع "عرض المزيد")
   Future<SalesPageResult> fetchPage({
     required DateTimeRange range,
@@ -51,7 +77,6 @@ class SalesHistoryRepository {
             isGreaterThanOrEqualTo: Timestamp.fromDate(range.start),
           )
           .where('settled_at', isLessThan: Timestamp.fromDate(range.end))
-          .where('paid', isEqualTo: true)
           .orderBy('settled_at', descending: true)
           .get();
 
@@ -108,7 +133,6 @@ class SalesHistoryRepository {
           isGreaterThanOrEqualTo: Timestamp.fromDate(range.start),
         )
         .where('settled_at', isLessThan: Timestamp.fromDate(range.end))
-        .where('paid', isEqualTo: true)
         .orderBy('settled_at', descending: true)
         .get();
 

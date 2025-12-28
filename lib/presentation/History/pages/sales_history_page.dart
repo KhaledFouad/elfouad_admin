@@ -6,8 +6,9 @@ import 'package:elfouad_admin/core/app_strings.dart';
 import 'package:elfouad_admin/data/repo/sales_history_repository.dart';
 import '../bloc/sales_history_cubit.dart';
 import 'credit_accounts_page.dart';
-import '../models/sale_record.dart';
+import '../models/history_summary.dart';
 import '../widgets/history_day_section.dart';
+import '../widgets/summary_pill.dart';
 import '../utils/sale_utils.dart';
 
 class SalesHistoryPage extends StatelessWidget {
@@ -44,13 +45,19 @@ class _SalesHistoryView extends StatelessWidget {
     );
     final showInitialLoading =
         state.isLoadingFirst && state.isEmpty && state.creditAccounts.isEmpty;
-    final noHistoryLabel =
-        state.isFiltered ? AppStrings.labelNoSalesInRange : AppStrings.labelNoSales;
-    final summary = state.groups.isEmpty
-        ? null
-        : _HistorySummaryData.fromRecords(
-            state.groups.expand((group) => group.entries),
-          );
+    final noHistoryLabel = state.isFiltered
+        ? AppStrings.labelNoSalesInRange
+        : AppStrings.labelNoSales;
+    final summary = state.summary;
+    final salesOverride = state.fullTotalsByDay.isNotEmpty
+        ? state.fullTotalsByDay.values.fold<double>(
+            0.0,
+            (total, value) => total + value,
+          )
+        : null;
+    final summaryForDisplay = summary != null && salesOverride != null
+        ? summary.copyWith(sales: salesOverride)
+        : summary;
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -79,41 +86,60 @@ class _SalesHistoryView extends StatelessWidget {
                     child: Align(
                       alignment: Alignment.topCenter,
                       child: ConstrainedBox(
-                        constraints: BoxConstraints(
-                          maxWidth: contentMaxWidth,
-                        ),
-                        child: ListView(
-                          padding: listPadding,
-                          children: [
-                            if (summary != null)
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 12),
-                                child: _HistorySummary(summary: summary),
-                              ),
-                            if (state.groups.isEmpty)
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 20,
-                                ),
-                                child: Center(child: Text(noHistoryLabel)),
-                              )
-                            else
-                              ...state.groups.map((group) {
-                                final overrideTotal =
-                                    state.fullTotalsByDay[group.label];
-                                final showLoading =
-                                    state.isRangeTotalLoading &&
-                                    overrideTotal == null;
-                                return Padding(
+                        constraints: BoxConstraints(maxWidth: contentMaxWidth),
+                        child: RefreshIndicator.adaptive(
+                          onRefresh: cubit.refreshCurrent,
+                          child: ListView(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            padding: listPadding,
+                            children: [
+                              if (summaryForDisplay != null)
+                                Padding(
                                   padding: const EdgeInsets.only(bottom: 12),
-                                  child: HistoryDaySection(
-                                    group: group,
-                                    overrideTotal: overrideTotal,
-                                    showTotalLoading: showLoading,
+                                  child: _HistorySummary(
+                                    summary: summaryForDisplay,
                                   ),
-                                );
-                              }),
-                          ],
+                                ),
+                              if (summaryForDisplay == null &&
+                                  state.isSummaryLoading)
+                                const Padding(
+                                  padding: EdgeInsets.only(bottom: 12),
+                                  child: Center(
+                                    child: SizedBox(
+                                      width: 24,
+                                      height: 24,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              if (state.groups.isEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 20,
+                                  ),
+                                  child: Center(child: Text(noHistoryLabel)),
+                                )
+                              else
+                                ...state.groups.map((group) {
+                                  final overrideTotal =
+                                      state.fullTotalsByDay[group.label];
+                                  final showLoading =
+                                      state.isRangeTotalLoading &&
+                                      overrideTotal == null;
+                                  return Padding(
+                                    padding: const EdgeInsets.only(bottom: 12),
+                                    child: HistoryDaySection(
+                                      group: group,
+                                      overrideTotal: overrideTotal,
+                                      summary: state.summaryByDay[group.label],
+                                      showTotalLoading: showLoading,
+                                    ),
+                                  );
+                                }),
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -144,7 +170,7 @@ class _SalesHistoryView extends StatelessWidget {
                       ),
                     ),
                 ],
-            ),
+              ),
       ),
     );
   }
@@ -162,62 +188,59 @@ class _HistoryAppBar extends StatelessWidget implements PreferredSizeWidget {
   Widget build(BuildContext context) {
     final state = cubit.state;
     final width = MediaQuery.of(context).size.width;
-    final canPop = Navigator.of(context).canPop();
     final titleSize = width < 600
         ? 22.0
         : width < 1024
-            ? 26.0
-            : width < 1400
-                ? 28.0
-                : 32.0;
+        ? 26.0
+        : width < 1400
+        ? 28.0
+        : 32.0;
     return ClipRRect(
       borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),
-      child: AppBar(
-        automaticallyImplyLeading: false,
-        leading: IconButton(
-          icon: Icon(
-            canPop ? Icons.arrow_back_ios_new_rounded : Icons.menu,
-            color: Colors.white,
+      child: PreferredSize(
+        preferredSize: const Size.fromHeight(64),
+        child: ClipRRect(
+          borderRadius: const BorderRadius.vertical(
+            bottom: Radius.circular(24),
           ),
-          onPressed: () {
-            if (canPop) {
-              Navigator.maybePop(context);
-              return;
-            }
-            AwesomeDrawerBar.of(context)?.toggle();
-          },
-          tooltip: canPop ? AppStrings.tooltipBack : AppStrings.menuTooltip,
-        ),
-        title: Text(
-          AppStrings.titleSalesHistory,
-          style: TextStyle(
-            fontWeight: FontWeight.w800,
-            fontSize: titleSize,
-            color: Colors.white,
-          ),
-        ),
-        centerTitle: true,
-        elevation: 8,
-        backgroundColor: Colors.transparent,
-        actions: [
-          IconButton(
-            tooltip: AppStrings.tooltipFilterByDate,
-            onPressed: () => _pickRange(context, cubit),
-            icon: const Icon(Icons.filter_alt, color: Colors.white),
-          ),
-          if (state.isFiltered)
-            IconButton(
-              tooltip: AppStrings.tooltipClearFilter,
-              onPressed: () async => cubit.setRange(null),
-              icon: const Icon(Icons.clear),
+          child: AppBar(
+            automaticallyImplyLeading: false,
+            leading: IconButton(
+              icon: const Icon(Icons.menu, color: Colors.white),
+              onPressed: () => AwesomeDrawerBar.of(context)?.toggle(),
             ),
-        ],
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFF5D4037), Color(0xFF795548)],
+            actions: [
+              IconButton(
+                tooltip: AppStrings.tooltipFilterByDate,
+                onPressed: () => _pickRange(context, cubit),
+                icon: const Icon(Icons.filter_alt, color: Colors.white),
+              ),
+              if (state.isFiltered)
+                IconButton(
+                  tooltip: AppStrings.tooltipClearFilter,
+                  onPressed: () async => cubit.setRange(null),
+                  icon: const Icon(Icons.clear),
+                ),
+            ],
+            centerTitle: true,
+            title: const Text(
+              AppStrings.tabHistory,
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 35,
+                color: Colors.white,
+              ),
+            ),
+            backgroundColor: Colors.transparent,
+
+            flexibleSpace: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF5D4037), Color(0xFF795548)],
+                ),
+              ),
             ),
           ),
         ),
@@ -225,10 +248,7 @@ class _HistoryAppBar extends StatelessWidget implements PreferredSizeWidget {
     );
   }
 
-  Future<void> _pickRange(
-    BuildContext context,
-    SalesHistoryCubit cubit,
-  ) async {
+  Future<void> _pickRange(BuildContext context, SalesHistoryCubit cubit) async {
     final now = DateTime.now();
     final init = cubit.state.customRange ?? defaultSalesRange();
 
@@ -289,7 +309,9 @@ class _CreditBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final background = count > 0 ? Colors.orange.shade700 : Colors.grey.shade400;
+    final background = count > 0
+        ? Colors.orange.shade700
+        : Colors.grey.shade400;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       decoration: BoxDecoration(
@@ -297,10 +319,7 @@ class _CreditBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
         border: Border.all(color: Colors.white, width: 1.2),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.15),
-            blurRadius: 6,
-          ),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 6),
         ],
       ),
       child: isLoading
@@ -324,96 +343,10 @@ class _CreditBadge extends StatelessWidget {
   }
 }
 
-class _HistorySummaryData {
-  const _HistorySummaryData({
-    required this.sales,
-    required this.cost,
-    required this.profit,
-    required this.drinks,
-    required this.snacks,
-    required this.grams,
-  });
-
-  final double sales;
-  final double cost;
-  final double profit;
-  final int drinks;
-  final int snacks;
-  final double grams;
-
-  factory _HistorySummaryData.fromRecords(Iterable<SaleRecord> records) {
-    double sales = 0;
-    double cost = 0;
-    double profit = 0;
-    double grams = 0;
-    int drinks = 0;
-    int snacks = 0;
-
-    for (final record in records) {
-      final isComplimentary = record.isComplimentary;
-      final totalPrice = isComplimentary ? 0.0 : record.totalPrice;
-      final totalCost = record.totalCost;
-      final rawProfit = isComplimentary
-          ? 0.0
-          : parseDouble(record.data['profit_total']);
-      final resolvedProfit = isComplimentary
-          ? 0.0
-          : (rawProfit != 0 ? rawProfit : (totalPrice - totalCost));
-
-      sales += totalPrice;
-      cost += totalCost;
-      profit += resolvedProfit;
-
-      switch (record.type) {
-        case 'drink':
-          drinks += _recordQuantity(record);
-          break;
-        case 'extra':
-          snacks += _recordQuantity(record);
-          break;
-        case 'single':
-        case 'ready_blend':
-          grams += _recordGrams(record, fallbackKey: 'grams');
-          break;
-        case 'custom_blend':
-          grams += _recordGrams(record, fallbackKey: 'total_grams');
-          break;
-        default:
-          final components = record.components;
-          if (components.isNotEmpty) {
-            for (final component in components) {
-              if (component.grams > 0) {
-                grams += component.grams;
-                continue;
-              }
-              final qty = _roundQty(component.quantity);
-              final unit = component.unit.trim().toLowerCase();
-              if (_isSnackUnit(unit)) {
-                snacks += qty;
-              } else {
-                drinks += qty;
-              }
-            }
-          }
-          break;
-      }
-    }
-
-    return _HistorySummaryData(
-      sales: sales,
-      cost: cost,
-      profit: profit,
-      drinks: drinks,
-      snacks: snacks,
-      grams: grams,
-    );
-  }
-}
-
 class _HistorySummary extends StatelessWidget {
   const _HistorySummary({required this.summary});
 
-  final _HistorySummaryData summary;
+  final HistorySummary summary;
 
   @override
   Widget build(BuildContext context) {
@@ -422,32 +355,32 @@ class _HistorySummary extends StatelessWidget {
       spacing: 10,
       runSpacing: 10,
       children: [
-        _HistorySummaryPill(
+        SummaryPill(
           icon: Icons.attach_money,
           label: AppStrings.salesLabel,
           value: summary.sales.toStringAsFixed(2),
         ),
-        _HistorySummaryPill(
+        SummaryPill(
           icon: Icons.factory,
           label: AppStrings.costLabel,
           value: summary.cost.toStringAsFixed(2),
         ),
-        _HistorySummaryPill(
+        SummaryPill(
           icon: Icons.trending_up,
           label: AppStrings.profitLabel,
           value: summary.profit.toStringAsFixed(2),
         ),
-        _HistorySummaryPill(
+        SummaryPill(
           icon: Icons.local_cafe,
           label: AppStrings.drinksLabel,
           value: summary.drinks.toString(),
         ),
-        _HistorySummaryPill(
+        SummaryPill(
           icon: Icons.cookie_rounded,
           label: AppStrings.snacksLabel,
           value: summary.snacks.toString(),
         ),
-        _HistorySummaryPill(
+        SummaryPill(
           icon: Icons.scale,
           label: AppStrings.gramsCoffeeLabel,
           value: summary.grams.toStringAsFixed(0),
@@ -456,73 +389,3 @@ class _HistorySummary extends StatelessWidget {
     );
   }
 }
-
-class _HistorySummaryPill extends StatelessWidget {
-  const _HistorySummaryPill({
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
-
-  final IconData icon;
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.brown.shade50,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.brown.shade200),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16, color: Colors.brown.shade700),
-          const SizedBox(width: 6),
-          Text(
-            '$label: $value',
-            style: const TextStyle(fontWeight: FontWeight.w700),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-int _roundQty(double qty) => qty > 0 ? qty.round() : 1;
-
-int _recordQuantity(SaleRecord record) {
-  final byComponents = record.components.fold<double>(
-    0.0,
-    (total, component) => total + component.quantity,
-  );
-  final fallback = parseDouble(
-    record.data['quantity'] ?? record.data['qty'],
-  );
-  final qty = byComponents > 0 ? byComponents : fallback;
-  return _roundQty(qty);
-}
-
-double _recordGrams(SaleRecord record, {String? fallbackKey}) {
-  final byComponents = record.components.fold<double>(
-    0.0,
-    (total, component) => total + component.grams,
-  );
-  if (byComponents > 0) return byComponents;
-  if (fallbackKey != null) {
-    final fallback = parseDouble(record.data[fallbackKey]);
-    if (fallback > 0) return fallback;
-  }
-  return parseDouble(record.data['grams']);
-}
-
-bool _isSnackUnit(String unit) {
-  if (unit.isEmpty) return false;
-  if (unit == 'piece' || unit == 'pcs' || unit == 'pc') return true;
-  return unit == AppStrings.labelPieceUnit;
-}
-
-

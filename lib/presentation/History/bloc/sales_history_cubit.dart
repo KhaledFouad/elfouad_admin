@@ -8,6 +8,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../models/sale_record.dart';
 import '../models/sales_day_group.dart';
 import '../models/credit_account.dart';
+import '../models/history_summary.dart';
 import '../utils/sale_utils.dart';
 import 'sales_history_state.dart';
 
@@ -19,9 +20,15 @@ class SalesHistoryCubit extends Cubit<SalesHistoryState> {
   final SalesHistoryRepository _repository;
 
   QueryDocumentSnapshot<Map<String, dynamic>>? _lastDoc;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _createdSub;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _settledSub;
+  Timer? _realtimeDebounce;
+  int _summaryRequestId = 0;
 
   Future<void> initialize() async {
     unawaited(_loadCreditUnpaidCount());
+    _startRealtime(state.range);
+    unawaited(_loadSummary(state.range));
     await _loadFirstPage();
   }
 
@@ -59,7 +66,16 @@ class SalesHistoryCubit extends Cubit<SalesHistoryState> {
 
   Future<void> setRange(DateTimeRange? range) async {
     final resolved = range ?? defaultSalesRange();
-    emit(state.copyWith(customRange: range, range: resolved));
+    emit(
+      state.copyWith(
+        customRange: range,
+        range: resolved,
+        summary: null,
+        summaryByDay: const {},
+      ),
+    );
+    _startRealtime(resolved);
+    unawaited(_loadSummary(resolved));
     await _loadFirstPage();
   }
 
@@ -118,6 +134,7 @@ class SalesHistoryCubit extends Cubit<SalesHistoryState> {
     await _loadFirstPage();
     unawaited(_loadCreditUnpaidCount());
     unawaited(_loadCreditAccounts());
+    unawaited(_loadSummary(state.range));
   }
 
   Future<void> loadCreditAccounts({bool force = false}) async {
@@ -156,6 +173,63 @@ class SalesHistoryCubit extends Cubit<SalesHistoryState> {
     );
 
     unawaited(_loadFullTotalsPerDay(range));
+  }
+
+  void _startRealtime(DateTimeRange range) {
+    _createdSub?.cancel();
+    _settledSub?.cancel();
+
+    _createdSub =
+        _repository.watchCreatedInRange(range).skip(1).listen((_) {
+      _scheduleRealtimeRefresh();
+    });
+    _settledSub =
+        _repository.watchSettledInRange(range).skip(1).listen((_) {
+      _scheduleRealtimeRefresh();
+    });
+  }
+
+  void _scheduleRealtimeRefresh() {
+    _realtimeDebounce?.cancel();
+    _realtimeDebounce = Timer(
+      const Duration(milliseconds: 350),
+      () => unawaited(refreshCurrent()),
+    );
+  }
+
+  Future<void> _loadSummary(DateTimeRange range) async {
+    final requestId = ++_summaryRequestId;
+    emit(state.copyWith(isSummaryLoading: true));
+    try {
+      final docs = await _repository.fetchAllForRange(range: range);
+      final records = docs.map(SaleRecord.new).toList();
+      final filtered = _filterRecordsForRange(records, range);
+      final summary = HistorySummary.fromRecords(filtered);
+
+      final Map<String, List<SaleRecord>> grouped = {};
+      for (final record in filtered) {
+        final key = _dayKey(record.effectiveTime);
+        grouped.putIfAbsent(key, () => <SaleRecord>[]).add(record);
+      }
+      final summariesByDay = <String, HistorySummary>{};
+      grouped.forEach((key, items) {
+        summariesByDay[key] = HistorySummary.fromRecords(items);
+      });
+
+      if (requestId == _summaryRequestId) {
+        emit(
+          state.copyWith(
+            summary: summary,
+            summaryByDay: summariesByDay,
+            isSummaryLoading: false,
+          ),
+        );
+      }
+    } catch (_) {
+      if (requestId == _summaryRequestId) {
+        emit(state.copyWith(isSummaryLoading: false));
+      }
+    }
   }
 
   Future<void> _loadCreditAccounts() async {
@@ -252,23 +326,7 @@ class SalesHistoryCubit extends Cubit<SalesHistoryState> {
     List<SaleRecord> records,
     DateTimeRange range,
   ) {
-    final start = range.start;
-    final end = range.end;
-
-    bool inRange(DateTime value) {
-      return !value.isBefore(start) && value.isBefore(end);
-    }
-
-    final filtered = <SaleRecord>[];
-    for (final record in records) {
-      final effective = record.effectiveTime;
-      final include =
-          (!record.isDeferred && inRange(effective)) ||
-          (record.isDeferred && record.isPaid && inRange(effective));
-      if (include) {
-        filtered.add(record);
-      }
-    }
+    final filtered = _filterRecordsForRange(records, range);
 
     final Map<String, List<SaleRecord>> grouped = {};
     for (final record in filtered) {
@@ -323,5 +381,37 @@ class SalesHistoryCubit extends Cubit<SalesHistoryState> {
   String _dayKey(DateTime value) {
     final shifted = shiftDayByFourHours(value);
     return '${shifted.year}-${shifted.month.toString().padLeft(2, '0')}-${shifted.day.toString().padLeft(2, '0')}';
+  }
+
+  List<SaleRecord> _filterRecordsForRange(
+    List<SaleRecord> records,
+    DateTimeRange range,
+  ) {
+    final start = range.start;
+    final end = range.end;
+
+    bool inRange(DateTime value) {
+      return !value.isBefore(start) && value.isBefore(end);
+    }
+
+    final filtered = <SaleRecord>[];
+    for (final record in records) {
+      final effective = record.effectiveTime;
+      final include =
+          (!record.isDeferred && inRange(effective)) ||
+          (record.isDeferred && record.isPaid && inRange(effective));
+      if (include) {
+        filtered.add(record);
+      }
+    }
+    return filtered;
+  }
+
+  @override
+  Future<void> close() {
+    _realtimeDebounce?.cancel();
+    _createdSub?.cancel();
+    _settledSub?.cancel();
+    return super.close();
   }
 }
