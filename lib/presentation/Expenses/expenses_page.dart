@@ -3,6 +3,7 @@ import 'package:elfouad_admin/core/app_strings.dart';
 import 'package:elfouad_admin/domain/entities/expense.dart' show Expense;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:responsive_framework/responsive_framework.dart';
 import 'state/expenses_providers.dart';
 
 class ExpensesPage extends StatelessWidget {
@@ -15,6 +16,11 @@ class ExpensesPage extends StatelessWidget {
     final range = state.range;
     final total = state.total;
     final list = state.items;
+    final breakpoints = ResponsiveBreakpoints.of(context);
+    final isPhone = breakpoints.smallerThan(TABLET);
+    final isWide = breakpoints.largerThan(TABLET);
+    final contentMaxWidth = isWide ? 1100.0 : double.infinity;
+    final horizontalPadding = isPhone ? 10.0 : 16.0;
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -112,49 +118,56 @@ class ExpensesPage extends StatelessWidget {
           backgroundColor: kDarkBrown,
           foregroundColor: Colors.white,
         ),
-        body: Column(
-          children: [
-            // ???? ???? ????: ?????? + ???? ?????
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
-              child: Row(
-                children: [
-                  _pill(
-                    context,
-                    AppStrings.totalLabel,
-                    total.toStringAsFixed(2),
-                    Icons.account_balance_wallet,
+        body: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: contentMaxWidth),
+            child: Column(
+              children: [
+                // ???? ???? ????: ?????? + ???? ?????
+                Padding(
+                  padding: EdgeInsets.fromLTRB(horizontalPadding, 10, horizontalPadding, 4),
+                  child: Row(
+                    children: [
+                      _pill(
+                        context,
+                        AppStrings.totalLabel,
+                        total.toStringAsFixed(2),
+                        Icons.account_balance_wallet,
+                      ),
+                      const Spacer(),
+                    ],
                   ),
-                  const Spacer(),
-                ],
-              ),
-            ),
+                ),
 
-            const SizedBox(height: 6),
+                const SizedBox(height: 6),
 
-            Expanded(
-              child: state.loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : state.error != null
-                      ? Center(
-                          child: Text(
-                            AppStrings.expensesLoadError(
-                              state.error ?? 'unknown',
-                            ),
-                          ),
-                        )
-                      : list.isEmpty
-                          ? const Center(
-                              child: Text(AppStrings.expensesEmptyRange),
+                Expanded(
+                  child: state.loading
+                      ? const Center(child: CircularProgressIndicator())
+                      : state.error != null
+                          ? Center(
+                              child: Text(
+                                AppStrings.expensesLoadError(
+                                  state.error ?? 'unknown',
+                                ),
+                              ),
                             )
-                          : _ExpensesList(
-                              items: list,
-                              onEdit: (e) => _openEditSheet(context, e),
-                              onDelete: (id) =>
-                                  _deleteExpense(context, id),
-                            ),
+                          : list.isEmpty
+                              ? const Center(
+                                  child: Text(AppStrings.expensesEmptyRange),
+                                )
+                              : _ExpensesList(
+                                  items: list,
+                                  horizontalPadding: horizontalPadding,
+                                  onEdit: (e) => _openEditSheet(context, e),
+                                  onDelete: (id) =>
+                                      _deleteExpense(context, id),
+                                ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -232,11 +245,13 @@ class ExpensesPage extends StatelessWidget {
 class _ExpensesList extends StatelessWidget {
   const _ExpensesList({
     required this.items,
+    required this.horizontalPadding,
     required this.onEdit,
     required this.onDelete,
   });
 
   final List<Expense> items;
+  final double horizontalPadding;
   final void Function(Expense e) onEdit;
   final void Function(String id) onDelete;
 
@@ -263,7 +278,7 @@ class _ExpensesList extends StatelessWidget {
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 100),
+      padding: EdgeInsets.fromLTRB(horizontalPadding, 8, horizontalPadding, 100),
       itemCount: dayKeys.length,
       itemBuilder: (context, i) {
         final day = dayKeys[i];

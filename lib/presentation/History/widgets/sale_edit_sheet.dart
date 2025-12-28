@@ -315,10 +315,10 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
 
       final pricePerKg = _numOf(_m['price_per_kg']);
       final costPerKg = _numOf(_m['cost_per_kg']);
-      final pricePerG = pricePerKg > 0
+      double pricePerG = pricePerKg > 0
           ? pricePerKg / 1000.0
           : _numOf(_m['price_per_g']);
-      final costPerG = costPerKg > 0
+      double costPerG = costPerKg > 0
           ? costPerKg / 1000.0
           : _numOf(_m['cost_per_g']);
 
@@ -331,6 +331,29 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
       double grams =
           double.tryParse(_gramsCtrl.text.replaceAll(',', '.')) ??
               _numOf(_m['grams']);
+      final baseGrams = _numOf(_m['grams']);
+      final gramsForRate = baseGrams > 0 ? baseGrams : grams;
+      final baseBeansAmount = _numOf(_m['beans_amount']);
+      final baseSpiceAmount = _numOf(_m['spice_amount']);
+      final baseSpiceCostAmount = _numOf(_m['spice_cost_amount']);
+      final baseBeansCost = (oldTotalCost - baseSpiceCostAmount).clamp(
+        0.0,
+        double.infinity,
+      );
+      if (pricePerG <= 0 && gramsForRate > 0) {
+        if (baseBeansAmount > 0) {
+          pricePerG = baseBeansAmount / gramsForRate;
+        } else {
+          pricePerG = (oldTotalPrice - baseSpiceAmount) / gramsForRate;
+        }
+      }
+      if (costPerG <= 0 && gramsForRate > 0) {
+        if (baseBeansCost > 0) {
+          costPerG = baseBeansCost / gramsForRate;
+        } else {
+          costPerG = oldTotalCost / gramsForRate;
+        }
+      }
 
       double newTotalPrice = oldTotalPrice;
       double newTotalCost = oldTotalCost;

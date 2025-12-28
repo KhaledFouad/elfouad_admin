@@ -1,9 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:elfouad_admin/data/repo/sales_history_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../models/sale_record.dart';
 import '../models/sales_day_group.dart';
@@ -119,8 +122,7 @@ class SalesHistoryCubit extends Cubit<SalesHistoryState> {
   }
 
   Future<void> deleteCreditCustomer(String customerName) async {
-    await _repository.deleteCreditCustomer(customerName);
-    await _loadFirstPage();
+    await _repository.hideCreditCustomer(customerName);
     unawaited(_loadCreditUnpaidCount());
     unawaited(_loadCreditAccounts());
   }
@@ -135,6 +137,18 @@ class SalesHistoryCubit extends Cubit<SalesHistoryState> {
     unawaited(_loadCreditUnpaidCount());
     unawaited(_loadCreditAccounts());
     unawaited(_loadSummary(state.range));
+  }
+
+  Future<String?> exportRangeCsv({DateTimeRange? range}) async {
+    final targetRange = range ?? state.range;
+    final docs = await _repository.fetchAllForRange(range: targetRange);
+    final records = docs.map(SaleRecord.new).toList();
+    final filtered = _filterRecordsForRange(records, targetRange);
+    if (filtered.isEmpty) return null;
+    filtered.sort((a, b) => b.effectiveTime.compareTo(a.effectiveTime));
+    final csv = _buildCsv(filtered);
+    final file = await _writeCsvFile(csv, targetRange);
+    return file.path;
   }
 
   Future<void> loadCreditAccounts({bool force = false}) async {
@@ -405,6 +419,115 @@ class SalesHistoryCubit extends Cubit<SalesHistoryState> {
       }
     }
     return filtered;
+  }
+
+  String _buildCsv(List<SaleRecord> records) {
+    final buffer = StringBuffer('\uFEFF');
+    buffer.writeln(
+      'date_time,title,type,total_price,total_cost,profit,paid,deferred,complimentary,note,id',
+    );
+
+    for (final record in records) {
+      final profit = record.totalPrice - record.totalCost;
+      final row = [
+        formatDateTime(record.effectiveTime),
+        record.titleLine,
+        record.type,
+        record.totalPrice.toStringAsFixed(2),
+        record.totalCost.toStringAsFixed(2),
+        profit.toStringAsFixed(2),
+        record.isPaid ? '1' : '0',
+        record.isDeferred ? '1' : '0',
+        record.isComplimentary ? '1' : '0',
+        record.note,
+        record.id,
+      ];
+      buffer.writeln(row.map(_escapeCsv).join(','));
+    }
+    return buffer.toString();
+  }
+
+  String _escapeCsv(String value) {
+    if (value.contains('"')) {
+      value = value.replaceAll('"', '""');
+    }
+    if (value.contains(',') || value.contains('\n') || value.contains('\r')) {
+      return '"$value"';
+    }
+    return value;
+  }
+
+  Future<File> _writeCsvFile(String csv, DateTimeRange range) async {
+    final primaryDir = await _resolveExportDirectory();
+    final fallbackDir = await getApplicationDocumentsDirectory();
+    final fileName = _buildExportFileName(range);
+
+    try {
+      return await _writeUniqueFile(primaryDir, fileName, csv);
+    } catch (_) {
+      if (primaryDir.path == fallbackDir.path) rethrow;
+      return _writeUniqueFile(fallbackDir, fileName, csv);
+    }
+  }
+
+  Future<File> _writeUniqueFile(
+    Directory directory,
+    String fileName,
+    String contents,
+  ) async {
+    await directory.create(recursive: true);
+    var attempt = 0;
+    final dot = fileName.lastIndexOf('.');
+    final base = dot == -1 ? fileName : fileName.substring(0, dot);
+    final ext = dot == -1 ? '' : fileName.substring(dot);
+    File file;
+    do {
+      final suffix = attempt == 0 ? '' : '_${attempt + 1}';
+      final name = '$base$suffix$ext';
+      final path = '${directory.path}${Platform.pathSeparator}$name';
+      file = File(path);
+      attempt++;
+    } while (await file.exists());
+
+    await file.writeAsString(contents, encoding: utf8);
+    return file;
+  }
+
+  String _buildExportFileName(DateTimeRange range) {
+    final startLabel = _formatDate(range.start);
+    final endLabel = _formatDate(
+      range.end.subtract(const Duration(seconds: 1)),
+    );
+    if (startLabel == endLabel) {
+      return 'sales_$startLabel.csv';
+    }
+    return 'sales_${startLabel}_to_$endLabel.csv';
+  }
+
+  String _formatDate(DateTime value) {
+    final y = value.year.toString().padLeft(4, '0');
+    final m = value.month.toString().padLeft(2, '0');
+    final d = value.day.toString().padLeft(2, '0');
+    return '$y-$m-$d';
+  }
+
+  Future<Directory> _resolveExportDirectory() async {
+    if (Platform.isAndroid) {
+      final downloads = Directory('/storage/emulated/0/Download');
+      if (await downloads.exists()) {
+        return downloads;
+      }
+      final external = await getExternalStorageDirectory();
+      if (external != null) return external;
+    } else {
+      try {
+        final downloads = await getDownloadsDirectory();
+        if (downloads != null) return downloads;
+      } catch (_) {
+        // Fall back to documents below.
+      }
+    }
+    return getApplicationDocumentsDirectory();
   }
 
   @override

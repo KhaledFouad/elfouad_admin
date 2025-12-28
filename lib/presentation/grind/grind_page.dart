@@ -3,6 +3,7 @@ import 'package:elfouad_admin/core/app_strings.dart';
 import 'package:elfouad_admin/presentation/grind/state/grind_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:responsive_framework/responsive_framework.dart';
 import 'widgets/grind_confirm_sheet.dart';
 
 class GrindPage extends StatelessWidget {
@@ -13,6 +14,11 @@ class GrindPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = context.watch<GrindCubit>().state;
     final filtered = state.filtered;
+    final breakpoints = ResponsiveBreakpoints.of(context);
+    final isPhone = breakpoints.smallerThan(TABLET);
+    final isWide = breakpoints.largerThan(TABLET);
+    final contentMaxWidth = isWide ? 1100.0 : double.infinity;
+    final horizontalPadding = isPhone ? 10.0 : 16.0;
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -53,48 +59,66 @@ class GrindPage extends StatelessWidget {
             ),
           ),
         ),
-        body: Column(
-          children: [
-            // ???? ????: ????? ??
-            Container(
-              decoration: const BoxDecoration(
-                color: Color(0xFFF7EFE8),
-                borderRadius: BorderRadius.vertical(
-                  bottom: Radius.circular(18),
-                ),
-              ),
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-              child: TextField(
-                decoration: InputDecoration(
-                  hintText: AppStrings.grindSearchHint,
-                  prefixIcon: const Icon(Icons.search),
-                  isDense: true,
-                  filled: true,
-                  fillColor: Colors.white,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+        body: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: contentMaxWidth),
+            child: Column(
+              children: [
+                // ???? ????: ????? ??
+                Container(
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFF7EFE8),
+                    borderRadius: BorderRadius.vertical(
+                      bottom: Radius.circular(18),
+                    ),
+                  ),
+                  padding: EdgeInsets.fromLTRB(
+                    horizontalPadding,
+                    12,
+                    horizontalPadding,
+                    12,
+                  ),
+                  child: TextField(
+                    decoration: InputDecoration(
+                      hintText: AppStrings.grindSearchHint,
+                      prefixIcon: const Icon(Icons.search),
+                      isDense: true,
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    onChanged: (t) => context.read<GrindCubit>().setQuery(t),
+                    controller: TextEditingController(text: state.query)
+                      ..selection =
+                          TextSelection.collapsed(offset: state.query.length),
                   ),
                 ),
-                onChanged: (t) => context.read<GrindCubit>().setQuery(t),
-                controller: TextEditingController(text: state.query)
-                  ..selection =
-                      TextSelection.collapsed(offset: state.query.length),
-              ),
-            ),
 
-            Expanded(
-              child: state.loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : filtered.isEmpty
-                      ? const Center(child: Text(AppStrings.noItems))
-                      : ListView.separated(
-                          padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-                          itemCount: filtered.length,
-                          separatorBuilder: (_, _) => const SizedBox(height: 8),
-                          itemBuilder: (_, i) => _ItemCard(row: filtered[i]),
-                        ),
+                Expanded(
+                  child: state.loading
+                      ? const Center(child: CircularProgressIndicator())
+                      : filtered.isEmpty
+                          ? const Center(child: Text(AppStrings.noItems))
+                          : ListView.separated(
+                              padding: EdgeInsets.fromLTRB(
+                                horizontalPadding,
+                                8,
+                                horizontalPadding,
+                                12,
+                              ),
+                              itemCount: filtered.length,
+                              separatorBuilder: (_, _) =>
+                                  const SizedBox(height: 8),
+                              itemBuilder: (_, i) =>
+                                  _ItemCard(row: filtered[i]),
+                            ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

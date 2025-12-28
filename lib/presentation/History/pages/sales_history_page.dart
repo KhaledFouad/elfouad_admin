@@ -2,6 +2,7 @@ import 'package:awesome_drawer_bar/awesome_drawer_bar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:responsive_framework/responsive_framework.dart';
 import 'package:elfouad_admin/core/app_strings.dart';
 import 'package:elfouad_admin/data/repo/sales_history_repository.dart';
 import '../bloc/sales_history_cubit.dart';
@@ -34,9 +35,11 @@ class _SalesHistoryView extends StatelessWidget {
   Widget build(BuildContext context) {
     final cubit = context.watch<SalesHistoryCubit>();
     final state = cubit.state;
-    final width = MediaQuery.of(context).size.width;
-    final contentMaxWidth = width >= 1100 ? 1100.0 : double.infinity;
-    final horizontalPadding = width < 600 ? 10.0 : 12.0;
+    final breakpoints = ResponsiveBreakpoints.of(context);
+    final isPhone = breakpoints.smallerThan(TABLET);
+    final isWide = breakpoints.largerThan(TABLET);
+    final contentMaxWidth = isWide ? 1100.0 : double.infinity;
+    final horizontalPadding = isPhone ? 10.0 : 16.0;
     final listPadding = EdgeInsets.fromLTRB(
       horizontalPadding,
       12,
@@ -187,14 +190,6 @@ class _HistoryAppBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     final state = cubit.state;
-    final width = MediaQuery.of(context).size.width;
-    final titleSize = width < 600
-        ? 22.0
-        : width < 1024
-        ? 26.0
-        : width < 1400
-        ? 28.0
-        : 32.0;
     return ClipRRect(
       borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),
       child: PreferredSize(
@@ -212,7 +207,7 @@ class _HistoryAppBar extends StatelessWidget implements PreferredSizeWidget {
             actions: [
               IconButton(
                 tooltip: AppStrings.tooltipFilterByDate,
-                onPressed: () => _pickRange(context, cubit),
+                onPressed: () => _showFilterActions(context, cubit),
                 icon: const Icon(Icons.filter_alt, color: Colors.white),
               ),
               if (state.isFiltered)
@@ -267,7 +262,99 @@ class _HistoryAppBar extends StatelessWidget implements PreferredSizeWidget {
       await cubit.setRange(normalized);
     }
   }
+
+  Future<void> _showFilterActions(
+    BuildContext context,
+    SalesHistoryCubit cubit,
+  ) async {
+    final action = await showModalBottomSheet<_HistoryFilterAction>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 8),
+              Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade400,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                AppStrings.filterAndExportTitle,
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+              ),
+              const SizedBox(height: 8),
+              ListTile(
+                leading: const Icon(Icons.date_range),
+                title: const Text(AppStrings.selectRange),
+                onTap: () => Navigator.pop(
+                  context,
+                  _HistoryFilterAction.selectRange,
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.download_rounded),
+                title: const Text(AppStrings.exportExcelCsv),
+                onTap: () => Navigator.pop(
+                  context,
+                  _HistoryFilterAction.exportRange,
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    switch (action) {
+      case _HistoryFilterAction.selectRange:
+        await _pickRange(context, cubit);
+        break;
+      case _HistoryFilterAction.exportRange:
+        await _exportRange(context, cubit);
+        break;
+      case null:
+        break;
+    }
+  }
+
+  Future<void> _exportRange(
+    BuildContext context,
+    SalesHistoryCubit cubit,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final path = await cubit.exportRangeCsv();
+      if (!context.mounted) return;
+      if (path == null) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text(AppStrings.noSalesInRangeForExport)),
+        );
+      } else {
+        messenger.showSnackBar(
+          SnackBar(content: Text(AppStrings.savedToPath(path))),
+        );
+      }
+    } catch (error) {
+      if (!context.mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text(AppStrings.exportFailed(error))),
+      );
+    }
+  }
 }
+
+enum _HistoryFilterAction { selectRange, exportRange }
 
 class _CreditFab extends StatelessWidget {
   const _CreditFab({

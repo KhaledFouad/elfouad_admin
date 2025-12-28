@@ -10,6 +10,7 @@ import 'package:elfouad_admin/presentation/stats/widgets/triple_trend_chart.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
+import 'package:responsive_framework/responsive_framework.dart';
 
 class StatsPage extends StatefulWidget {
   const StatsPage({super.key});
@@ -27,6 +28,10 @@ class _StatsPageState extends State<StatsPage> {
     final state = context.watch<StatsCubit>().state;
     final month = state.month;
     final period = state.period;
+    final breakpoints = ResponsiveBreakpoints.of(context);
+    final isPhone = breakpoints.smallerThan(TABLET);
+    final maxWidth = breakpoints.largerThan(TABLET) ? 1000.0 : double.infinity;
+    final horizontalPadding = isPhone ? 12.0 : 20.0;
 
     return Scaffold(
       appBar: _brandedMonthAppBar(context, month),
@@ -35,16 +40,25 @@ class _StatsPageState extends State<StatsPage> {
           await context.read<StatsCubit>().refresh();
           await Future.delayed(const Duration(milliseconds: 350));
         },
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(12, 6, 12, 18),
-          children: [
-            // ?????? ??? ?????
-            PeriodChips(
-              forMonth: month,
-              selected: period,
-              preview: state.preview,
-              onSelected: (p) => context.read<StatsCubit>().setPeriod(p),
-            ),
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: maxWidth),
+            child: ListView(
+              padding: EdgeInsets.fromLTRB(
+                horizontalPadding,
+                6,
+                horizontalPadding,
+                18,
+              ),
+              children: [
+                // ?????? ??? ?????
+                PeriodChips(
+                  forMonth: month,
+                  selected: period,
+                  preview: state.preview,
+                  onSelected: (p) => context.read<StatsCubit>().setPeriod(p),
+                ),
 
             const SizedBox(height: 8),
 
@@ -104,271 +118,286 @@ class _StatsPageState extends State<StatsPage> {
                 ],
               ),
 
-            const SizedBox(height: 16),
+                const SizedBox(height: 16),
 
             // ????????? ??? ????? (NEW)
-            Card(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                      child: Text(
-                        AppStrings.drinksAndSnacksTitle,
-                        style: TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    if (state.loading)
-                      const SizedBox(
-                        height: 120,
-                        child: Center(child: CircularProgressIndicator()),
-                      )
-                    else if (state.error != null)
-                      Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Text(
-                          AppStrings.loadFailed(
-                            AppStrings.drinksDataLabel,
-                            state.error ?? 'unknown',
-                          ),
-                        ),
-                      )
-                    else if (state.overview != null)
-                      Builder(
-                        builder: (context) {
-                          final bundle = state.overview!;
-                          final drinkRows = bundle.drinks
-                              .map(
-                                (x) => DrinkRow(
-                                  name: x.name,
-                                  cups: x.cups,
-                                  sales: x.sales,
-                                  cost: x.cost,
-                                  profit: x.profit,
-                                  avgPrice:
-                                      x.cups > 0 ? (x.sales / x.cups) : 0,
-                                ),
-                              )
-                              .toList();
-                          final snackRows = bundle.extras
-                              .map(
-                                (x) => DrinkRow(
-                                  name: x.name,
-                                  cups: x.cups,
-                                  sales: x.sales,
-                                  cost: x.cost,
-                                  profit: x.profit,
-                                  avgPrice:
-                                      x.cups > 0 ? (x.sales / x.cups) : 0,
-                                ),
-                              )
-                              .toList();
-                          final combined = [...drinkRows, ...snackRows]
-                            ..sort((a, b) => b.sales.compareTo(a.sales));
-                          if (combined.isEmpty) {
-                            return const Padding(
-                              padding: EdgeInsets.all(8.0),
-                              child: Text(AppStrings.noDataForRange),
-                            );
-                          }
-                          return DrinksByNameTable(rows: combined);
-                        },
-                      ),
-                  ],
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // ???? ?????? ?????????
-            Card(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                      child: Text(
-                        AppStrings.dailyHighlightsTitle,
-                        style: TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    if (state.loading)
-                      const SizedBox(
-                        height: 120,
-                        child: Center(child: CircularProgressIndicator()),
-                      )
-                    else if (state.error != null)
-                      Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Text(
-                          AppStrings.loadFailed(
-                            AppStrings.dailyHighlightsLabel,
-                            state.error ?? 'unknown',
-                          ),
-                        ),
-                      )
-                    else if (state.overview != null)
-                      StatsHighlightsCard(
-                        highlights: state.overview!.highlights,
-                      ),
-                  ],
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // ???? ??? ?????
-            Card(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                      child: Text(
-                        AppStrings.beansByNameTitle,
-                        style: TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    if (state.loading)
-                      const SizedBox(
-                        height: 120,
-                        child: Center(child: CircularProgressIndicator()),
-                      )
-                    else if (state.error != null)
-                      Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Text(
-                          AppStrings.loadFailed(
-                            AppStrings.beansDataLabel,
-                            state.error ?? 'unknown',
-                          ),
-                        ),
-                      )
-                    else if (state.overview != null)
-                      Builder(
-                        builder: (context) {
-                          final rows = state.overview!.beans
-                              .map(
-                                (x) => BeanRow(
-                                  name: x.name,
-                                  grams: x.grams,
-                                  plainGrams: x.plainGrams,
-                                  spicedGrams: x.spicedGrams,
-                                  sales: x.sales,
-                                  cost: x.cost,
-                                ),
-                              )
-                              .toList();
-                          if (rows.isEmpty) {
-                            return const Padding(
-                              padding: EdgeInsets.all(8.0),
-                              child: Text(AppStrings.noDataForRange),
-                            );
-                          }
-                          return BeansByNameTable(rows: rows);
-                        },
-                      ),
-                  ],
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // ???? ?????: ??????/??? (?????? + ??????? + ??)
-            Card(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+                Card(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          AppStrings.dailyTrendsTitle,
-                          style: TextStyle(fontWeight: FontWeight.w800),
-                        ),
-                        const Spacer(),
-                        SegmentedButton<bool>(
-                          segments: const [
-                            ButtonSegment<bool>(
-                              value: false,
-                              label: Text(AppStrings.salesLabel),
-                            ),
-                            ButtonSegment<bool>(
-                              value: true,
-                              label: Text(AppStrings.profitLabel),
-                            ),
-                          ],
-                          selected: <bool>{_profitMode},
-                          onSelectionChanged: (s) =>
-                              setState(() => _profitMode = s.first),
-                          style: const ButtonStyle(
-                            visualDensity: VisualDensity(
-                              horizontal: -2,
-                              vertical: -2,
-                            ),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 4,
+                          ),
+                          child: Text(
+                            AppStrings.drinksAndSnacksTitle,
+                            style: TextStyle(fontWeight: FontWeight.w800),
                           ),
                         ),
+                        const SizedBox(height: 8),
+                        if (state.loading)
+                          const SizedBox(
+                            height: 120,
+                            child: Center(child: CircularProgressIndicator()),
+                          )
+                        else if (state.error != null)
+                          Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: Text(
+                              AppStrings.loadFailed(
+                                AppStrings.drinksDataLabel,
+                                state.error ?? 'unknown',
+                              ),
+                            ),
+                          )
+                        else if (state.overview != null)
+                          Builder(
+                            builder: (context) {
+                              final bundle = state.overview!;
+                              final drinkRows = bundle.drinks
+                                  .map(
+                                    (x) => DrinkRow(
+                                      name: x.name,
+                                      cups: x.cups,
+                                      sales: x.sales,
+                                      cost: x.cost,
+                                      profit: x.profit,
+                                      avgPrice: x.cups > 0
+                                          ? (x.sales / x.cups)
+                                          : 0,
+                                    ),
+                                  )
+                                  .toList();
+                              final snackRows = bundle.extras
+                                  .map(
+                                    (x) => DrinkRow(
+                                      name: x.name,
+                                      cups: x.cups,
+                                      sales: x.sales,
+                                      cost: x.cost,
+                                      profit: x.profit,
+                                      avgPrice: x.cups > 0
+                                          ? (x.sales / x.cups)
+                                          : 0,
+                                    ),
+                                  )
+                                  .toList();
+                              final combined = [...drinkRows, ...snackRows]
+                                ..sort((a, b) => b.sales.compareTo(a.sales));
+                              if (combined.isEmpty) {
+                                return const Padding(
+                                  padding: EdgeInsets.all(8.0),
+                                  child: Text(AppStrings.noDataForRange),
+                                );
+                              }
+                              return DrinksByNameTable(rows: combined);
+                            },
+                          ),
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    if (state.loading)
-                      const SizedBox(
-                        height: 220,
-                        child: Center(child: CircularProgressIndicator()),
-                      )
-                    else if (state.error != null)
-                      Text(
-                        AppStrings.loadFailed(
-                          AppStrings.trendLabel,
-                          state.error ?? 'unknown',
-                        ),
-                      )
-                    else if (state.overview != null)
-                      Builder(
-                        builder: (context) {
-                          final t = state.overview!.trends;
-                          return TripleTrendChart(
-                            line1: _profitMode ? t.totalProfit : t.totalSales,
-                            lineDrinks: _profitMode
-                                ? t.drinksProfit
-                                : t.drinksSales,
-                            lineBeansGrams: _profitMode
-                                ? t.beansProfit
-                                : t.beansSales,
-                            asProfit: _profitMode,
-                          );
-                        },
-                      ),
-                  ],
+                  ),
                 ),
-              ),
+
+                const SizedBox(height: 16),
+
+            // ???? ?????? ?????????
+                Card(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 4,
+                          ),
+                          child: Text(
+                            AppStrings.dailyHighlightsTitle,
+                            style: TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        if (state.loading)
+                          const SizedBox(
+                            height: 120,
+                            child: Center(child: CircularProgressIndicator()),
+                          )
+                        else if (state.error != null)
+                          Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: Text(
+                              AppStrings.loadFailed(
+                                AppStrings.dailyHighlightsLabel,
+                                state.error ?? 'unknown',
+                              ),
+                            ),
+                          )
+                        else if (state.overview != null)
+                          StatsHighlightsCard(
+                            highlights: state.overview!.highlights,
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+
+            // ???? ??? ?????
+                Card(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 4,
+                          ),
+                          child: Text(
+                            AppStrings.beansByNameTitle,
+                            style: TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        if (state.loading)
+                          const SizedBox(
+                            height: 120,
+                            child: Center(child: CircularProgressIndicator()),
+                          )
+                        else if (state.error != null)
+                          Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: Text(
+                              AppStrings.loadFailed(
+                                AppStrings.beansDataLabel,
+                                state.error ?? 'unknown',
+                              ),
+                            ),
+                          )
+                        else if (state.overview != null)
+                          Builder(
+                            builder: (context) {
+                              final rows = state.overview!.beans
+                                  .map(
+                                    (x) => BeanRow(
+                                      name: x.name,
+                                      grams: x.grams,
+                                      plainGrams: x.plainGrams,
+                                      spicedGrams: x.spicedGrams,
+                                      sales: x.sales,
+                                      cost: x.cost,
+                                    ),
+                                  )
+                                  .toList();
+                              if (rows.isEmpty) {
+                                return const Padding(
+                                  padding: EdgeInsets.all(8.0),
+                                  child: Text(AppStrings.noDataForRange),
+                                );
+                              }
+                              return BeansByNameTable(rows: rows);
+                            },
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+
+            // ???? ?????: ??????/??? (?????? + ??????? + ??)
+                Card(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Text(
+                              AppStrings.dailyTrendsTitle,
+                              style: TextStyle(fontWeight: FontWeight.w800),
+                            ),
+                            const Spacer(),
+                            SegmentedButton<bool>(
+                              segments: const [
+                                ButtonSegment<bool>(
+                                  value: false,
+                                  label: Text(AppStrings.salesLabel),
+                                ),
+                                ButtonSegment<bool>(
+                                  value: true,
+                                  label: Text(AppStrings.profitLabel),
+                                ),
+                              ],
+                              selected: <bool>{_profitMode},
+                              onSelectionChanged: (s) =>
+                                  setState(() => _profitMode = s.first),
+                              style: const ButtonStyle(
+                                visualDensity: VisualDensity(
+                                  horizontal: -2,
+                                  vertical: -2,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        if (state.loading)
+                          const SizedBox(
+                            height: 220,
+                            child: Center(child: CircularProgressIndicator()),
+                          )
+                        else if (state.error != null)
+                          Text(
+                            AppStrings.loadFailed(
+                              AppStrings.trendLabel,
+                              state.error ?? 'unknown',
+                            ),
+                          )
+                        else if (state.overview != null)
+                          Builder(
+                            builder: (context) {
+                              final t = state.overview!.trends;
+                              return TripleTrendChart(
+                                line1: _profitMode
+                                    ? t.totalProfit
+                                    : t.totalSales,
+                                lineDrinks: _profitMode
+                                    ? t.drinksProfit
+                                    : t.drinksSales,
+                                lineBeansGrams: _profitMode
+                                    ? t.beansProfit
+                                    : t.beansSales,
+                                asProfit: _profitMode,
+                              );
+                            },
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

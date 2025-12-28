@@ -242,7 +242,11 @@ class SalesHistoryRepository {
       combined[doc.id] = doc;
     }
 
-    return combined.values.toList();
+    final filtered = combined.values.where((doc) {
+      final data = doc.data();
+      return !_isCreditHidden(data);
+    }).toList();
+    return filtered;
   }
 
   Future<List<String>> fetchCreditCustomerNames() async {
@@ -263,20 +267,69 @@ class SalesHistoryRepository {
         .collection('sales')
         .where('is_deferred', isEqualTo: true)
         .where('paid', isEqualTo: false)
-        .count()
         .get();
 
     final creditFuture = _firestore
         .collection('sales')
         .where('is_credit', isEqualTo: true)
         .where('paid', isEqualTo: false)
-        .count()
         .get();
 
     final results = await Future.wait([deferredFuture, creditFuture]);
-    final deferredCount = results[0].count ?? 0;
-    final creditCount = results[1].count ?? 0;
-    return deferredCount + creditCount;
+    final deferredSnap = results[0];
+    final creditSnap = results[1];
+
+    final combined =
+        <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
+    for (final doc in deferredSnap.docs) {
+      combined[doc.id] = doc;
+    }
+    for (final doc in creditSnap.docs) {
+      combined[doc.id] = doc;
+    }
+
+    var count = 0;
+    for (final doc in combined.values) {
+      if (!_isCreditHidden(doc.data())) {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  Future<void> hideCreditCustomer(String customerName) async {
+    final name = customerName.trim();
+    if (name.isEmpty) {
+      throw Exception('Customer name is required.');
+    }
+
+    final snap = await _firestore
+        .collection('sales')
+        .where('note', isEqualTo: name)
+        .get();
+
+    if (snap.docs.isEmpty) {
+      return;
+    }
+
+    const batchLimit = 400;
+    var batch = _firestore.batch();
+    var opCount = 0;
+    for (final doc in snap.docs) {
+      batch.update(doc.reference, {
+        'credit_hidden': true,
+        'credit_hidden_at': FieldValue.serverTimestamp(),
+      });
+      opCount++;
+      if (opCount >= batchLimit) {
+        await batch.commit();
+        batch = _firestore.batch();
+        opCount = 0;
+      }
+    }
+    if (opCount > 0) {
+      await batch.commit();
+    }
   }
 
   Future<void> deleteCreditCustomer(String customerName) async {
@@ -470,6 +523,10 @@ class SalesHistoryRepository {
   double _parseDouble(dynamic value) {
     if (value is num) return value.toDouble();
     return double.tryParse(value?.toString() ?? '0') ?? 0;
+  }
+
+  bool _isCreditHidden(Map<String, dynamic> data) {
+    return data['credit_hidden'] == true;
   }
 
   int _parseInt(dynamic value) {

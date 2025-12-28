@@ -4,7 +4,7 @@ import 'package:elfouad_admin/presentation/History/models/payment_event.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:elfouad_admin/core/app_strings.dart';
-import 'package:elfouad_admin/core/widgets/branded_appbar.dart';
+import 'package:responsive_framework/responsive_framework.dart';
 
 import '../bloc/sales_history_cubit.dart';
 import '../bloc/sales_history_state.dart';
@@ -12,6 +12,7 @@ import '../models/credit_account.dart';
 import '../models/sale_component.dart';
 import '../models/sale_record.dart';
 import '../utils/sale_utils.dart';
+import '../widgets/sale_edit_sheet.dart';
 
 class CreditCustomerPage extends StatefulWidget {
   const CreditCustomerPage({super.key, required this.customerName});
@@ -27,13 +28,16 @@ class _CreditCustomerPageState extends State<CreditCustomerPage> {
 
   @override
   Widget build(BuildContext context) {
+    final breakpoints = ResponsiveBreakpoints.of(context);
+    final isPhone = breakpoints.smallerThan(TABLET);
+    final isWide = breakpoints.largerThan(TABLET);
+    final contentMaxWidth = isWide ? 1000.0 : double.infinity;
+    final horizontalPadding = isPhone ? 10.0 : 16.0;
+
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        appBar: BrandedAppBar(
-          title: widget.customerName,
-          showBack: true,
-        ),
+        appBar: _CreditCustomerAppBar(title: widget.customerName),
         body: BlocBuilder<SalesHistoryCubit, SalesHistoryState>(
           builder: (context, state) {
             final account = _findAccount(state, widget.customerName);
@@ -47,42 +51,66 @@ class _CreditCustomerPageState extends State<CreditCustomerPage> {
             final totalOwed = account.totalOwed;
             final sales = account.sales;
 
-            return Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-                  child: _AccountHeader(
-                    account: account,
-                    totalOwed: totalOwed,
-                    busy: _busy,
-                    onPayAmount: totalOwed <= 0 || _busy
-                        ? null
-                        : () => _handlePayAmount(account),
-                  ),
+            return Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: contentMaxWidth),
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        horizontalPadding,
+                        12,
+                        horizontalPadding,
+                        8,
+                      ),
+                      child: _AccountHeader(
+                        account: account,
+                        totalOwed: totalOwed,
+                        busy: _busy,
+                        onPayAmount: totalOwed <= 0 || _busy
+                            ? null
+                            : () => _handlePayAmount(account),
+                      ),
+                    ),
+                    Expanded(
+                      child: sales.isEmpty
+                          ? Center(
+                              child: Text(
+                                AppStrings.labelNoCreditSalesForCustomer,
+                              ),
+                            )
+                          : ListView.separated(
+                              padding: EdgeInsets.fromLTRB(
+                                horizontalPadding,
+                                0,
+                                horizontalPadding,
+                                20,
+                              ),
+                              itemCount: sales.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 10),
+                              itemBuilder: (context, index) {
+                                final record = sales[index];
+                                return _CreditSaleTile(
+                                  record: record,
+                                  busy: _busy,
+                                  onPay: record.outstandingAmount > 0 && !_busy
+                                      ? () => _handlePaySale(record)
+                                      : null,
+                                  onEdit: _busy
+                                      ? null
+                                      : () => _handleEditSale(record),
+                                  onDelete: _busy
+                                      ? null
+                                      : () => _handleDeleteSale(record),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
                 ),
-                Expanded(
-                  child: sales.isEmpty
-                      ? Center(
-                          child: Text(AppStrings.labelNoCreditSalesForCustomer),
-                        )
-                      : ListView.separated(
-                          padding: const EdgeInsets.fromLTRB(12, 0, 12, 20),
-                          itemCount: sales.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(height: 10),
-                          itemBuilder: (context, index) {
-                            final record = sales[index];
-                            return _CreditSaleTile(
-                              record: record,
-                              busy: _busy,
-                              onPay: record.outstandingAmount > 0 && !_busy
-                                  ? () => _handlePaySale(record)
-                                  : null,
-                            );
-                          },
-                        ),
-                ),
-              ],
+              ),
             );
           },
         ),
@@ -188,6 +216,62 @@ class _CreditCustomerPageState extends State<CreditCustomerPage> {
       }
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _handleEditSale(SaleRecord record) async {
+    final result = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => SaleEditSheet(snap: record.snapshot),
+    );
+    if (result == true && mounted) {
+      await context.read<SalesHistoryCubit>().refreshCurrent();
+    }
+  }
+
+  Future<void> _handleDeleteSale(SaleRecord record) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text(AppStrings.deleteSaleTitle),
+        content: const Text(
+          AppStrings.deleteSaleConfirm,
+          textAlign: TextAlign.center,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text(AppStrings.actionCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text(AppStrings.actionDelete),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final cubit = context.read<SalesHistoryCubit>();
+    try {
+      await cubit.deleteSale(record.id);
+      if (mounted) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text(AppStrings.saleDeletedRollback)),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(content: Text(AppStrings.saleDeleteFailed(error))),
+        );
+      }
     }
   }
 
@@ -312,6 +396,63 @@ class _CreditCustomerPageState extends State<CreditCustomerPage> {
   }
 }
 
+class _CreditCustomerAppBar extends StatelessWidget
+    implements PreferredSizeWidget {
+  const _CreditCustomerAppBar({required this.title});
+
+  final String title;
+
+  @override
+  Size get preferredSize => const Size.fromHeight(64);
+
+  @override
+  Widget build(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    final titleSize = width < 600
+        ? 22.0
+        : width < 1024
+            ? 26.0
+            : width < 1400
+                ? 28.0
+                : 32.0;
+
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),
+      child: AppBar(
+        automaticallyImplyLeading: false,
+        leading: IconButton(
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: Colors.white,
+          ),
+          onPressed: () => Navigator.maybePop(context),
+          tooltip: AppStrings.tooltipBack,
+        ),
+        title: Text(
+          title,
+          style: TextStyle(
+            fontWeight: FontWeight.w800,
+            fontSize: titleSize,
+            color: Colors.white,
+          ),
+        ),
+        centerTitle: true,
+        elevation: 8,
+        backgroundColor: Colors.transparent,
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF5D4037), Color(0xFF795548)],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _AccountHeader extends StatelessWidget {
   const _AccountHeader({
     required this.account,
@@ -375,11 +516,15 @@ class _CreditSaleTile extends StatelessWidget {
     required this.record,
     required this.busy,
     required this.onPay,
+    required this.onEdit,
+    required this.onDelete,
   });
 
   final SaleRecord record;
   final bool busy;
   final VoidCallback? onPay;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -441,6 +586,22 @@ class _CreditSaleTile extends StatelessWidget {
                 ),
               ],
             ),
+            if (onEdit != null || onDelete != null)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  IconButton(
+                    tooltip: AppStrings.actionEdit,
+                    onPressed: onEdit,
+                    icon: const Icon(Icons.edit),
+                  ),
+                  IconButton(
+                    tooltip: AppStrings.actionDelete,
+                    onPressed: onDelete,
+                    icon: const Icon(Icons.delete_outline),
+                  ),
+                ],
+              ),
             if (record.components.isNotEmpty) ...[
               const SizedBox(height: 10),
               const Divider(height: 1),

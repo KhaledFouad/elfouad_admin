@@ -9,11 +9,13 @@ class CreditAccountsSection extends StatelessWidget {
     required this.accounts,
     required this.isLoading,
     required this.onSelect,
+    required this.onDelete,
   });
 
   final List<CreditCustomerAccount> accounts;
   final bool isLoading;
   final ValueChanged<CreditCustomerAccount> onSelect;
+  final ValueChanged<CreditCustomerAccount> onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -60,13 +62,14 @@ class CreditAccountsSection extends StatelessWidget {
                     .map(
                       (account) => Padding(
                         padding: const EdgeInsets.only(bottom: 8),
-                      child: _CreditAccountTile(
-                        account: account,
-                        onTap: () => onSelect(account),
+                        child: _CreditAccountTile(
+                          account: account,
+                          onTap: () => onSelect(account),
+                          onDelete: () => onDelete(account),
+                        ),
                       ),
-                    ),
-                  )
-                  .toList(),
+                    )
+                    .toList(),
               ),
           ],
         ),
@@ -79,10 +82,12 @@ class _CreditAccountTile extends StatelessWidget {
   const _CreditAccountTile({
     required this.account,
     required this.onTap,
+    required this.onDelete,
   });
 
   final CreditCustomerAccount account;
   final VoidCallback onTap;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -147,6 +152,13 @@ class _CreditAccountTile extends StatelessWidget {
                     style: const TextStyle(fontSize: 12),
                   ),
                 ],
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                tooltip: AppStrings.actionDelete,
+                onPressed: onDelete,
+                icon: const Icon(Icons.delete_outline),
+                color: Colors.brown,
               ),
             ],
           ),

@@ -17,6 +17,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:responsive_framework/responsive_framework.dart';
 import 'services/firebase_options.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:elfouad_admin/core/app_strings.dart';
@@ -133,6 +134,15 @@ class MyApp extends StatelessWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
+      builder: (context, child) => ResponsiveBreakpoints.builder(
+        child: child!,
+        breakpoints: const [
+          Breakpoint(start: 0, end: 450, name: MOBILE),
+          Breakpoint(start: 451, end: 800, name: TABLET),
+          Breakpoint(start: 801, end: 1920, name: DESKTOP),
+          Breakpoint(start: 1921, end: double.infinity, name: '4K'),
+        ],
+      ),
       theme: _lightTheme(),
       debugShowCheckedModeBanner: false,
       home: const AppShell(),

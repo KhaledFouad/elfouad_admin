@@ -3,6 +3,7 @@ import 'package:awesome_drawer_bar/awesome_drawer_bar.dart'
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:elfouad_admin/core/app_strings.dart';
 import 'package:flutter/material.dart';
+import 'package:responsive_framework/responsive_framework.dart';
 
 import 'recipe_edit_sheet.dart';
 import 'recipe_prepare_sheet.dart';
@@ -116,6 +117,12 @@ class _RecipesListPageState extends State<RecipesListPage> {
 
   @override
   Widget build(BuildContext context) {
+    final breakpoints = ResponsiveBreakpoints.of(context);
+    final isPhone = breakpoints.smallerThan(TABLET);
+    final isWide = breakpoints.largerThan(TABLET);
+    final contentMaxWidth = isWide ? 1100.0 : double.infinity;
+    final horizontalPadding = isPhone ? 10.0 : 16.0;
+
     return Directionality(
       textDirection: TextDirection.rtl,
 
@@ -176,54 +183,68 @@ class _RecipesListPageState extends State<RecipesListPage> {
               return const Center(child: Text(AppStrings.noRecipesYet));
             }
 
-            return ListView.separated(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 100),
-              itemCount: docs.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 8),
-              itemBuilder: (_, i) {
-                final d = docs[i];
-                final m = d.data();
-                final name = (m['name'] ?? '').toString();
-                final variant = (m['variant'] ?? '').toString();
-                final comps = ((m['components'] ?? []) as List)
-                    .map(
-                      (e) => (e is Map)
-                          ? e.cast<String, dynamic>()
-                          : <String, dynamic>{},
-                    )
-                    .map(RecipeComponent.fromMap)
-                    .toList();
-                final sum = _sumPercent(comps);
-
-                final title = variant.isEmpty ? name : '$name — $variant';
-
-                return Card(
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    side: BorderSide(color: Colors.brown.shade100),
+            return Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: contentMaxWidth),
+                child: ListView.separated(
+                  padding: EdgeInsets.fromLTRB(
+                    horizontalPadding,
+                    12,
+                    horizontalPadding,
+                    100,
                   ),
-                  child: ExpansionTile(
-                    tilePadding: const EdgeInsetsDirectional.only(
-                      start: 12,
-                      end: 8,
-                    ),
-                    childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                    title: Text(
-                      title.isEmpty ? AppStrings.unnamedLabel : title,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
+                  itemCount: docs.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 8),
+                  itemBuilder: (_, i) {
+                    final d = docs[i];
+                    final m = d.data();
+                    final name = (m['name'] ?? '').toString();
+                    final variant = (m['variant'] ?? '').toString();
+                    final comps = ((m['components'] ?? []) as List)
+                        .map(
+                          (e) => (e is Map)
+                              ? e.cast<String, dynamic>()
+                              : <String, dynamic>{},
+                        )
+                        .map(RecipeComponent.fromMap)
+                        .toList();
+                    final sum = _sumPercent(comps);
+
+                    final title = variant.isEmpty ? name : '$name - $variant';
+
+                    return Card(
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        side: BorderSide(color: Colors.brown.shade100),
                       ),
-                    ),
-                    subtitle: Text(
-                      AppStrings.componentsCount(comps.length),
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: sum == 100 ? Colors.green : Colors.red,
-                      ),
-                    ),
-                    children: [
+                      child: ExpansionTile(
+                        tilePadding: const EdgeInsetsDirectional.only(
+                          start: 12,
+                          end: 8,
+                        ),
+                        childrenPadding: const EdgeInsets.fromLTRB(
+                          12,
+                          0,
+                          12,
+                          12,
+                        ),
+                        title: Text(
+                          title.isEmpty ? AppStrings.unnamedLabel : title,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        subtitle: Text(
+                          AppStrings.componentsCount(comps.length),
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: sum == 100 ? Colors.green : Colors.red,
+                          ),
+                        ),
+                        children: [
                       // تفاصيل المكونات
                       Align(
                         alignment: Alignment.centerRight,
@@ -309,9 +330,11 @@ class _RecipesListPageState extends State<RecipesListPage> {
                         ],
                       ),
                     ],
-                  ),
-                );
-              },
+                      ),
+                    );
+                  },
+                ),
+              ),
             );
           },
         ),

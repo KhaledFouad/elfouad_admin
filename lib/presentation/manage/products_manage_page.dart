@@ -10,6 +10,7 @@ import 'package:elfouad_admin/presentation/manage/state/manage_tab_cubit.dart';
 import 'package:elfouad_admin/presentation/manage/widgets/extra_edit_sheet.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:responsive_framework/responsive_framework.dart';
 import 'widgets/add_item_sheet.dart';
 
 class ManagePage extends StatelessWidget {
@@ -23,6 +24,11 @@ class ManagePage extends StatelessWidget {
     final drinksState = context.watch<DrinksCubit>().state;
     final inventoryState = context.watch<InventoryCubit>().state;
     final extrasState = context.watch<ExtrasCubit>().state;
+    final breakpoints = ResponsiveBreakpoints.of(context);
+    final isPhone = breakpoints.smallerThan(TABLET);
+    final isWide = breakpoints.largerThan(TABLET);
+    final contentMaxWidth = isWide ? 1100.0 : double.infinity;
+    final horizontalPadding = isPhone ? 10.0 : 16.0;
 
     Widget drinks0() {
       if (drinksState.loading) return _loading();
@@ -307,42 +313,53 @@ class ManagePage extends StatelessWidget {
             ),
           ),
         ),
-        body: ListView(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
-          children: [
-            Wrap(
-              spacing: 8,
+        body: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: contentMaxWidth),
+            child: ListView(
+              padding: EdgeInsets.fromLTRB(
+                horizontalPadding,
+                8,
+                horizontalPadding,
+                96,
+              ),
               children: [
-                _mChip(context, AppStrings.inventoryAll, ManageTab.all, tab),
-                _mChip(
-                  context,
-                  AppStrings.drinksLabelDefinite,
-                  ManageTab.drinks,
-                  tab,
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    _mChip(context, AppStrings.inventoryAll, ManageTab.all, tab),
+                    _mChip(
+                      context,
+                      AppStrings.drinksLabelDefinite,
+                      ManageTab.drinks,
+                      tab,
+                    ),
+                    _mChip(
+                      context,
+                      AppStrings.inventorySingles,
+                      ManageTab.singles,
+                      tab,
+                    ),
+                    _mChip(
+                      context,
+                      AppStrings.inventoryBlends,
+                      ManageTab.blends,
+                      tab,
+                    ),
+                    _mChip(
+                      context,
+                      AppStrings.snacksLabel,
+                      ManageTab.extras,
+                      tab,
+                    ),
+                  ],
                 ),
-                _mChip(
-                  context,
-                  AppStrings.inventorySingles,
-                  ManageTab.singles,
-                  tab,
-                ),
-                _mChip(
-                  context,
-                  AppStrings.inventoryBlends,
-                  ManageTab.blends,
-                  tab,
-                ),
-                _mChip(
-                  context,
-                  AppStrings.snacksLabel,
-                  ManageTab.extras,
-                  tab,
-                ),
+                const SizedBox(height: 8),
+                content(),
               ],
             ),
-            const SizedBox(height: 8),
-            content(),
-          ],
+          ),
         ),
         floatingActionButton: FloatingActionButton.extended(
           onPressed: tab == ManageTab.extras

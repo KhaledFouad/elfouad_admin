@@ -91,10 +91,10 @@ class AppStrings {
       'سيتم حذف هذه العملية وإرجاع أي تأثير على المخزون. هل تريد المتابعة؟';
   static const saleDeletedRollback = 'تم حذف العملية وإرجاع المخزون.';
   static const noSalesInRange = 'لا توجد عمليات في هذه الفترة.';
-  static const noSalesInRangeForExport = 'No sales to export for this range.';
-  static const oldestFirst = 'Oldest first';
+  static const noSalesInRangeForExport = 'لا توجد عمليات للتصدير في هذا المدى.';
+  static const oldestFirst = 'الأقدم أولاً';
   static const deferredNoteHint =
-      'Original date & time shown. Use edit to add notes.';
+      'ملاحظة: العمليات المؤجلة لا تؤثر على المخزون حتى الدفع.';
 
   static const filterAndExportTitle = 'تصفية وتصدير';
   static const selectRange = 'اختيار المدى';
@@ -228,19 +228,19 @@ class AppStrings {
   static const previousMonthTooltip = 'الشهر السابق';
   static const nextMonthTooltip = 'الشهر التالي';
   static const noDataForRange = 'لا توجد بيانات للمدى المختار';
-  static const noDataForSection = 'No data for this section.';
-  static const groupCategoryLabel = 'Category';
-  static const quantityLabelShort = 'Qty';
-  static const averageLabel = 'Average';
-  static const avgPerKgSuffix = ' /kg';
-  static const avgPerCupSuffix = ' /cup';
-  static const typeLabel = 'Type';
+  static const noDataForSection = 'لا توجد بيانات لهذا القسم';
+  static const groupCategoryLabel = 'التصنيف';
+  static const quantityLabelShort = 'الكمية';
+  static const averageLabel = 'المتوسط';
+  static const avgPerKgSuffix = ' /كجم';
+  static const avgPerCupSuffix = ' /كوب';
+  static const typeLabel = 'النوع';
   static const firstThirdLabel = 'الثلث الأول';
   static const secondThirdLabel = 'الثلث الثاني';
   static const thirdThirdLabel = 'الثلث الثالث';
   static const fullMonthLabel = 'الشهر الكامل';
-  static const refreshLabel = 'Refresh';
-  static const statsUpdated = 'Stats updated';
+  static const refreshLabel = 'تحديث';
+  static const statsUpdated = 'تم تحديث الإحصائيات';
   static const drinksSalesLegend = 'مشروبات';
   static const beansGramsLegend = 'جرامات';
   static const noDrinksData = 'لا توجد بيانات مشروبات ضمن الفترة المختارة';
@@ -271,7 +271,7 @@ class AppStrings {
   static String saleDeleteFailed(Object error) => 'تعذر حذف العملية: $error';
   static String deferredLoadError(Object error) =>
       'تعذر تحميل الديون المؤجلة: $error';
-  static String deferredPending(int count) => 'Deferred pending ($count)';
+  static String deferredPending(int count) => 'حساب مؤجل ($count)';
   static String topFiveTitle(String title) => 'Top 5 $title';
   static String savedToPath(String path) => 'تم الحفظ: $path';
   static String savedToDownloads(String path) => 'Saved to Downloads: $path';
@@ -356,6 +356,10 @@ class AppStrings {
   static String paidOrdersSubtitle(int count) => '$count عملية مدفوعة';
   static const titleSalesHistory = salesHistoryTitle;
   static const titleCreditAccounts = 'حسابات مؤجلة';
+  static const confirmDeleteCreditAccount = 'هل تريد حذف حساب هذا العميل؟';
+  static const confirmDeleteCreditAccountUnpaid =
+      'هناك عمليات مؤجلة غير مدفوعة لهذا العميل. هل تريد حذف الحساب؟';
+  static const creditAccountDeleted = 'تم حذف الحساب';
   static const btnLoadMore = 'عرض المزيد';
   static const btnPayAmount = 'دفع جزء من المستحق';
   static const btnPaySale = 'دفع المبلغ';
@@ -376,7 +380,8 @@ class AppStrings {
   static const labelPaidAt = 'تم الدفع في';
   static const labelPartialPayments = 'دفعات جزئية';
   static const labelNoCreditAccounts = 'لا توجد حسابات مؤجلة';
-  static const labelNoCreditSalesForCustomer = 'لا توجد عمليات مؤجلة لهذا العميل';
+  static const labelNoCreditSalesForCustomer =
+      'لا توجد عمليات مؤجلة لهذا العميل';
   static const labelDrink = drinkLabel;
   static const labelExtra = 'إضافة';
   static const labelPieceUnit = 'قطعة';
