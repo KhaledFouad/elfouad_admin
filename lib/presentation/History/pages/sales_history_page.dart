@@ -6,6 +6,7 @@ import 'package:elfouad_admin/core/app_strings.dart';
 import 'package:elfouad_admin/data/repo/sales_history_repository.dart';
 import '../bloc/sales_history_cubit.dart';
 import 'credit_accounts_page.dart';
+import '../models/sale_record.dart';
 import '../widgets/history_day_section.dart';
 import '../utils/sale_utils.dart';
 
@@ -496,7 +497,7 @@ int _roundQty(double qty) => qty > 0 ? qty.round() : 1;
 int _recordQuantity(SaleRecord record) {
   final byComponents = record.components.fold<double>(
     0.0,
-    (sum, component) => sum + component.quantity,
+    (total, component) => total + component.quantity,
   );
   final fallback = parseDouble(
     record.data['quantity'] ?? record.data['qty'],
@@ -508,7 +509,7 @@ int _recordQuantity(SaleRecord record) {
 double _recordGrams(SaleRecord record, {String? fallbackKey}) {
   final byComponents = record.components.fold<double>(
     0.0,
-    (sum, component) => sum + component.grams,
+    (total, component) => total + component.grams,
   );
   if (byComponents > 0) return byComponents;
   if (fallbackKey != null) {
