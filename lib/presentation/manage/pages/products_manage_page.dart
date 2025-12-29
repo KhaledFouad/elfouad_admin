@@ -388,8 +388,10 @@ class ManagePage extends StatelessWidget {
                       top: Radius.circular(18),
                     ),
                   ),
-                  builder: (_) =>
-                      AddItemSheet(initialType: _newTypeForTab(tab)),
+                  builder: (_) => BlocProvider.value(
+                    value: context.read<InventoryCubit>(),
+                    child: AddItemSheet(initialType: _newTypeForTab(tab)),
+                  ),
                 ),
           icon: const Icon(Icons.add),
           label: const Text(AppStrings.actionAdd),

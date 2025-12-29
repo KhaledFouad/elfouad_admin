@@ -1,6 +1,7 @@
 import 'package:awesome_drawer_bar/awesome_drawer_bar.dart'
     show AwesomeDrawerBar;
 import 'package:elfouad_admin/core/app_strings.dart';
+import 'package:elfouad_admin/presentation/inventory/bloc/inventory_cubit.dart';
 import 'package:elfouad_admin/presentation/recipes/bloc/recipes_cubit.dart';
 import 'package:elfouad_admin/presentation/recipes/models/recipe_price_cost.dart';
 import 'package:elfouad_admin/presentation/recipes/utils/recipes_utils.dart';
@@ -51,11 +52,14 @@ class _RecipesListPageState extends State<RecipesListPage> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (_) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
+      builder: (_) => BlocProvider.value(
+        value: context.read<InventoryCubit>(),
+        child: Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+          ),
+          child: RecipeEditSheet(recipeId: recipeId),
         ),
-        child: RecipeEditSheet(recipeId: recipeId),
       ),
     );
   }

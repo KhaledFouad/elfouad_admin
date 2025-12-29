@@ -104,7 +104,7 @@ class _SalesHistoryView extends StatelessWidget {
                                 Padding(
                                   padding: const EdgeInsets.only(bottom: 12),
                                   child: _HistorySummary(
-                                    summary: summaryForDisplay!,
+                                    summary: summaryForDisplay,
                                   ),
                                 ),
                               if (showSummaryLoading)
@@ -299,18 +299,14 @@ class _HistoryAppBar extends StatelessWidget implements PreferredSizeWidget {
               ListTile(
                 leading: const Icon(Icons.date_range),
                 title: const Text(AppStrings.selectRange),
-                onTap: () => Navigator.pop(
-                  context,
-                  _HistoryFilterAction.selectRange,
-                ),
+                onTap: () =>
+                    Navigator.pop(context, _HistoryFilterAction.selectRange),
               ),
               ListTile(
                 leading: const Icon(Icons.download_rounded),
                 title: const Text(AppStrings.exportExcelCsv),
-                onTap: () => Navigator.pop(
-                  context,
-                  _HistoryFilterAction.exportRange,
-                ),
+                onTap: () =>
+                    Navigator.pop(context, _HistoryFilterAction.exportRange),
               ),
               const SizedBox(height: 8),
             ],

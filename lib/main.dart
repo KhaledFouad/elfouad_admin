@@ -46,24 +46,7 @@ Future<void> _scheduleAutoArchive() async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await _initFirebase();
-  runApp(
-    MultiBlocProvider(
-      providers: [
-        BlocProvider(create: (_) => NavCubit()),
-        BlocProvider(create: (_) => ExpensesCubit()),
-        BlocProvider(create: (_) => RecipesCubit()),
-        BlocProvider(create: (_) => InventoryCubit()),
-        BlocProvider(create: (_) => DrinksCubit()),
-        BlocProvider(create: (_) => ExtrasCubit()),
-        BlocProvider(create: (_) => ManageTabCubit()),
-        BlocProvider(create: (_) => GrindCubit()),
-        BlocProvider(create: (_) => StatsCubit()),
-      ],
-      child: const MyApp(),
-    ),
-  );
-  unawaited(_scheduleAutoArchive());
+  runApp(const MyApp());
 }
 
 ThemeData _lightTheme() {
@@ -147,7 +130,116 @@ class MyApp extends StatelessWidget {
       ),
       theme: _lightTheme(),
       debugShowCheckedModeBanner: false,
-      home: const AppShell(),
+      home: const _BootstrapGate(),
+    );
+  }
+}
+
+class _BootstrapGate extends StatefulWidget {
+  const _BootstrapGate();
+
+  @override
+  State<_BootstrapGate> createState() => _BootstrapGateState();
+}
+
+class _BootstrapGateState extends State<_BootstrapGate> {
+  late final Future<void> _initFuture;
+  Widget? _app;
+
+  @override
+  void initState() {
+    super.initState();
+    _initFuture = _initFirebase();
+    _initFuture.then((_) => unawaited(_scheduleAutoArchive()));
+  }
+
+  Widget _buildApp() {
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider(create: (_) => NavCubit()),
+        BlocProvider(create: (_) => ExpensesCubit()),
+        BlocProvider(create: (_) => RecipesCubit()),
+        BlocProvider(create: (_) => InventoryCubit()),
+        BlocProvider(create: (_) => DrinksCubit()),
+        BlocProvider(create: (_) => ExtrasCubit()),
+        BlocProvider(create: (_) => ManageTabCubit()),
+        BlocProvider(create: (_) => GrindCubit()),
+        BlocProvider(create: (_) => StatsCubit()),
+      ],
+      child: const AppShell(),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<void>(
+      future: _initFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const _SplashScreen();
+        }
+        if (snapshot.hasError) {
+          return Scaffold(
+            body: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  AppStrings.loadFailedSimple(snapshot.error ?? 'unknown'),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+          );
+        }
+        return _app ??= _buildApp();
+      },
+    );
+  }
+}
+
+class _SplashScreen extends StatefulWidget {
+  const _SplashScreen();
+
+  @override
+  State<_SplashScreen> createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends State<_SplashScreen>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 12),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final shortest = MediaQuery.of(context).size.shortestSide;
+    final logoSize = (shortest * 0.35).clamp(120.0, 200.0);
+
+    return Scaffold(
+      body: Center(
+        child: RotationTransition(
+          turns: _controller,
+          child: Image.asset(
+            'assets/logo2.png',
+            width: logoSize,
+            height: logoSize,
+            fit: BoxFit.contain,
+          ),
+        ),
+      ),
     );
   }
 }

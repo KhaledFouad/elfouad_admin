@@ -1,5 +1,5 @@
 class AppStrings {
-  static const appTitle = 'Elfouad Admin';
+  static const appTitle = 'ELfouad Admin';
   static const localeAr = 'ar';
   static const localeEn = 'en';
   static const systemUserId = 'system';
@@ -132,6 +132,23 @@ class AppStrings {
   static const nameLabel = 'الاسم';
   static const noNameLabel = 'No name';
   static const roastOptionalLabel = 'درجة التحميص (اختياري)';
+  static const drinkVariantsLabel = 'متغيرات المشروب';
+  static const drinkRoastsLabel = 'درجات التحميص';
+  static const addVariantLabel = 'إضافة متغير';
+  static const addRoastLabel = 'إضافة تحميص';
+  static const variantNameLabel = 'اسم المتغير';
+  static const roastNameLabel = 'اسم التحميص';
+  static const drinkPricingLabel = 'أسعار المتغيرات';
+  static const drinkVariantsHint = 'اختياري: اتركها فارغة لو مفيش متغيرات.';
+  static const drinkRoastsHint = 'اختياري: اتركها فارغة لو مفيش تحميص.';
+  static const spicedOptionLabel = 'إضافة خيار المحوج';
+  static const spicedExtraPriceLabel = 'زيادة السعر (محوج)';
+  static const spicedExtraCostLabel = 'زيادة التكلفة (محوج)';
+  static const drinkIngredientLabel = 'الخامة المستخدمة';
+  static const noIngredientSelectedLabel = 'لم يتم اختيار خامة';
+  static const usedGramsLabel = 'الكمية المستخدمة بالجرام';
+  static const fillVariantNamesPrompt = 'من فضلك أدخل اسم كل متغير.';
+  static const fillRoastNamesPrompt = 'من فضلك أدخل اسم كل درجة تحميص.';
   static const stockGramsLabel = 'المخزون (جرامات)';
   static const pricePerKgLabel = 'سعر/كجم';
   static const costPerKgLabel = 'التكلفة/كجم';

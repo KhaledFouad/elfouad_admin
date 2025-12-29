@@ -58,6 +58,36 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.13.1
+  flutter_native_splash: ^2.4.1
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/profile image.png"
+  remove_alpha_ios: true
+  web:
+    generate: true
+    image_path: "assets/icon/profile image.png"
+    background_color: "#FFFFFF"
+    theme_color: "#FFFFFF"
+  windows:
+    generate: true
+    image_path: "assets/icon/profile image.png"
+    icon_size: 256
+  macos:
+    generate: true
+    image_path: "assets/icon/profile image.png"
+
+flutter_native_splash:
+  color: "#FFFFFF"
+  image: assets/logo2.png
+  android_12:
+    color: "#FFFFFF"
+    image: assets/logo2.png
+  android: true
+  ios: true
+  web: true
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -69,6 +99,8 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+  assets:
+    - assets/logo2.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:
