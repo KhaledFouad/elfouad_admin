@@ -1027,6 +1027,36 @@ TrendsBundle _buildTrends(
   );
 }
 
+DateTime _monthStart(DateTime d) => DateTime(d.year, d.month, 1);
+
+DateTime _nextMonth(DateTime d) =>
+    d.month == 12 ? DateTime(d.year + 1, 1, 1) : DateTime(d.year, d.month + 1, 1);
+
+Future<List<Map<String, dynamic>>> fetchSalesRawForRange({
+  required DateTime startLocal,
+  required DateTime endLocal,
+}) async {
+  final start = _monthStart(startLocal);
+  final end = _monthStart(endLocal);
+  final combined = <String, Map<String, dynamic>>{};
+
+  var cursor = start;
+  while (!cursor.isAfter(end)) {
+    final raw = await _fetchSalesRawForMonth(cursor);
+    for (final entry in raw) {
+      final id = (entry['id'] ?? entry['sale_id'] ?? '').toString();
+      if (id.isNotEmpty) {
+        combined[id] = entry;
+      } else {
+        combined['${cursor.millisecondsSinceEpoch}-${combined.length}'] = entry;
+      }
+    }
+    cursor = _nextMonth(cursor);
+  }
+
+  return combined.values.toList();
+}
+
 Future<List<Map<String, dynamic>>> fetchSalesRawForMonth(DateTime month) =>
     _fetchSalesRawForMonth(month);
 

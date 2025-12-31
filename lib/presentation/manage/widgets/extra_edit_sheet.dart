@@ -12,6 +12,7 @@ class ExtraEditSheet extends StatefulWidget {
 
 class _ExtraEditSheetState extends State<ExtraEditSheet> {
   late Map<String, dynamic> _data;
+  final _formKey = GlobalKey<FormState>();
   final _name = TextEditingController();
   final _category = TextEditingController();
   final _unit = TextEditingController();
@@ -62,12 +63,19 @@ class _ExtraEditSheetState extends State<ExtraEditSheet> {
     setState(() => _busy = true);
     try {
       final now = DateTime.now().toUtc();
+      if (!(_formKey.currentState?.validate() ?? false)) {
+        return;
+      }
+      final name = _name.text.trim();
+      final category = _category.text.trim();
+      final sell = _num(_priceSell.text);
+      final cost = _num(_costUnit.text);
       final upd = <String, dynamic>{
-        'name': _name.text.trim(),
-        'category': _category.text.trim(),
-        'unit': _unit.text.trim(),
-        'price_sell': _num(_priceSell.text),
-        'cost_unit': _num(_costUnit.text),
+        'name': name,
+        'category': category,
+        'unit': _unit.text.trim().isEmpty ? 'piece' : _unit.text.trim(),
+        'price_sell': sell,
+        'cost_unit': cost,
         'stock_units': _num(_stockUnits.text),
         'active': _active,
         'updated_at': now,
@@ -101,10 +109,12 @@ class _ExtraEditSheetState extends State<ExtraEditSheet> {
         top: 14,
         bottom: 12 + MediaQuery.of(context).viewInsets.bottom,
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
+      child: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
           Container(
             height: 4,
             width: 42,
@@ -120,9 +130,19 @@ class _ExtraEditSheetState extends State<ExtraEditSheet> {
             style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
           ),
           const SizedBox(height: 12),
-          _field(AppStrings.nameLabel, _name),
+          _field(
+            AppStrings.nameLabel,
+            _name,
+            validator: (v) =>
+                _requiredText(v, AppStrings.nameRequiredPrompt),
+          ),
           const SizedBox(height: 8),
-          _field(AppStrings.categoryOptionalLabel, _category),
+          _field(
+            AppStrings.categoryLabel,
+            _category,
+            validator: (v) =>
+                _requiredText(v, AppStrings.categoryRequiredPrompt),
+          ),
           const SizedBox(height: 8),
           _field(AppStrings.unitLabel, _unit),
           const SizedBox(height: 8),
@@ -132,12 +152,16 @@ class _ExtraEditSheetState extends State<ExtraEditSheet> {
             AppStrings.sellPricePerUnitLabel,
             _priceSell,
             numKeyboard: true,
+            validator: (v) =>
+                _requiredPositive(v, AppStrings.sellPriceRequiredPrompt),
           ),
           const SizedBox(height: 8),
           _field(
             AppStrings.costPerUnitShortLabel,
             _costUnit,
             numKeyboard: true,
+            validator: (v) =>
+                _requiredPositive(v, AppStrings.costPriceRequiredPrompt),
           ),
           const SizedBox(height: 8),
           SwitchListTile.adaptive(
@@ -173,6 +197,7 @@ class _ExtraEditSheetState extends State<ExtraEditSheet> {
             ],
           ),
         ],
+        ),
       ),
     );
   }
@@ -181,17 +206,32 @@ class _ExtraEditSheetState extends State<ExtraEditSheet> {
     String label,
     TextEditingController controller, {
     bool numKeyboard = false,
+    String? Function(String?)? validator,
   }) {
-    return TextField(
+    return TextFormField(
       controller: controller,
       textAlign: TextAlign.center,
       keyboardType: numKeyboard
           ? const TextInputType.numberWithOptions(decimal: true)
           : TextInputType.text,
+      autovalidateMode: validator == null
+          ? AutovalidateMode.disabled
+          : AutovalidateMode.onUserInteraction,
+      validator: validator,
       decoration: const InputDecoration(
         border: OutlineInputBorder(),
         isDense: true,
       ).copyWith(labelText: label),
     );
+  }
+
+  String? _requiredText(String? value, String message) {
+    if (value == null || value.trim().isEmpty) return message;
+    return null;
+  }
+
+  String? _requiredPositive(String? value, String message) {
+    if (_num(value) <= 0) return message;
+    return null;
   }
 }

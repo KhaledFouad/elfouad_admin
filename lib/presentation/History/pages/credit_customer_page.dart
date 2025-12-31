@@ -88,7 +88,7 @@ class _CreditCustomerPageState extends State<CreditCustomerPage> {
                                 20,
                               ),
                               itemCount: sales.length,
-                              separatorBuilder: (_, __) =>
+                              separatorBuilder: (context, index) =>
                                   const SizedBox(height: 10),
                               itemBuilder: (context, index) {
                                 final record = sales[index];

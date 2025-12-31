@@ -148,11 +148,11 @@ class _EditItemSheetState extends State<EditItemSheet> {
                 const TextInputType.numberWithOptions(decimal: true),
               ),
               const SizedBox(height: 8),
-              _tf(
-                _costCup,
-                AppStrings.cupCostLabel,
-                const TextInputType.numberWithOptions(decimal: true),
-              ), // ✅
+              // _tf(
+              //   _costCup,
+              //   AppStrings.cupCostLabel,
+              //   const TextInputType.numberWithOptions(decimal: true),
+              // ), // ✅
               const SizedBox(height: 8),
               _tf(
                 _doubleCostCup,

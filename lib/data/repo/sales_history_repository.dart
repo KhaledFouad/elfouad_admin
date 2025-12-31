@@ -17,7 +17,6 @@ class SalesHistoryRepository {
   SalesHistoryRepository(this._firestore);
 
   final FirebaseFirestore _firestore;
-
   static const int pageSize = 30;
 
   Stream<QuerySnapshot<Map<String, dynamic>>> watchCreatedInRange(
@@ -224,9 +223,11 @@ class SalesHistoryRepository {
         .where('settled_at', isNull: false)
         .get();
 
-    final results = await Future.wait(
-      [deferredFuture, creditFuture, settledFuture],
-    );
+    final results = await Future.wait([
+      deferredFuture,
+      creditFuture,
+      settledFuture,
+    ]);
     final deferredSnap = results[0];
     final creditSnap = results[1];
     final settledSnap = results[2];
@@ -279,8 +280,7 @@ class SalesHistoryRepository {
     final deferredSnap = results[0];
     final creditSnap = results[1];
 
-    final combined =
-        <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
+    final combined = <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
     for (final doc in deferredSnap.docs) {
       combined[doc.id] = doc;
     }
@@ -354,8 +354,7 @@ class SalesHistoryRepository {
     final deferredSnap = results[0];
     final creditSnap = results[1];
 
-    final combined =
-        <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
+    final combined = <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
     for (final doc in deferredSnap.docs) {
       combined[doc.id] = doc;
     }
@@ -396,9 +395,7 @@ class SalesHistoryRepository {
       for (final entry in ops.entries) {
         final grams = entry.value;
         if (grams > 0) {
-          transaction.update(entry.key, {
-            'stock': FieldValue.increment(grams),
-          });
+          transaction.update(entry.key, {'stock': FieldValue.increment(grams)});
         }
       }
 
@@ -453,8 +450,7 @@ class SalesHistoryRepository {
     final deferredSnap = results[0];
     final creditSnap = results[1];
 
-    final combined =
-        <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
+    final combined = <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
     for (final doc in deferredSnap.docs) {
       combined[doc.id] = doc;
     }
@@ -471,10 +467,14 @@ class SalesHistoryRepository {
 
     await _firestore.runTransaction((transaction) async {
       var remaining = amount;
+      final liveSnaps = <DocumentSnapshot<Map<String, dynamic>>>[];
 
       for (final doc in docs) {
+        liveSnaps.add(await transaction.get(doc.reference));
+      }
+
+      for (final liveSnap in liveSnaps) {
         if (remaining <= 0) break;
-        final liveSnap = await transaction.get(doc.reference);
         if (!liveSnap.exists) continue;
         final data = liveSnap.data() as Map<String, dynamic>;
         final dueAmount = _resolveDueAmount(data);
@@ -484,15 +484,14 @@ class SalesHistoryRepository {
         if (applied <= 0) continue;
 
         final totalPrice = _parseDouble(data['total_price']);
-        final newDue =
-            (dueAmount - applied).clamp(0.0, totalPrice).toDouble();
+        final newDue = (dueAmount - applied).clamp(0.0, totalPrice).toDouble();
         final isPaid = newDue <= 0;
         final now = Timestamp.now();
         final paymentEvents = _appendPaymentEvent(data, applied, now);
 
         remaining -= applied;
 
-        transaction.update(doc.reference, {
+        transaction.update(liveSnap.reference, {
           'is_deferred': true,
           'paid': isPaid,
           'due_amount': newDue,
@@ -506,9 +505,7 @@ class SalesHistoryRepository {
   }
 
   Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
-  fetchPaymentEventsForRange({
-    required DateTimeRange range,
-  }) async {
+  fetchPaymentEventsForRange({required DateTimeRange range}) async {
     final snap = await _firestore
         .collection('sales')
         .where(
@@ -558,7 +555,9 @@ class SalesHistoryRepository {
             .map(
               (e) => e is Map<String, dynamic>
                   ? e
-                  : (e is Map ? e.cast<String, dynamic>() : <String, dynamic>{}),
+                  : (e is Map
+                        ? e.cast<String, dynamic>()
+                        : <String, dynamic>{}),
             )
             .toList();
       }
@@ -568,7 +567,11 @@ class SalesHistoryRepository {
     final type = (data['type'] ?? '').toString();
     if (type == 'single' || type == 'ready_blend') {
       final coll = type == 'single' ? 'singles' : 'blends';
-      final id = data['single_id'] ?? data['blend_id'] ?? data['item_id'] ?? data['id'];
+      final id =
+          data['single_id'] ??
+          data['blend_id'] ??
+          data['item_id'] ??
+          data['id'];
       acc(coll, id, _parseDouble(data['grams']));
       return out;
     }
@@ -582,12 +585,13 @@ class SalesHistoryRepository {
       for (final row in rows) {
         final grams = _parseDouble(row['grams']);
         String? coll = (row['coll'] ?? row['collection'])?.toString();
-        final id = row['id'] ?? row['item_id'] ?? row['single_id'] ?? row['blend_id'];
+        final id =
+            row['id'] ?? row['item_id'] ?? row['single_id'] ?? row['blend_id'];
         coll ??= (row['blend_id'] != null)
             ? 'blends'
             : (row['single_id'] != null)
-                ? 'singles'
-                : null;
+            ? 'singles'
+            : null;
         acc(coll, id, grams);
       }
     }
@@ -626,10 +630,7 @@ class SalesHistoryRepository {
         }
       }
     }
-    existing.add({
-      'amount': amount,
-      'at': at,
-    });
+    existing.add({'amount': amount, 'at': at});
     return existing;
   }
 

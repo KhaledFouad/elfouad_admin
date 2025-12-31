@@ -42,6 +42,12 @@ class SideMenu extends StatelessWidget {
                 onTap: () => _go(context, AppTab.stats),
               ),
               _MenuItem(
+                icon: Icons.auto_graph_outlined,
+                label: AppStrings.tabForecast,
+                selected: selected == AppTab.forecast,
+                onTap: () => _go(context, AppTab.forecast),
+              ),
+              _MenuItem(
                 icon: Icons.inventory_2_outlined,
                 label: AppStrings.tabInventory,
                 selected: selected == AppTab.inventory,

@@ -15,11 +15,28 @@ class AppStrings {
   static const tabRecipes = 'تحضير التوليفات';
   static const tabExpenses = 'المصروفات';
   static const tabGrind = 'الطحن';
+  static const tabForecast = 'توقعات البن';
   static const inventoryAll = 'الكل';
   static const inventorySingles = 'الأصناف المنفردة';
   static const inventoryBlends = 'التوليفات';
   static const drinksNoStockNote = 'المشروبات لا تُدار كمخزون جرامات هنا.';
-
+  static const forecastTitle = 'توقع احتياج البن';
+  static const forecastAnalysisDaysLabel = 'مدة التحليل (يوم)';
+  static const forecastCoverageDaysLabel = 'مدة التغطية المطلوبة (يوم)';
+  static const forecastRun = 'احسب التوقع';
+  static const forecastResultsTitle = 'النتائج المتوقعة';
+  static const forecastRangeLabel = 'فترة التحليل';
+  static const forecastAvgDailyLabel = 'متوسط الاستهلاك اليومي (جم)';
+  static const forecastNeedKgLabel = 'الكمية المتوقعة (كجم)';
+  static const forecastUsedGramsLabel = 'الاستهلاك خلال الفترة (جم)';
+  static const forecastNoData = 'لا توجد بيانات كافية في الفترة.';
+  static const forecastNote = 'التوقع يعتمد على المبيعات المسجلة بالجرام.';
+  static const forecastBlendComponentsTitle = 'توقع مكونات التوليفات';
+  static const forecastBlendLabel = 'التوليفة';
+  static const forecastComponentLabel = 'المكون';
+  static const forecastPercentLabel = 'النسبة %';
+  static const forecastComponentKgLabel = 'احتياج المكون (كجم)';
+  static const forecastNoBlendComponents = 'لا توجد وصفات مطابقة للتوليفات المباعة.';
   static const actionCancel = 'إلغاء';
   static const actionDelete = 'حذف';
   static const actionEdit = 'تعديل';
@@ -27,6 +44,7 @@ class AppStrings {
   static const actionClose = 'إغلاق';
   static const actionCreate = 'إنشاء';
   static const actionAdd = 'إضافة';
+  static const actionLoadMore = 'تحميل المزيد';
   static const actionApplyFilter = 'تطبيق الفلتر';
   static const actionExportExcel = 'تصدير Excel لهذا النطاق';
   static const actionFilterByDate = 'تصفية بالتاريخ';
@@ -48,7 +66,7 @@ class AppStrings {
   static const profitLabelDefinite = 'الربح';
   static const drinksLabel = 'مشروبات';
   static const gramsCoffeeLabel = 'جرام بن';
-  static const snacksLabel = 'سناكس';
+  static const snacksLabel = 'أخري';
   static const gramsKeyword = 'جرام';
   static const gramsShortKeyword = 'جم';
   static const maamoulKeyword = 'معمول';
@@ -142,13 +160,28 @@ class AppStrings {
   static const drinkVariantsHint = 'اختياري: اتركها فارغة لو مفيش متغيرات.';
   static const drinkRoastsHint = 'اختياري: اتركها فارغة لو مفيش تحميص.';
   static const spicedOptionLabel = 'إضافة خيار المحوج';
+  static const ginsengOptionLabel = 'إضافة خيار الجنسنج';
+  static const ginsengPricePerKgLabel = 'سعر الجنسنج/كجم';
+  static const ginsengCostPerKgLabel = 'تكلفة الجنسنج/كجم';
   static const spicedExtraPriceLabel = 'زيادة السعر (محوج)';
   static const spicedExtraCostLabel = 'زيادة التكلفة (محوج)';
   static const drinkIngredientLabel = 'الخامة المستخدمة';
   static const noIngredientSelectedLabel = 'لم يتم اختيار خامة';
   static const usedGramsLabel = 'الكمية المستخدمة بالجرام';
+  static const roastUsageLabel = 'خامة لكل تحميص';
+  static const fillRoastUsagePrompt = 'اختار خامة لكل درجة تحميص.';
+  static const fillRoastUsageGramsPrompt = 'ادخل الكمية لكل درجة تحميص.';
   static const fillVariantNamesPrompt = 'من فضلك أدخل اسم كل متغير.';
   static const fillRoastNamesPrompt = 'من فضلك أدخل اسم كل درجة تحميص.';
+  static const addRoastLevelsPrompt = 'أضف درجات التحميص.';
+  static const nameRequiredPrompt = 'اكتب الاسم.';
+  static const categoryRequiredPrompt = 'ادخل التصنيف.';
+  static const categoryExistsWarning =
+      'التصنيف موجود بالفعل، سجّل المنتج بداخله.';
+  static const sellPriceRequiredPrompt = 'ادخل سعر البيع.';
+  static const costPriceRequiredPrompt = 'ادخل التكلفة.';
+  static const spicePriceCostRequiredPrompt = 'ادخل سعر وتكلفة التحويج.';
+  static const ginsengPriceCostRequiredPrompt = 'ادخل سعر وتكلفة الجنسنج.';
   static const stockGramsLabel = 'المخزون (جرامات)';
   static const pricePerKgLabel = 'سعر/كجم';
   static const costPerKgLabel = 'التكلفة/كجم';
@@ -180,11 +213,7 @@ class AppStrings {
   static const spicePricePerKgLabel = 'سعر التحويج/كجم (spicesPrice)';
   static const spiceCostPerKgLabel = 'تكلفة التحويج/كجم (spicesCost)';
   static const cupPriceLabel = 'سعر الكوب';
-  static const cupCostLabel = 'تكلفة الكوب';
-  static const doublePriceLabel = 'سعر الدابل';
-  static const doubleCostLabel = 'تكلفة الدابل';
-  static const spicedCupCostLabel = 'تكلفة كوب محوّج';
-  static const spicedDoubleCostLabel = 'تكلفة دابل محوّج';
+
   static const usedAmountLabel = 'استخدام خامة/كوب (usedAmount)';
   static const doubleCostOptionalLabel = 'تكلفة الدوبل (اختياري)';
   static const addNewItemTitle = 'إضافة عنصر جديد';
@@ -301,7 +330,7 @@ class AppStrings {
   static String deferredSettlementFailed(Object error) =>
       'تعذر تسوية العملية: $error';
   static String snacksSaleTitle(int qty, String label) =>
-      'سناكس - $qty ${label.isNotEmpty ? label : ''}'.trim();
+      'أخري - $qty ${label.isNotEmpty ? label : ''}'.trim();
   static String drinkSaleTitle(String qty, String name) => 'مشروب - $qty $name';
   static String singleItemTitle(String grams, String label) =>
       'صنف منفرد - $grams جم ${label.isNotEmpty ? label : ''}'.trim();

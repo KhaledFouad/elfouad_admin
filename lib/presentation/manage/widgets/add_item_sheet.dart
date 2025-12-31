@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:elfouad_admin/core/app_strings.dart';
 import 'package:elfouad_admin/presentation/inventory/bloc/inventory_cubit.dart';
 import 'package:elfouad_admin/presentation/inventory/models/inventory_row.dart';
+import 'package:elfouad_admin/presentation/manage/bloc/extras_cubit.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -9,7 +10,7 @@ enum NewItemType { single, blend, drink, extra }
 
 class _OptionEntry {
   _OptionEntry(this.id, {String initial = ''})
-      : controller = TextEditingController(text: initial);
+    : controller = TextEditingController(text: initial);
 
   final String id;
   final TextEditingController controller;
@@ -22,13 +23,11 @@ class _OptionEntry {
 }
 
 class _DrinkPriceEntry {
-  _DrinkPriceEntry({
-    required this.variantId,
-    required this.roastId,
-  })  : sellCtrl = TextEditingController(text: '0.0'),
-        costCtrl = TextEditingController(text: '0.0'),
-        spicedSellCtrl = TextEditingController(text: '0.0'),
-        spicedCostCtrl = TextEditingController(text: '0.0');
+  _DrinkPriceEntry({required this.variantId, required this.roastId})
+    : sellCtrl = TextEditingController(text: '0.0'),
+      costCtrl = TextEditingController(text: '0.0'),
+      spicedSellCtrl = TextEditingController(text: '0.0'),
+      spicedCostCtrl = TextEditingController(text: '0.0');
 
   final String variantId;
   final String roastId;
@@ -45,6 +44,41 @@ class _DrinkPriceEntry {
   }
 }
 
+class _RoastUsageEntry {
+  _RoastUsageEntry() : gramsCtrl = TextEditingController();
+
+  final TextEditingController gramsCtrl;
+  InventoryRow? item;
+  String? coll;
+
+  void dispose() {
+    gramsCtrl.dispose();
+  }
+}
+
+class _ItemRoastEntry {
+  _ItemRoastEntry(this.id)
+    : nameCtrl = TextEditingController(),
+      stockCtrl = TextEditingController(text: '0'),
+      sellCtrl = TextEditingController(text: '0.0'),
+      costCtrl = TextEditingController(text: '0.0');
+
+  final String id;
+  final TextEditingController nameCtrl;
+  final TextEditingController stockCtrl;
+  final TextEditingController sellCtrl;
+  final TextEditingController costCtrl;
+
+  String get name => nameCtrl.text.trim();
+
+  void dispose() {
+    nameCtrl.dispose();
+    stockCtrl.dispose();
+    sellCtrl.dispose();
+    costCtrl.dispose();
+  }
+}
+
 class AddItemSheet extends StatefulWidget {
   final NewItemType initialType;
 
@@ -58,18 +92,25 @@ class _AddItemSheetState extends State<AddItemSheet> {
   static const _defaultRoastId = '_default_roast';
 
   late NewItemType _t;
+  final _formKey = GlobalKey<FormState>();
   final _name = TextEditingController();
-  final _variant = TextEditingController();
   final _stock = TextEditingController(text: '0');
   final _category = TextEditingController();
   final _extraUnit = TextEditingController(text: 'piece');
-  // وزن/سعر/تكلفة
-  final _sellPerKg = TextEditingController(text: '0.0'); // single/blend
-  final _costPerKg = TextEditingController(text: '0.0'); // ✅
+  final List<_ItemRoastEntry> _itemRoasts = [];
+  final _baseSellPerKg = TextEditingController(text: '0.0');
+  final _baseCostPerKg = TextEditingController(text: '0.0');
+  final _spicePricePerKg = TextEditingController(text: '0.0');
+  final _spiceCostPerKg = TextEditingController(text: '0.0');
+  final _ginsengPricePerKg = TextEditingController(text: '0.0');
+  final _ginsengCostPerKg = TextEditingController(text: '0.0');
+  bool _itemSpicedEnabled = false;
+  bool _itemGinsengEnabled = false;
+  // ┘ê╪▓┘å/╪│╪╣╪▒/╪¬┘â┘ä┘ü╪⌐
 
   // drinks
   final _sellCup = TextEditingController(text: '0.0');
-  final _costCup = TextEditingController(text: '0.0'); // ✅
+  final _costCup = TextEditingController(text: '0.0'); // Γ£à
   final _drinkSpicedPrice = TextEditingController(text: '0.0');
   final _drinkSpicedCost = TextEditingController(text: '0.0');
   final _extraPrice = TextEditingController(text: '0.0');
@@ -78,10 +119,12 @@ class _AddItemSheetState extends State<AddItemSheet> {
   final List<_OptionEntry> _drinkVariants = [];
   final List<_OptionEntry> _drinkRoasts = [];
   final Map<String, _DrinkPriceEntry> _drinkPrices = {};
+  final Map<String, _RoastUsageEntry> _roastUsage = {};
   final _drinkUsedGrams = TextEditingController();
   InventoryRow? _drinkIngredient;
   String? _drinkIngredientColl;
   bool _drinkSpicedEnabled = false;
+  bool _showRoastUsageErrors = false;
   int _optionSeq = 0;
 
   bool _busy = false;
@@ -94,10 +137,13 @@ class _AddItemSheetState extends State<AddItemSheet> {
   @override
   void dispose() {
     _name.dispose();
-    _variant.dispose();
     _stock.dispose();
-    _sellPerKg.dispose();
-    _costPerKg.dispose();
+    _baseSellPerKg.dispose();
+    _baseCostPerKg.dispose();
+    _spicePricePerKg.dispose();
+    _spiceCostPerKg.dispose();
+    _ginsengPricePerKg.dispose();
+    _ginsengCostPerKg.dispose();
     _sellCup.dispose();
     _costCup.dispose();
     _drinkSpicedPrice.dispose();
@@ -107,6 +153,9 @@ class _AddItemSheetState extends State<AddItemSheet> {
     _extraPrice.dispose();
     _extraCost.dispose();
     _drinkUsedGrams.dispose();
+    for (final entry in _itemRoasts) {
+      entry.dispose();
+    }
     for (final entry in _drinkVariants) {
       entry.dispose();
     }
@@ -116,11 +165,23 @@ class _AddItemSheetState extends State<AddItemSheet> {
     for (final entry in _drinkPrices.values) {
       entry.dispose();
     }
+    for (final entry in _roastUsage.values) {
+      entry.dispose();
+    }
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final extrasState = context.watch<ExtrasCubit>().state;
+    final categoryText = _category.text.trim().toLowerCase();
+    final categoryExists =
+        _t == NewItemType.extra &&
+        categoryText.isNotEmpty &&
+        extrasState.items.any(
+          (e) => e.category.trim().toLowerCase() == categoryText,
+        );
+
     return Padding(
       padding: EdgeInsets.only(
         left: 16,
@@ -129,181 +190,299 @@ class _AddItemSheetState extends State<AddItemSheet> {
         bottom: 16 + MediaQuery.of(context).viewInsets.bottom,
       ),
       child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              height: 4,
-              width: 42,
-              margin: const EdgeInsets.only(bottom: 12),
-              decoration: BoxDecoration(
-                color: Colors.black26,
-                borderRadius: BorderRadius.circular(100),
-              ),
-            ),
-            const Text(
-              AppStrings.addNewItemTitle,
-              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
-            ),
-            const SizedBox(height: 10),
-
-            // تبويب الأنواع
-            SegmentedButton<NewItemType>(
-              segments: const [
-                ButtonSegment(
-                  value: NewItemType.single,
-                  label: Text(AppStrings.singleSegmentLabel),
-                ),
-                ButtonSegment(
-                  value: NewItemType.blend,
-                  label: Text(AppStrings.blendLabel),
-                ),
-                ButtonSegment(
-                  value: NewItemType.drink,
-                  label: Text(AppStrings.drinkLabel),
-                ),
-                ButtonSegment(
-                  value: NewItemType.extra,
-                  label: Text(AppStrings.snacksLabel),
-                ),
-              ],
-              selected: {_t},
-              onSelectionChanged: (s) => setState(() => _t = s.first),
-            ),
-            const SizedBox(height: 10),
-
-            // 🟤 كيبورد نصي لاسم/تحميص
-            _tf(_name, AppStrings.nameLabel, TextInputType.text),
-            const SizedBox(height: 8),
-            if (_t == NewItemType.extra) ...[
-              _tf(
-                _category,
-                AppStrings.categoryOptionalLabel,
-                TextInputType.text,
-              ),
-              const SizedBox(height: 8),
-              _tf(_extraUnit, AppStrings.unitExampleLabel, TextInputType.text),
-            ] else if (_t != NewItemType.drink) ...[
-              _tf(_variant, AppStrings.roastOptionalLabel, TextInputType.text),
-              const SizedBox(height: 8),
-            ],
-            if (_t == NewItemType.extra) ...[
-              _tf(
-                _stock,
-                AppStrings.stockUnitsLabel,
-                const TextInputType.numberWithOptions(decimal: true),
-              ),
-              const SizedBox(height: 8),
-              _tf(
-                _extraPrice,
-                AppStrings.sellPricePerUnitLabel,
-                const TextInputType.numberWithOptions(decimal: true),
-              ),
-              const SizedBox(height: 8),
-              _tf(
-                _extraCost,
-                AppStrings.costPerUnitShortLabel,
-                const TextInputType.numberWithOptions(decimal: true),
-              ),
-              const SizedBox(height: 8),
-              Align(
-                alignment: AlignmentDirectional.centerStart,
-                child: SwitchListTile.adaptive(
-                  value: _extraActive,
-                  onChanged: (v) => setState(() => _extraActive = v),
-                  title: const Text(AppStrings.activeQuestionLabel),
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                height: 4,
+                width: 42,
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: Colors.black26,
+                  borderRadius: BorderRadius.circular(100),
                 ),
               ),
-              const SizedBox(height: 12),
-            ] else if (_t != NewItemType.drink) ...[
-              _tf(
-                _stock,
-                AppStrings.stockGramsLabel,
-                const TextInputType.numberWithOptions(decimal: false),
+              const Text(
+                AppStrings.addNewItemTitle,
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
               ),
-              const SizedBox(height: 8),
-              _tf(
-                _sellPerKg,
-                AppStrings.pricePerKgLabelDefinite,
-                const TextInputType.numberWithOptions(decimal: true),
-              ),
-              const SizedBox(height: 8),
-              _tf(
-                _costPerKg,
-                AppStrings.costPerKgLabel,
-                const TextInputType.numberWithOptions(decimal: true),
-              ), // ✅
-            ] else ...[
-              _buildDrinkVariantsSection(),
               const SizedBox(height: 10),
-              _buildDrinkRoastsSection(),
-              const SizedBox(height: 8),
-              Align(
-                alignment: AlignmentDirectional.centerStart,
-                child: CheckboxListTile(
-                  value: _drinkSpicedEnabled,
-                  onChanged: (v) =>
-                      setState(() => _drinkSpicedEnabled = v ?? false),
-                  title: const Text(AppStrings.spicedOptionLabel),
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
-                  controlAffinity: ListTileControlAffinity.leading,
-                ),
+
+              // ╪¬╪¿┘ê┘è╪¿ ╪º┘ä╪ú┘å┘ê╪º╪╣
+              SegmentedButton<NewItemType>(
+                segments: const [
+                  ButtonSegment(
+                    value: NewItemType.single,
+                    label: Text(AppStrings.singleSegmentLabel),
+                  ),
+                  ButtonSegment(
+                    value: NewItemType.blend,
+                    label: Text(AppStrings.blendLabel),
+                  ),
+                  ButtonSegment(
+                    value: NewItemType.drink,
+                    label: Text(AppStrings.drinkLabel),
+                  ),
+                  ButtonSegment(
+                    value: NewItemType.extra,
+                    label: Text(AppStrings.snacksLabel),
+                  ),
+                ],
+                selected: {_t},
+                onSelectionChanged: (s) {
+                  setState(() {
+                    _t = s.first;
+                  });
+                },
               ),
-              _buildDrinkPricingSection(),
-              const SizedBox(height: 12),
-              _buildDrinkIngredientSection(),
-            ],
-            if (_t != NewItemType.extra) const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: _busy ? null : () => Navigator.pop(context),
-                    child: const Text(AppStrings.actionCancel),
+              const SizedBox(height: 10),
+
+              // ≡ƒƒñ ┘â┘è╪¿┘ê╪▒╪» ┘å╪╡┘è ┘ä╪º╪│┘à/╪¬╪¡┘à┘è╪╡
+              _tf(
+                _name,
+                AppStrings.nameLabel,
+                TextInputType.text,
+                validator: (v) =>
+                    _requiredText(v, AppStrings.nameRequiredPrompt),
+              ),
+              const SizedBox(height: 8),
+              if (_t == NewItemType.extra) ...[
+                _tf(
+                  _category,
+                  AppStrings.categoryLabel,
+                  TextInputType.text,
+                  validator: (v) =>
+                      _requiredText(v, AppStrings.categoryRequiredPrompt),
+                  helperText: categoryExists
+                      ? AppStrings.categoryExistsWarning
+                      : null,
+                  helperStyle: categoryExists
+                      ? TextStyle(color: Colors.orange.shade700)
+                      : null,
+                  onChanged: (_) => setState(() {}),
+                ),
+                const SizedBox(height: 8),
+                _tf(
+                  _extraUnit,
+                  AppStrings.unitExampleLabel,
+                  TextInputType.text,
+                ),
+                _tf(
+                  _stock,
+                  AppStrings.stockUnitsLabel,
+                  const TextInputType.numberWithOptions(decimal: true),
+                ),
+                const SizedBox(height: 8),
+                _tf(
+                  _extraPrice,
+                  AppStrings.sellPricePerUnitLabel,
+                  const TextInputType.numberWithOptions(decimal: true),
+                  validator: (v) =>
+                      _requiredPositive(v, AppStrings.sellPriceRequiredPrompt),
+                ),
+                const SizedBox(height: 8),
+                _tf(
+                  _extraCost,
+                  AppStrings.costPerUnitShortLabel,
+                  const TextInputType.numberWithOptions(decimal: true),
+                  validator: (v) =>
+                      _requiredPositive(v, AppStrings.costPriceRequiredPrompt),
+                ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: SwitchListTile.adaptive(
+                    value: _extraActive,
+                    onChanged: (v) => setState(() => _extraActive = v),
+                    title: const Text(AppStrings.activeQuestionLabel),
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
                   ),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: _busy ? null : _save,
-                    icon: _busy
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.save),
-                    label: const Text(AppStrings.actionSave),
+                const SizedBox(height: 12),
+              ] else if (_t == NewItemType.drink) ...[
+                _buildDrinkVariantsSection(),
+                const SizedBox(height: 10),
+                _buildDrinkRoastsSection(),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: CheckboxListTile(
+                    value: _drinkSpicedEnabled,
+                    onChanged: (v) =>
+                        setState(() => _drinkSpicedEnabled = v ?? false),
+                    title: const Text(AppStrings.spicedOptionLabel),
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    controlAffinity: ListTileControlAffinity.leading,
                   ),
                 ),
+                _buildDrinkPricingSection(),
+                const SizedBox(height: 12),
+                _buildDrinkIngredientSection(),
+              ] else ...[
+                _buildItemRoastsSection(),
+                const SizedBox(height: 8),
+                if (_itemRoasts.isEmpty) ...[
+                  _tf(
+                    _stock,
+                    AppStrings.stockGramsLabel,
+                    const TextInputType.numberWithOptions(decimal: false),
+                  ),
+                  const SizedBox(height: 8),
+                  _tf(
+                    _baseSellPerKg,
+                    AppStrings.pricePerKgLabelDefinite,
+                    const TextInputType.numberWithOptions(decimal: true),
+                    validator: (v) => _requiredPositive(
+                      v,
+                      AppStrings.sellPriceRequiredPrompt,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  _tf(
+                    _baseCostPerKg,
+                    AppStrings.costPerKgLabel,
+                    const TextInputType.numberWithOptions(decimal: true),
+                    validator: (v) => _requiredPositive(
+                      v,
+                      AppStrings.costPriceRequiredPrompt,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: CheckboxListTile(
+                    value: _itemSpicedEnabled,
+                    onChanged: (v) =>
+                        setState(() => _itemSpicedEnabled = v ?? false),
+                    title: const Text(AppStrings.spicedOptionLabel),
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    controlAffinity: ListTileControlAffinity.leading,
+                  ),
+                ),
+                if (_itemSpicedEnabled) ...[
+                  _tf(
+                    _spicePricePerKg,
+                    AppStrings.spicePricePerKgLabel,
+                    const TextInputType.numberWithOptions(decimal: true),
+                    validator: (v) => _requiredPositive(
+                      v,
+                      AppStrings.spicePriceCostRequiredPrompt,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  _tf(
+                    _spiceCostPerKg,
+                    AppStrings.spiceCostPerKgLabel,
+                    const TextInputType.numberWithOptions(decimal: true),
+                    validator: (v) => _requiredPositive(
+                      v,
+                      AppStrings.spicePriceCostRequiredPrompt,
+                    ),
+                  ),
+                ],
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: CheckboxListTile(
+                    value: _itemGinsengEnabled,
+                    onChanged: (v) =>
+                        setState(() => _itemGinsengEnabled = v ?? false),
+                    title: const Text(AppStrings.ginsengOptionLabel),
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    controlAffinity: ListTileControlAffinity.leading,
+                  ),
+                ),
+                if (_itemGinsengEnabled) ...[
+                  _tf(
+                    _ginsengPricePerKg,
+                    AppStrings.ginsengPricePerKgLabel,
+                    const TextInputType.numberWithOptions(decimal: true),
+                    validator: (v) => _requiredPositive(
+                      v,
+                      AppStrings.ginsengPriceCostRequiredPrompt,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  _tf(
+                    _ginsengCostPerKg,
+                    AppStrings.ginsengCostPerKgLabel,
+                    const TextInputType.numberWithOptions(decimal: true),
+                    validator: (v) => _requiredPositive(
+                      v,
+                      AppStrings.ginsengPriceCostRequiredPrompt,
+                    ),
+                  ),
+                ],
               ],
-            ),
-          ],
+              if (_t != NewItemType.extra) const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: _busy ? null : () => Navigator.pop(context),
+                      child: const Text(AppStrings.actionCancel),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: _busy ? null : _save,
+                      icon: _busy
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.save),
+                      label: const Text(AppStrings.actionSave),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _tf(TextEditingController c, String label, TextInputType kt) {
+  Widget _tf(
+    TextEditingController c,
+    String label,
+    TextInputType kt, {
+    String? helperText,
+    TextStyle? helperStyle,
+    String? Function(String?)? validator,
+    ValueChanged<String>? onChanged,
+  }) {
     return TextFormField(
       controller: c,
       textAlign: TextAlign.center,
       keyboardType: kt,
+      autovalidateMode: validator == null
+          ? AutovalidateMode.disabled
+          : AutovalidateMode.onUserInteraction,
+      validator: validator,
+      onChanged: onChanged,
       decoration: InputDecoration(
         labelText: label,
         border: const OutlineInputBorder(),
         isDense: true,
+        helperText: helperText,
+        helperStyle: helperStyle,
       ),
     );
   }
 
   String _nextOptionId() => 'opt_${_optionSeq++}';
 
-  String _priceKey(String variantId, String roastId) =>
-      '$variantId::$roastId';
+  String _priceKey(String variantId, String roastId) => '$variantId::$roastId';
 
   void _clearDrinkPrices() {
     for (final entry in _drinkPrices.values) {
@@ -337,12 +516,31 @@ class _AddItemSheetState extends State<AddItemSheet> {
       }
     }
 
-    final removeKeys =
-        _drinkPrices.keys.where((k) => !wantedKeys.contains(k)).toList();
+    final removeKeys = _drinkPrices.keys
+        .where((k) => !wantedKeys.contains(k))
+        .toList();
     for (final key in removeKeys) {
       _drinkPrices[key]?.dispose();
       _drinkPrices.remove(key);
     }
+  }
+
+  void _syncRoastUsage() {
+    final activeIds = _drinkRoasts.map((e) => e.id).toSet();
+    for (final id in activeIds) {
+      _roastUsage.putIfAbsent(id, () => _RoastUsageEntry());
+    }
+    final removeIds = _roastUsage.keys
+        .where((id) => !activeIds.contains(id))
+        .toList();
+    for (final id in removeIds) {
+      _roastUsage[id]?.dispose();
+      _roastUsage.remove(id);
+    }
+  }
+
+  _RoastUsageEntry _roastUsageFor(String roastId) {
+    return _roastUsage.putIfAbsent(roastId, () => _RoastUsageEntry());
   }
 
   List<_DrinkPriceEntry> _orderedDrinkPrices() {
@@ -409,16 +607,117 @@ class _AddItemSheetState extends State<AddItemSheet> {
   ) {
     return Row(
       children: [
-        Text(
-          title,
-          style: const TextStyle(fontWeight: FontWeight.w800),
-        ),
+        Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
         const Spacer(),
         TextButton.icon(
           onPressed: onTap,
           icon: const Icon(Icons.add, size: 18),
           label: Text(actionLabel),
         ),
+      ],
+    );
+  }
+
+  Widget _buildItemRoastsSection() {
+    final numKeyboard = const TextInputType.numberWithOptions(decimal: true);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader(
+          AppStrings.drinkRoastsLabel,
+          AppStrings.addRoastLabel,
+          () => setState(() {
+            _itemRoasts.add(_ItemRoastEntry(_nextOptionId()));
+          }),
+        ),
+        if (_itemRoasts.isEmpty)
+          Text(
+            AppStrings.drinkRoastsHint,
+            style: TextStyle(color: Colors.brown.shade300),
+          )
+        else
+          ..._itemRoasts.map((entry) {
+            return Card(
+              margin: const EdgeInsets.only(bottom: 8),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: Colors.brown.shade100),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: entry.nameCtrl,
+                            textAlign: TextAlign.center,
+                            autovalidateMode:
+                                AutovalidateMode.onUserInteraction,
+                            validator: (v) => _requiredText(
+                              v,
+                              AppStrings.fillRoastNamesPrompt,
+                            ),
+                            decoration: const InputDecoration(
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                              labelText: AppStrings.roastNameLabel,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline),
+                          onPressed: () {
+                            setState(() {
+                              _itemRoasts.remove(entry);
+                              entry.dispose();
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    _tf(
+                      entry.stockCtrl,
+                      AppStrings.stockGramsLabel,
+                      numKeyboard,
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _tf(
+                            entry.sellCtrl,
+                            AppStrings.pricePerKgLabelDefinite,
+                            numKeyboard,
+                            validator: (v) => _requiredPositive(
+                              v,
+                              AppStrings.sellPriceRequiredPrompt,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _tf(
+                            entry.costCtrl,
+                            AppStrings.costPerKgLabel,
+                            numKeyboard,
+                            validator: (v) => _requiredPositive(
+                              v,
+                              AppStrings.costPriceRequiredPrompt,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }),
       ],
     );
   }
@@ -450,6 +749,9 @@ class _AddItemSheetState extends State<AddItemSheet> {
                     child: TextFormField(
                       controller: entry.controller,
                       textAlign: TextAlign.center,
+                      autovalidateMode: AutovalidateMode.onUserInteraction,
+                      validator: (v) =>
+                          _requiredText(v, AppStrings.fillVariantNamesPrompt),
                       decoration: const InputDecoration(
                         border: OutlineInputBorder(),
                         isDense: true,
@@ -487,6 +789,7 @@ class _AddItemSheetState extends State<AddItemSheet> {
           () => setState(() {
             _drinkRoasts.add(_OptionEntry(_nextOptionId()));
             _syncDrinkPricing();
+            _syncRoastUsage();
           }),
         ),
         if (_drinkRoasts.isEmpty)
@@ -504,6 +807,9 @@ class _AddItemSheetState extends State<AddItemSheet> {
                     child: TextFormField(
                       controller: entry.controller,
                       textAlign: TextAlign.center,
+                      autovalidateMode: AutovalidateMode.onUserInteraction,
+                      validator: (v) =>
+                          _requiredText(v, AppStrings.fillRoastNamesPrompt),
                       decoration: const InputDecoration(
                         border: OutlineInputBorder(),
                         isDense: true,
@@ -520,6 +826,7 @@ class _AddItemSheetState extends State<AddItemSheet> {
                         _drinkRoasts.remove(entry);
                         entry.dispose();
                         _syncDrinkPricing();
+                        _syncRoastUsage();
                       });
                     },
                   ),
@@ -544,12 +851,28 @@ class _AddItemSheetState extends State<AddItemSheet> {
             style: const TextStyle(fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 8),
-          _tf(_sellCup, AppStrings.cupPriceLabel, numKeyboard),
+          _tf(
+            _sellCup,
+            AppStrings.cupPriceLabel,
+            numKeyboard,
+            validator: (v) =>
+                _requiredPositive(v, AppStrings.sellPriceRequiredPrompt),
+          ),
           const SizedBox(height: 8),
-          _tf(_costCup, AppStrings.cupCostLabel, numKeyboard),
+          // _tf(
+          //   _costCup,
+          //   AppStrings.cupCostLabel,
+          //   numKeyboard,
+          //   validator: (v) =>
+          //       _requiredPositive(v, AppStrings.costPriceRequiredPrompt),
+          // ),
           if (_drinkSpicedEnabled) ...[
             const SizedBox(height: 8),
-            _tf(_drinkSpicedPrice, AppStrings.spicedExtraPriceLabel, numKeyboard),
+            _tf(
+              _drinkSpicedPrice,
+              AppStrings.spicedExtraPriceLabel,
+              numKeyboard,
+            ),
             const SizedBox(height: 8),
             _tf(_drinkSpicedCost, AppStrings.spicedExtraCostLabel, numKeyboard),
           ],
@@ -590,6 +913,10 @@ class _AddItemSheetState extends State<AddItemSheet> {
                           row.sellCtrl,
                           AppStrings.sellPriceLabel,
                           numKeyboard,
+                          validator: (v) => _requiredPositive(
+                            v,
+                            AppStrings.sellPriceRequiredPrompt,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -598,6 +925,10 @@ class _AddItemSheetState extends State<AddItemSheet> {
                           row.costCtrl,
                           AppStrings.costLabelDefinite,
                           numKeyboard,
+                          validator: (v) => _requiredPositive(
+                            v,
+                            AppStrings.costPriceRequiredPrompt,
+                          ),
                         ),
                       ),
                     ],
@@ -635,6 +966,139 @@ class _AddItemSheetState extends State<AddItemSheet> {
 
   Widget _buildDrinkIngredientSection() {
     final inventoryState = context.watch<InventoryCubit>().state;
+    final hasRoasts = _drinkRoasts.isNotEmpty;
+
+    if (hasRoasts) {
+      _syncRoastUsage();
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            AppStrings.roastUsageLabel,
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
+          ..._drinkRoasts.map((roast) {
+            final usage = _roastUsageFor(roast.id);
+            final showItemError = _showRoastUsageErrors && usage.item == null;
+            final itemName = usage.item == null
+                ? AppStrings.noIngredientSelectedLabel
+                : (usage.item!.variant.isEmpty
+                      ? usage.item!.name
+                      : '${usage.item!.name} - ${usage.item!.variant}');
+            final roastName = roast.name.isEmpty
+                ? AppStrings.unnamedLabel
+                : roast.name;
+
+            return Card(
+              margin: const EdgeInsets.only(bottom: 8),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(
+                  color: showItemError
+                      ? Colors.red.shade300
+                      : Colors.brown.shade100,
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            roastName,
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (usage.item != null)
+                          IconButton(
+                            icon: const Icon(Icons.close),
+                            onPressed: () {
+                              setState(() {
+                                usage.item = null;
+                                usage.coll = null;
+                              });
+                            },
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      itemName,
+                      style: TextStyle(color: Colors.brown.shade600),
+                    ),
+                    if (showItemError) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        AppStrings.fillRoastUsagePrompt,
+                        style: TextStyle(color: Colors.red.shade700),
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            icon: const Icon(Icons.add),
+                            label: const Text(AppStrings.pickSingleItem),
+                            onPressed: () async {
+                              final chosen = await _showIngredientPicker(
+                                coll: 'singles',
+                                source: inventoryState.singles,
+                                loading: inventoryState.loadingSingles,
+                              );
+                              if (!mounted || chosen == null) return;
+                              setState(() {
+                                usage.item = chosen;
+                                usage.coll = 'singles';
+                              });
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            icon: const Icon(Icons.add),
+                            label: const Text(AppStrings.pickBlend),
+                            onPressed: () async {
+                              final chosen = await _showIngredientPicker(
+                                coll: 'blends',
+                                source: inventoryState.blends,
+                                loading: inventoryState.loadingBlends,
+                              );
+                              if (!mounted || chosen == null) return;
+                              setState(() {
+                                usage.item = chosen;
+                                usage.coll = 'blends';
+                              });
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    _tf(
+                      usage.gramsCtrl,
+                      AppStrings.usedGramsLabel,
+                      const TextInputType.numberWithOptions(decimal: true),
+                      validator: (v) => _requiredPositive(
+                        v,
+                        AppStrings.fillRoastUsageGramsPrompt,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }),
+        ],
+      );
+    }
+
     final name = _drinkIngredient == null
         ? AppStrings.noIngredientSelectedLabel
         : (_drinkIngredient!.variant.isEmpty
@@ -713,18 +1177,20 @@ class _AddItemSheetState extends State<AddItemSheet> {
     );
   }
 
-  Future<void> _pickDrinkIngredient({
+  Future<InventoryRow?> _showIngredientPicker({
     required String coll,
     required List<InventoryRow> source,
     required bool loading,
   }) async {
-    final chosen = await showDialog<InventoryRow>(
+    return showDialog<InventoryRow>(
       context: context,
       builder: (_) {
         final search = TextEditingController();
         return AlertDialog(
           title: Text(
-            coll == 'singles' ? AppStrings.pickSingleItem : AppStrings.pickBlend,
+            coll == 'singles'
+                ? AppStrings.pickSingleItem
+                : AppStrings.pickBlend,
           ),
           content: SizedBox(
             width: 460,
@@ -751,8 +1217,8 @@ class _AddItemSheetState extends State<AddItemSheet> {
                             final filtered = q.isEmpty
                                 ? source
                                 : source.where((r) {
-                                    final t =
-                                        '${r.name} ${r.variant}'.toLowerCase();
+                                    final t = '${r.name} ${r.variant}'
+                                        .toLowerCase();
                                     return t.contains(q);
                                   }).toList();
                             if (filtered.isEmpty) {
@@ -778,7 +1244,9 @@ class _AddItemSheetState extends State<AddItemSheet> {
                                         AppStrings.stockGramsInline(r.stockG),
                                       ),
                                       Text(
-                                        AppStrings.pricePerKgInline(r.sellPerKg),
+                                        AppStrings.pricePerKgInline(
+                                          r.sellPerKg,
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -801,6 +1269,18 @@ class _AddItemSheetState extends State<AddItemSheet> {
         );
       },
     );
+  }
+
+  Future<void> _pickDrinkIngredient({
+    required String coll,
+    required List<InventoryRow> source,
+    required bool loading,
+  }) async {
+    final chosen = await _showIngredientPicker(
+      coll: coll,
+      source: source,
+      loading: loading,
+    );
 
     if (!mounted) return;
     if (chosen != null) {
@@ -816,28 +1296,15 @@ class _AddItemSheetState extends State<AddItemSheet> {
     try {
       final db = FirebaseFirestore.instance;
       final now = DateTime.now().toUtc();
+      final name = _name.text.trim();
+
+      if (!(_formKey.currentState?.validate() ?? false)) {
+        return;
+      }
 
       if (_t == NewItemType.drink) {
-        final name = _name.text.trim();
         final variants = _drinkVariants.map((e) => e.name).toList();
         final roasts = _drinkRoasts.map((e) => e.name).toList();
-
-        if (variants.any((n) => n.isEmpty)) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text(AppStrings.fillVariantNamesPrompt)),
-            );
-          }
-          return;
-        }
-        if (roasts.any((n) => n.isEmpty)) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text(AppStrings.fillRoastNamesPrompt)),
-            );
-          }
-          return;
-        }
 
         final hasMatrix = variants.isNotEmpty || roasts.isNotEmpty;
         final pricing = <Map<String, dynamic>>[];
@@ -857,7 +1324,9 @@ class _AddItemSheetState extends State<AddItemSheet> {
             for (final rId in roastIds) {
               final row = _drinkPrices[_priceKey(vId, rId)];
               if (row == null) continue;
-              final variant = _drinkVariants.isEmpty ? '' : _variantNameFor(vId);
+              final variant = _drinkVariants.isEmpty
+                  ? ''
+                  : _variantNameFor(vId);
               final roast = _drinkRoasts.isEmpty ? '' : _roastNameFor(rId);
 
               final entry = <String, dynamic>{
@@ -877,6 +1346,36 @@ class _AddItemSheetState extends State<AddItemSheet> {
           if (pricing.isNotEmpty) {
             baseSell = _num(pricing.first['sellPrice']);
             baseCost = _num(pricing.first['costPrice']);
+          }
+        }
+
+        final hasRoastUsage = roasts.isNotEmpty;
+        final roastUsage = <Map<String, dynamic>>[];
+        if (hasRoastUsage) {
+          _syncRoastUsage();
+          final missingItem = _drinkRoasts.any(
+            (roast) => _roastUsage[roast.id]?.item == null,
+          );
+          if (missingItem) {
+            setState(() => _showRoastUsageErrors = true);
+            return;
+          } else if (_showRoastUsageErrors) {
+            setState(() => _showRoastUsageErrors = false);
+          }
+          for (final roast in _drinkRoasts) {
+            final usage = _roastUsage[roast.id]!;
+            final item = usage.item!;
+            final grams = _num(usage.gramsCtrl.text);
+            roastUsage.add({
+              'roast': roast.name,
+              'usedAmount': grams,
+                'usedItem': {
+                  'id': item.id,
+                  'name': item.name,
+                  'variant': item.variant,
+                  'collection': usage.coll,
+                },
+              });
           }
         }
 
@@ -909,18 +1408,23 @@ class _AddItemSheetState extends State<AddItemSheet> {
         if (pricing.isNotEmpty) {
           payload['pricing'] = pricing;
         }
-        if (usedItem != null) {
-          payload['usedItem'] = usedItem;
-        }
-        if (usedAmount > 0) {
-          payload['usedAmount'] = usedAmount;
+        if (hasRoastUsage && roastUsage.isNotEmpty) {
+          payload['roastUsage'] = roastUsage;
+        } else {
+          if (usedItem != null) {
+            payload['usedItem'] = usedItem;
+          }
+          if (usedAmount > 0) {
+            payload['usedAmount'] = usedAmount;
+          }
         }
 
         await db.collection('drinks').add(payload);
       } else if (_t == NewItemType.extra) {
+        final category = _category.text.trim();
         await db.collection('extras').add({
-          'name': _name.text.trim(),
-          'category': _category.text.trim(),
+          'name': name,
+          'category': category,
           'unit': _extraUnit.text.trim().isEmpty
               ? 'piece'
               : _extraUnit.text.trim(),
@@ -933,19 +1437,71 @@ class _AddItemSheetState extends State<AddItemSheet> {
         });
       } else {
         final col = _t == NewItemType.single ? 'singles' : 'blends';
-        await db.collection(col).add({
-          'name': _name.text.trim(),
-          'variant': _variant.text.trim(),
-          'unit': 'g',
-          'stock': _num(_stock.text),
-          'minLevel': 0,
-          'sellPricePerKg': _num(_sellPerKg.text),
-          'costPricePerKg': _num(_costPerKg.text), // ✅
-          'image': col == 'singles'
-              ? 'assets/singles.jpg'
-              : 'assets/blends.jpg',
-          'createdAt': now,
-        });
+        final spicePrice = _itemSpicedEnabled
+            ? _num(_spicePricePerKg.text)
+            : 0.0;
+        final spiceCost = _itemSpicedEnabled ? _num(_spiceCostPerKg.text) : 0.0;
+        final ginsengPrice = _itemGinsengEnabled
+            ? _num(_ginsengPricePerKg.text)
+            : 0.0;
+        final ginsengCost = _itemGinsengEnabled
+            ? _num(_ginsengCostPerKg.text)
+            : 0.0;
+
+        if (_itemRoasts.isEmpty) {
+          final baseSell = _num(_baseSellPerKg.text);
+          final baseCost = _num(_baseCostPerKg.text);
+
+          await db.collection(col).add({
+            'name': name,
+            'variant': '',
+            'unit': 'g',
+            'stock': _num(_stock.text),
+            'minLevel': 0,
+            'sellPricePerKg': baseSell,
+            'costPricePerKg': baseCost,
+            'spicedEnabled': _itemSpicedEnabled,
+            'spicePricePerKg': spicePrice,
+            'spiceCostPerKg': spiceCost,
+            'spicesPrice': spicePrice,
+            'spicesCost': spiceCost,
+            if (_itemGinsengEnabled) 'ginsengEnabled': true,
+            if (_itemGinsengEnabled) 'ginsengPricePerKg': ginsengPrice,
+            if (_itemGinsengEnabled) 'ginsengCostPerKg': ginsengCost,
+            'image': col == 'singles'
+                ? 'assets/singles.jpg'
+                : 'assets/blends.jpg',
+            'createdAt': now,
+          });
+        } else {
+          final batch = db.batch();
+          for (final entry in _itemRoasts) {
+            final docRef = db.collection(col).doc();
+            final payload = <String, dynamic>{
+              'name': name,
+              'variant': entry.name,
+              'unit': 'g',
+              'stock': _num(entry.stockCtrl.text),
+              'minLevel': 0,
+              'sellPricePerKg': _num(entry.sellCtrl.text),
+              'costPricePerKg': _num(entry.costCtrl.text),
+              'spicedEnabled': _itemSpicedEnabled,
+              'spicePricePerKg': spicePrice,
+              'spiceCostPerKg': spiceCost,
+              'spicesPrice': spicePrice,
+              'spicesCost': spiceCost,
+              if (_itemGinsengEnabled) 'ginsengEnabled': true,
+              if (_itemGinsengEnabled) 'ginsengPricePerKg': ginsengPrice,
+              if (_itemGinsengEnabled) 'ginsengCostPerKg': ginsengCost,
+              'image': col == 'singles'
+                  ? 'assets/singles.jpg'
+                  : 'assets/blends.jpg',
+              'createdAt': now,
+            };
+            batch.set(docRef, payload);
+          }
+          await batch.commit();
+        }
       }
 
       if (mounted) Navigator.pop(context);
@@ -963,6 +1519,14 @@ class _AddItemSheetState extends State<AddItemSheet> {
     if (v is num) return v.toDouble();
     return double.tryParse(v?.toString().replaceAll(',', '.') ?? '') ?? 0.0;
   }
+
+  String? _requiredText(String? value, String message) {
+    if (value == null || value.trim().isEmpty) return message;
+    return null;
+  }
+
+  String? _requiredPositive(String? value, String message) {
+    if (_num(value) <= 0) return message;
+    return null;
+  }
 }
-
-

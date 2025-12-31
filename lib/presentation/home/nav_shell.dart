@@ -1,4 +1,5 @@
 import 'package:awesome_drawer_bar/awesome_drawer_bar.dart';
+import 'package:elfouad_admin/presentation/forecast/pages/beans_forecast_page.dart';
 import 'package:elfouad_admin/presentation/home/drawer_menu.dart';
 import 'package:elfouad_admin/presentation/recipes/pages/recipes_list_page.dart';
 import 'package:flutter/material.dart';
@@ -37,6 +38,8 @@ class _NavShellState extends State<NavShell> {
               return const GrindPage(); // ???
             case AppTab.recipes:
               return const RecipesListPage(); // ???????
+            case AppTab.forecast:
+              return const BeansForecastPage(); // ???????
           }
         }
 

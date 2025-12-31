@@ -254,7 +254,7 @@ class SalesHistoryCubit extends Cubit<SalesHistoryState> {
       final accounts = _buildCreditAccounts(records);
       final unpaidCount = accounts.fold<int>(
         0,
-        (sum, account) => sum + account.unpaidCount,
+        (total, account) => total + account.unpaidCount,
       );
       emit(
         state.copyWith(

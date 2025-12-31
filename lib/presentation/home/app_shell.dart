@@ -1,5 +1,6 @@
 import 'package:awesome_drawer_bar/awesome_drawer_bar.dart';
 import 'package:elfouad_admin/presentation/Expenses/pages/expenses_page.dart';
+import 'package:elfouad_admin/presentation/forecast/pages/beans_forecast_page.dart';
 import 'package:elfouad_admin/presentation/grind/grind_page.dart';
 import 'package:elfouad_admin/presentation/home/drawer_menu.dart';
 import 'package:elfouad_admin/presentation/manage/pages/products_manage_page.dart';
@@ -34,6 +35,7 @@ class _AppShellState extends State<AppShell> {
       ExpensesPage(),
       GrindPage(),
       RecipesListPage(),
+      BeansForecastPage(),
     ];
 
     return BlocBuilder<NavCubit, AppTab>(
@@ -76,7 +78,7 @@ class _MainStack extends StatefulWidget {
 class _MainStackState extends State<_MainStack> {
   // ?????? ?? ???? ??? ??? ????? ???
   late final List<Widget?> _tabs = List<Widget?>.filled(
-    7,
+    8,
     null,
     growable: false,
   );
@@ -97,6 +99,8 @@ class _MainStackState extends State<_MainStack> {
         return const GrindPage();
       case 6:
         return const RecipesListPage();
+      case 7:
+        return const BeansForecastPage();
       default:
         return const SizedBox.shrink();
     }

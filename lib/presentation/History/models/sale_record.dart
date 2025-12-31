@@ -74,7 +74,7 @@ class SaleRecord {
       if (paymentEvents.isNotEmpty && totalPrice > 0) {
         final paid = paymentEvents.fold<double>(
           0.0,
-          (sum, event) => sum + event.amount,
+          (total, event) => total + event.amount,
         );
         final remaining = totalPrice - paid;
         return remaining > 0 ? remaining : 0.0;
