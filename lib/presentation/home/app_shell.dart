@@ -1,8 +1,6 @@
-import 'package:awesome_drawer_bar/awesome_drawer_bar.dart';
 import 'package:elfouad_admin/presentation/Expenses/pages/expenses_page.dart';
 import 'package:elfouad_admin/presentation/forecast/pages/beans_forecast_page.dart';
-import 'package:elfouad_admin/presentation/grind/grind_page.dart';
-import 'package:elfouad_admin/presentation/home/drawer_menu.dart';
+import 'package:elfouad_admin/presentation/home/home_dashboard_page.dart';
 import 'package:elfouad_admin/presentation/manage/pages/products_manage_page.dart';
 import 'package:elfouad_admin/presentation/recipes/pages/recipes_list_page.dart'
     show RecipesListPage;
@@ -21,38 +19,34 @@ class AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<AppShell> {
-  final AwesomeDrawerBarController _drawerController =
-      AwesomeDrawerBarController();
-
   @override
   Widget build(BuildContext context) {
     // Keep as-is for compatibility; not used in lazy build (no design change).
     final screens = const <Widget>[
+      HomeDashboardPage(),
       SalesHistoryPage(),
       StatsPage(),
       InventoryPage(),
       ManagePage(),
       ExpensesPage(),
-      GrindPage(),
+      // GrindPage(),
       RecipesListPage(),
       BeansForecastPage(),
     ];
 
     return BlocBuilder<NavCubit, AppTab>(
       builder: (context, tab) {
-        return Directionality(
-          textDirection: TextDirection.rtl,
-          child: AwesomeDrawerBar(
-            controller: _drawerController,
-            menuScreen: const SideMenu(), // ???????
-            mainScreen: _MainStack(current: tab, screens: screens),
-            angle: -10,
-            backgroundColor: const Color(0xFFF0E7DC),
-            showShadow: true,
-            borderRadius: 24,
-            slideWidth: MediaQuery.of(context).size.width * .72,
-            openCurve: Curves.fastOutSlowIn,
-            closeCurve: Curves.easeOutBack,
+        return WillPopScope(
+          onWillPop: () async {
+            if (tab != AppTab.home) {
+              context.read<NavCubit>().setTab(AppTab.home);
+              return false;
+            }
+            return true;
+          },
+          child: Directionality(
+            textDirection: TextDirection.rtl,
+            child: _MainStack(current: tab, screens: screens),
           ),
         );
       },
@@ -60,15 +54,10 @@ class _AppShellState extends State<AppShell> {
   }
 }
 
-/// ??????:
-/// - ??????? AppTab (??????? ????) ?????? ????? NavTab.
-/// - ????? ?????? ??????? ??? ??? ???? ???????? ????? ??????.
-/// - IndexedStack ????? ??? ???? ?? ???? ??? ?? ????? ???.
 class _MainStack extends StatefulWidget {
-  final AppTab current; // ? ?????? Enum ??????? ??????
+  final AppTab current;
   const _MainStack({required this.current, required this.screens});
 
-  // ????? ??????? ???? ?? ??????? ?? ?????? ?????? (?? ????? ??????).
   final List<Widget> screens;
 
   @override
@@ -76,9 +65,8 @@ class _MainStack extends StatefulWidget {
 }
 
 class _MainStackState extends State<_MainStack> {
-  // ?????? ?? ???? ??? ??? ????? ???
   late final List<Widget?> _tabs = List<Widget?>.filled(
-    8,
+    AppTab.values.length,
     null,
     growable: false,
   );
@@ -86,20 +74,22 @@ class _MainStackState extends State<_MainStack> {
   Widget _buildRealPage(int i) {
     switch (i) {
       case 0:
-        return const SalesHistoryPage();
+        return const HomeDashboardPage();
       case 1:
-        return const StatsPage();
+        return const SalesHistoryPage();
       case 2:
-        return const InventoryPage();
+        return const StatsPage();
       case 3:
-        return const ManagePage();
+        return const InventoryPage();
       case 4:
-        return const ExpensesPage();
+        return const ManagePage();
       case 5:
-        return const GrindPage();
-      case 6:
-        return const RecipesListPage();
+        return const ExpensesPage();
+      // case 6:
+      //   return const GrindPage();
       case 7:
+        return const RecipesListPage();
+      case 8:
         return const BeansForecastPage();
       default:
         return const SizedBox.shrink();
@@ -110,20 +100,12 @@ class _MainStackState extends State<_MainStack> {
   Widget build(BuildContext context) {
     final index = widget.current.index;
 
-    // ???? ?????? ??????? ??? ??? ???
     _tabs[index] ??= _buildRealPage(index);
 
-    // ???? ??????? Placeholder ??? ??? ?????
     final children = List<Widget>.generate(_tabs.length, (i) {
       return _tabs[i] ?? const SizedBox.shrink();
     });
 
-    return ClipRRect(
-      borderRadius: const BorderRadius.only(
-        topRight: Radius.circular(24),
-        bottomRight: Radius.circular(24),
-      ),
-      child: IndexedStack(index: index, children: children),
-    );
+    return IndexedStack(index: index, children: children);
   }
 }

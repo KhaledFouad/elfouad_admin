@@ -1,14 +1,19 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:elfouad_admin/core/app_strings.dart';
 import 'package:elfouad_admin/core/widgets/branded_appbar.dart';
-import 'package:elfouad_admin/presentation/recipes/models/recipe_component.dart';
+import 'package:elfouad_admin/presentation/home/nav_state.dart';
 import 'package:elfouad_admin/presentation/recipes/models/recipe_list_item.dart';
-import 'package:elfouad_admin/presentation/stats/models/stats_models.dart'
-    as stats;
 import 'package:elfouad_admin/presentation/stats/utils/stats_data_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:responsive_framework/responsive_framework.dart';
+
+import '../models/blend_component_forecast_row.dart';
+import '../models/forecast_item_row.dart';
+import '../utils/blend_component_utils.dart';
+import '../utils/forecast_utils.dart';
+import '../widgets/forecast_stat_pill.dart';
 
 class BeansForecastPage extends StatefulWidget {
   const BeansForecastPage({super.key});
@@ -26,8 +31,8 @@ class _BeansForecastPageState extends State<BeansForecastPage> {
   bool _loading = false;
   Object? _error;
   DateTimeRange? _range;
-  List<_ForecastRow> _rows = const [];
-  List<_BlendComponentForecastRow> _componentRows = const [];
+  List<ForecastItemRow> _rows = const [];
+  List<BlendComponentForecastRow> _componentRows = const [];
   int _analysisDays = 50;
   int _coverageDays = 15;
 
@@ -55,27 +60,15 @@ class _BeansForecastPageState extends State<BeansForecastPage> {
   DateTimeRange _computeRange(int analysisDays) {
     final now = DateTime.now();
     final today4 = DateTime(now.year, now.month, now.day, 4);
-    final endLocal =
-        now.isBefore(today4) ? today4 : today4.add(const Duration(days: 1));
+    final endLocal = now.isBefore(today4)
+        ? today4
+        : today4.add(const Duration(days: 1));
     final startLocal = endLocal.subtract(Duration(days: analysisDays));
     return DateTimeRange(start: startLocal, end: endLocal);
   }
 
-  String _normalizeKey(String input) {
-    final cleaned = input.trim().toLowerCase();
-    return cleaned.replaceAll(RegExp(r'\s+'), ' ');
-  }
-
-  String _componentTitle(RecipeComponent component) {
-    final name = component.name.trim();
-    final variant = component.variant.trim();
-    if (name.isEmpty) return AppStrings.noNameLabel;
-    return variant.isEmpty ? name : '$name - $variant';
-  }
-
   Future<List<RecipeListItem>> _fetchRecipes() async {
-    final snap =
-        await FirebaseFirestore.instance.collection('recipes').get();
+    final snap = await FirebaseFirestore.instance.collection('recipes').get();
     return snap.docs.map(RecipeListItem.fromSnapshot).toList();
   }
 
@@ -99,60 +92,42 @@ class _BeansForecastPageState extends State<BeansForecastPage> {
         endLocal: range.end,
       );
       final prepared = prepareStatsData(raw);
-      final beans = buildBeansRows(
+      final seriesByKey = buildBeanDailySeries(
         prepared,
         startUtc: range.start.toUtc(),
         endUtc: range.end.toUtc(),
+        analysisDays: analysisDays,
       );
-      final rows = beans
-          .where((b) => b.grams > 0)
-          .map((b) => _ForecastRow.fromGroupRow(b, analysisDays, coverageDays))
-          .toList()
-        ..sort((a, b) => b.forecastGrams.compareTo(a.forecastGrams));
+      final rows = <ForecastItemRow>[];
+      seriesByKey.forEach((_, series) {
+        final stats = forecastSeries(series.dailyGrams, coverageDays);
+        if (stats.totalGrams <= 0 && stats.forecastGrams <= 0) return;
+        rows.add(
+          ForecastItemRow(
+            key: series.key,
+            name: series.name,
+            type: series.type,
+            gramsInRange: stats.totalGrams,
+            avgDailyGrams: stats.avgDailyForecast,
+            forecastGrams: stats.forecastGrams,
+          ),
+        );
+      });
+      rows.sort((a, b) => b.forecastGrams.compareTo(a.forecastGrams));
 
       final recipes = await _fetchRecipes();
-      final recipeByKey = <String, RecipeListItem>{};
-      for (final recipe in recipes) {
-        final key = _normalizeKey(recipe.title);
-        if (key.isNotEmpty) {
-          recipeByKey[key] = recipe;
-        }
-      }
-
-      final forecastByKey = <String, _ForecastRow>{};
+      final blendForecastByKey = <String, ForecastItemRow>{};
       for (final row in rows) {
-        final key = _normalizeKey(row.name);
-        if (key.isNotEmpty) {
-          forecastByKey[key] = row;
+        if (row.type != 'ready_blend' || row.forecastGrams <= 0) continue;
+        if (row.key.isNotEmpty) {
+          blendForecastByKey[row.key] = row;
         }
       }
 
-      final componentRows = <_BlendComponentForecastRow>[];
-      for (final entry in recipeByKey.entries) {
-        final forecastRow = forecastByKey[entry.key];
-        if (forecastRow == null || forecastRow.forecastGrams <= 0) continue;
-        final recipe = entry.value;
-        for (final component in recipe.components) {
-          final percent = component.percent;
-          if (percent <= 0) continue;
-          final grams =
-              forecastRow.forecastGrams * (percent / 100.0);
-          if (grams <= 0) continue;
-          componentRows.add(
-            _BlendComponentForecastRow(
-              blendName: recipe.title,
-              componentName: _componentTitle(component),
-              percent: percent,
-              forecastGrams: grams,
-            ),
-          );
-        }
-      }
-      componentRows.sort((a, b) {
-        final c = a.blendName.compareTo(b.blendName);
-        if (c != 0) return c;
-        return b.forecastGrams.compareTo(a.forecastGrams);
-      });
+      final componentRows = buildBlendComponentForecastRows(
+        recipes: recipes,
+        blendForecastByKey: blendForecastByKey,
+      );
 
       setState(() {
         _rows = rows;
@@ -189,14 +164,51 @@ class _BeansForecastPageState extends State<BeansForecastPage> {
       0,
       (total, r) => total + r.gramsInRange,
     );
-    final avgDaily = _analysisDays > 0 ? totalGrams / _analysisDays : 0.0;
-    final forecastTotalKg =
-        _analysisDays > 0 ? (avgDaily * _coverageDays) / 1000.0 : 0.0;
+    final forecastTotalGrams = _rows.fold<double>(
+      0,
+      (total, r) => total + r.forecastGrams,
+    );
+    final avgDaily = _coverageDays > 0
+        ? (forecastTotalGrams / _coverageDays)
+        : 0.0;
+    final forecastTotalKg = forecastTotalGrams / 1000.0;
 
     return Scaffold(
-      appBar: const BrandedAppBar(
-        title: AppStrings.tabForecast,
-        showMenu: true,
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(64),
+        child: ClipRRect(
+          borderRadius: const BorderRadius.vertical(
+            bottom: Radius.circular(24),
+          ),
+          child: AppBar(
+            centerTitle: true,
+            automaticallyImplyLeading: false,
+            leading: IconButton(
+              icon: const Icon(Icons.home_rounded, color: Colors.white),
+              onPressed: () => context.read<NavCubit>().setTab(AppTab.home),
+              tooltip: AppStrings.tabHome,
+            ),
+            title: const Text(
+              AppStrings.forecastTitle,
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 35,
+                color: Colors.white,
+              ),
+            ),
+            backgroundColor: Colors.transparent,
+
+            flexibleSpace: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF5D4037), Color(0xFF795548)],
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
       body: Align(
         alignment: Alignment.topCenter,
@@ -302,15 +314,15 @@ class _BeansForecastPageState extends State<BeansForecastPage> {
                         spacing: 12,
                         runSpacing: 8,
                         children: [
-                          _StatPill(
+                          ForecastStatPill(
                             label: AppStrings.forecastUsedGramsLabel,
                             value: totalGrams.toStringAsFixed(0),
                           ),
-                          _StatPill(
+                          ForecastStatPill(
                             label: AppStrings.forecastAvgDailyLabel,
                             value: avgDaily.toStringAsFixed(1),
                           ),
-                          _StatPill(
+                          ForecastStatPill(
                             label: AppStrings.forecastNeedKgLabel,
                             value: forecastTotalKg.toStringAsFixed(2),
                           ),
@@ -418,16 +430,17 @@ class _BeansForecastPageState extends State<BeansForecastPage> {
                             dataRowMaxHeight: 48,
                             columns: const [
                               DataColumn(
-                                label: Text(AppStrings.forecastBlendLabel),
-                              ),
-                              DataColumn(
                                 label: Text(AppStrings.forecastComponentLabel),
                               ),
                               DataColumn(
-                                label: Text(AppStrings.forecastPercentLabel),
+                                label: Text(
+                                  AppStrings.forecastBlendTotalKgLabel,
+                                ),
                               ),
                               DataColumn(
-                                label: Text(AppStrings.forecastComponentKgLabel),
+                                label: Text(
+                                  AppStrings.forecastComponentKgLabel,
+                                ),
                               ),
                             ],
                             rows: _componentRows.map((r) {
@@ -437,23 +450,12 @@ class _BeansForecastPageState extends State<BeansForecastPage> {
                                     SizedBox(
                                       width: 180,
                                       child: Text(
-                                        r.blendName,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ),
-                                  DataCell(
-                                    SizedBox(
-                                      width: 180,
-                                      child: Text(
                                         r.componentName,
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
                                   ),
-                                  DataCell(
-                                    Text(r.percent.toStringAsFixed(1)),
-                                  ),
+                                  DataCell(Text(r.blendKg.toStringAsFixed(2))),
                                   DataCell(
                                     Text(r.forecastKg.toStringAsFixed(2)),
                                   ),
@@ -469,79 +471,6 @@ class _BeansForecastPageState extends State<BeansForecastPage> {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _ForecastRow {
-  final String name;
-  final double gramsInRange;
-  final double avgDailyGrams;
-  final double forecastGrams;
-
-  _ForecastRow({
-    required this.name,
-    required this.gramsInRange,
-    required this.avgDailyGrams,
-    required this.forecastGrams,
-  });
-
-  double get forecastKg => forecastGrams / 1000.0;
-
-  factory _ForecastRow.fromGroupRow(
-    stats.GroupRow row,
-    int analysisDays,
-    int coverageDays,
-  ) {
-    final safeDays = analysisDays <= 0 ? 1 : analysisDays;
-    final avgDaily = row.grams / safeDays;
-    final forecast = avgDaily * coverageDays;
-    final name = row.key.trim().isEmpty ? AppStrings.noNameLabel : row.key;
-    return _ForecastRow(
-      name: name,
-      gramsInRange: row.grams,
-      avgDailyGrams: avgDaily,
-      forecastGrams: forecast,
-    );
-  }
-}
-
-class _BlendComponentForecastRow {
-  final String blendName;
-  final String componentName;
-  final double percent;
-  final double forecastGrams;
-
-  const _BlendComponentForecastRow({
-    required this.blendName,
-    required this.componentName,
-    required this.percent,
-    required this.forecastGrams,
-  });
-
-  double get forecastKg => forecastGrams / 1000.0;
-}
-
-class _StatPill extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _StatPill({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    final color = Theme.of(context).colorScheme.primary;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withAlpha(18),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withAlpha(60)),
-      ),
-      child: Text(
-        '$label: $value',
-        style: const TextStyle(fontWeight: FontWeight.w700),
       ),
     );
   }

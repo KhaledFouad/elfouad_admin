@@ -1,5 +1,5 @@
-import 'package:awesome_drawer_bar/awesome_drawer_bar.dart';
 import 'package:elfouad_admin/core/app_strings.dart';
+import 'package:elfouad_admin/presentation/home/nav_state.dart';
 import 'package:elfouad_admin/presentation/inventory/bloc/inventory_cubit.dart';
 import 'package:elfouad_admin/presentation/inventory/models/inventory_tab.dart';
 import 'package:flutter/material.dart';
@@ -37,8 +37,10 @@ class InventoryPage extends StatelessWidget {
 
               automaticallyImplyLeading: false,
               leading: IconButton(
-                icon: const Icon(Icons.menu, color: Colors.white),
-                onPressed: () => AwesomeDrawerBar.of(context)?.toggle(),
+                icon: const Icon(Icons.home_rounded, color: Colors.white),
+                onPressed: () =>
+                    context.read<NavCubit>().setTab(AppTab.home),
+                tooltip: AppStrings.tabHome,
               ),
               title: const Text(
                 AppStrings.tabInventory,

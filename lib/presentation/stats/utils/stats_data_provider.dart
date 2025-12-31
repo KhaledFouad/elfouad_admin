@@ -15,6 +15,19 @@ double _d(dynamic v) {
   return 0.0;
 }
 
+Future<QuerySnapshot<Map<String, dynamic>>> _getQuerySnapshot(
+  Query<Map<String, dynamic>> query, {
+  bool cacheFirst = false,
+}) async {
+  if (!cacheFirst) return query.get();
+  try {
+    final cached =
+        await query.get(const GetOptions(source: Source.cache));
+    if (cached.docs.isNotEmpty) return cached;
+  } catch (_) {}
+  return query.get();
+}
+
 const Set<String> _knownTypes = {
   'drink',
   'single',
@@ -355,8 +368,9 @@ bool _inFinancialRange(Map<String, dynamic> m, DateTime start, DateTime end) =>
 
 /// ============ RAW الشهري + فلترة الثلث/الشهر ============
 Future<List<Map<String, dynamic>>> _fetchSalesRawForMonth(
-  DateTime month,
-) async {
+  DateTime month, {
+  bool cacheFirst = false,
+}) async {
   final y = month.year;
   final m = month.month;
   final dim = DateUtils.getDaysInMonth(y, m);
@@ -373,43 +387,24 @@ Future<List<Map<String, dynamic>>> _fetchSalesRawForMonth(
   final startMs = startUtc.millisecondsSinceEpoch;
   final endMs = endUtc.millisecondsSinceEpoch;
 
-  final snap = await FirebaseFirestore.instance
+  final snap = await _getQuerySnapshot(
+    FirebaseFirestore.instance
       .collection('sales')
       .where('created_at', isGreaterThanOrEqualTo: startUtc)
       .where('created_at', isLessThan: endUtc)
-      .orderBy('created_at', descending: false)
-      .get();
-  QuerySnapshot<Map<String, dynamic>>? snapStr;
-  try {
-    snapStr = await FirebaseFirestore.instance
-        .collection('sales')
-        .where('created_at', isGreaterThanOrEqualTo: startIso)
-        .where('created_at', isLessThan: endIso)
-        .orderBy('created_at', descending: false)
-        .get();
-  } catch (_) {
-    snapStr = null;
-  }
-  QuerySnapshot<Map<String, dynamic>>? snapNum;
-  try {
-    snapNum = await FirebaseFirestore.instance
-        .collection('sales')
-        .where('created_at', isGreaterThanOrEqualTo: startMs)
-        .where('created_at', isLessThan: endMs)
-        .orderBy('created_at', descending: false)
-        .get();
-  } catch (_) {
-    snapNum = null;
-  }
-
+      .orderBy('created_at', descending: false),
+    cacheFirst: cacheFirst,
+  );
   QuerySnapshot<Map<String, dynamic>>? snapOrig;
   try {
-    snapOrig = await FirebaseFirestore.instance
+    snapOrig = await _getQuerySnapshot(
+      FirebaseFirestore.instance
         .collection('sales')
         .where('original_created_at', isGreaterThanOrEqualTo: startUtc)
         .where('original_created_at', isLessThan: endUtc)
-        .orderBy('original_created_at', descending: false)
-        .get();
+        .orderBy('original_created_at', descending: false),
+      cacheFirst: cacheFirst,
+    );
   } catch (_) {
     snapOrig = null;
   }
@@ -422,6 +417,31 @@ Future<List<Map<String, dynamic>>> _fetchSalesRawForMonth(
     combined[d.id] = m;
   }
 
+  if (snapOrig != null) {
+    for (final d in snapOrig.docs) {
+      final m = d.data();
+      m['id'] = d.id;
+      combined[d.id] = m;
+    }
+  }
+
+  if (combined.isNotEmpty) {
+    return combined.values.toList();
+  }
+
+  QuerySnapshot<Map<String, dynamic>>? snapStr;
+  try {
+    snapStr = await _getQuerySnapshot(
+      FirebaseFirestore.instance
+        .collection('sales')
+        .where('created_at', isGreaterThanOrEqualTo: startIso)
+        .where('created_at', isLessThan: endIso)
+        .orderBy('created_at', descending: false),
+      cacheFirst: cacheFirst,
+    );
+  } catch (_) {
+    snapStr = null;
+  }
   if (snapStr != null) {
     for (final d in snapStr.docs) {
       final m = d.data();
@@ -429,16 +449,22 @@ Future<List<Map<String, dynamic>>> _fetchSalesRawForMonth(
       combined[d.id] = m;
     }
   }
+
+  QuerySnapshot<Map<String, dynamic>>? snapNum;
+  try {
+    snapNum = await _getQuerySnapshot(
+      FirebaseFirestore.instance
+        .collection('sales')
+        .where('created_at', isGreaterThanOrEqualTo: startMs)
+        .where('created_at', isLessThan: endMs)
+        .orderBy('created_at', descending: false),
+      cacheFirst: cacheFirst,
+    );
+  } catch (_) {
+    snapNum = null;
+  }
   if (snapNum != null) {
     for (final d in snapNum.docs) {
-      final m = d.data();
-      m['id'] = d.id;
-      combined[d.id] = m;
-    }
-  }
-
-  if (snapOrig != null) {
-    for (final d in snapOrig.docs) {
       final m = d.data();
       m['id'] = d.id;
       combined[d.id] = m;
@@ -466,14 +492,28 @@ List<Map<String, dynamic>> _filterStatsSales(
 Future<List<Map<String, dynamic>>> _fetchStatsExpenses({
   required DateTime startUtc,
   required DateTime endUtc,
+  bool cacheFirst = false,
 }) async {
-  final snap = await FirebaseFirestore.instance
-      .collection('expenses')
-      .where('created_at', isGreaterThanOrEqualTo: startUtc)
-      .where('created_at', isLessThan: endUtc)
-      .get();
+  final snap = await _getQuerySnapshot(
+    FirebaseFirestore.instance
+        .collection('expenses')
+        .where('created_at', isGreaterThanOrEqualTo: startUtc)
+        .where('created_at', isLessThan: endUtc),
+    cacheFirst: cacheFirst,
+  );
 
   return snap.docs.map((d) => d.data()).toList();
+}
+
+List<Map<String, dynamic>> _filterStatsExpenses(
+  List<Map<String, dynamic>> raw, {
+  required DateTime startUtc,
+  required DateTime endUtc,
+}) {
+  return raw.where((m) {
+    final ts = _asUtc(m['created_at'] ?? m['createdAt'] ?? m['date']);
+    return _inRangeUtc(ts, startUtc, endUtc);
+  }).toList();
 }
 /// ============ KPIs (الربح من الداتا + استبعاد الأجل غير المدفوع) ============
 Kpis _buildKpis(
@@ -1035,6 +1075,7 @@ DateTime _nextMonth(DateTime d) =>
 Future<List<Map<String, dynamic>>> fetchSalesRawForRange({
   required DateTime startLocal,
   required DateTime endLocal,
+  bool cacheFirst = false,
 }) async {
   final start = _monthStart(startLocal);
   final end = _monthStart(endLocal);
@@ -1042,7 +1083,10 @@ Future<List<Map<String, dynamic>>> fetchSalesRawForRange({
 
   var cursor = start;
   while (!cursor.isAfter(end)) {
-    final raw = await _fetchSalesRawForMonth(cursor);
+    final raw = await _fetchSalesRawForMonth(
+      cursor,
+      cacheFirst: cacheFirst,
+    );
     for (final entry in raw) {
       final id = (entry['id'] ?? entry['sale_id'] ?? '').toString();
       if (id.isNotEmpty) {
@@ -1057,8 +1101,11 @@ Future<List<Map<String, dynamic>>> fetchSalesRawForRange({
   return combined.values.toList();
 }
 
-Future<List<Map<String, dynamic>>> fetchSalesRawForMonth(DateTime month) =>
-    _fetchSalesRawForMonth(month);
+Future<List<Map<String, dynamic>>> fetchSalesRawForMonth(
+  DateTime month, {
+  bool cacheFirst = false,
+}) =>
+    _fetchSalesRawForMonth(month, cacheFirst: cacheFirst);
 
 List<Map<String, dynamic>> prepareStatsData(List<Map<String, dynamic>> data) =>
     _prepareStatsData(data);
@@ -1073,8 +1120,20 @@ List<Map<String, dynamic>> filterStatsSales(
 Future<List<Map<String, dynamic>>> fetchStatsExpenses({
   required DateTime startUtc,
   required DateTime endUtc,
+  bool cacheFirst = false,
 }) =>
-    _fetchStatsExpenses(startUtc: startUtc, endUtc: endUtc);
+    _fetchStatsExpenses(
+      startUtc: startUtc,
+      endUtc: endUtc,
+      cacheFirst: cacheFirst,
+    );
+
+List<Map<String, dynamic>> filterStatsExpenses(
+  List<Map<String, dynamic>> rawMonth, {
+  required DateTime startUtc,
+  required DateTime endUtc,
+}) =>
+    _filterStatsExpenses(rawMonth, startUtc: startUtc, endUtc: endUtc);
 
 Kpis buildKpis(
   List<Map<String, dynamic>> data,

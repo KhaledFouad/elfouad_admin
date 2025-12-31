@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:elfouad_admin/core/app_strings.dart';
 
+import '../utils/sale_utils.dart';
 import '../utils/sales_history_utils.dart';
 
 class SaleEditSheet extends StatefulWidget {
@@ -20,6 +21,7 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
   final TextEditingController _totalPriceCtrl = TextEditingController();
   final TextEditingController _qtyCtrl = TextEditingController();
   final TextEditingController _gramsCtrl = TextEditingController();
+  final TextEditingController _ginsengCtrl = TextEditingController();
   final TextEditingController _noteCtrl = TextEditingController();
 
   bool _isComplimentary = false;
@@ -36,17 +38,57 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
   int _intOf(dynamic v, [int def = 0]) =>
       (v is num) ? v.toInt() : (int.tryParse('${v ?? ''}') ?? def);
 
+  bool _isDrinkSale(Map<String, dynamic> data) {
+    final type = (data['type'] ?? '').toString();
+    if (type == 'drink') return true;
+    return data.containsKey('drink_id') ||
+        data.containsKey('drinkId') ||
+        data.containsKey('drink_name') ||
+        data.containsKey('drinkName');
+  }
+
+  String? _drinkIdFromSale(Map<String, dynamic> data) {
+    final raw = data['drink_id'] ?? data['drinkId'] ?? data['drinkID'];
+    final id = raw?.toString().trim() ?? '';
+    return id.isEmpty ? null : id;
+  }
+
+  String? _normalizeColl(String? raw) {
+    if (raw == null) return null;
+    final value = raw.trim().toLowerCase();
+    if (value.isEmpty) return null;
+    if (value == 'single' || value == 'singles' || value == 'bean') {
+      return 'singles';
+    }
+    if (value == 'beans') return 'singles';
+    if (value == 'blend' || value == 'blends') return 'blends';
+    return null;
+  }
+
   @override
   void initState() {
     super.initState();
     _m = widget.snap.data() ?? {};
-    _type = (_m['type'] ?? 'unknown').toString();
+    final rawType = (_m['type'] ?? '').toString();
+    final linesType = (_m['lines_type'] ?? '').toString();
+    _type = rawType.isNotEmpty
+        ? rawType
+        : (linesType.isNotEmpty ? linesType : detectSaleType(_m)).toString();
 
     _totalPriceCtrl.text = _numOf(_m['total_price']).toStringAsFixed(2);
     _noteCtrl.text = ((_m['note'] ?? _m['notes'] ?? '') as Object).toString();
 
     _isComplimentary = (_m['is_complimentary'] ?? false) == true;
     _isSpiced = (_m['is_spiced'] ?? false) == true;
+    final meta = _m['meta'];
+    final ginsengMeta = meta is Map
+        ? (meta['ginseng_grams'] ?? meta['ginsengGrams'])
+        : null;
+    final ginsengGrams =
+        _intOf(_m['ginseng_grams'] ?? _m['ginsengGrams'] ?? ginsengMeta, 0);
+    if (ginsengGrams > 0) {
+      _ginsengCtrl.text = ginsengGrams.toString();
+    }
 
     if (_type == 'drink') {
       final q = _numOf(_m['quantity'], 1);
@@ -88,6 +130,7 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
     _totalPriceCtrl.dispose();
     _qtyCtrl.dispose();
     _gramsCtrl.dispose();
+    _ginsengCtrl.dispose();
     _noteCtrl.dispose();
     super.dispose();
   }
@@ -101,8 +144,9 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
   }
 
   Map<DocumentReference<Map<String, dynamic>>, double> _opsFromSale(
-    Map<String, dynamic> m,
-  ) {
+    Map<String, dynamic> m, {
+    Map<String, dynamic>? usageSource,
+  }) {
     final db = FirebaseFirestore.instance;
     final out = <DocumentReference<Map<String, dynamic>>, double>{};
 
@@ -110,55 +154,208 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
         (v is num) ? v.toDouble() : double.tryParse('${v ?? ''}') ?? 0.0;
 
     void acc(String? coll, dynamic id, double grams) {
-      if (coll == null || id == null || grams <= 0) return;
-      final ref = db.collection(coll).doc(id.toString());
+      final normalized = _normalizeColl(coll);
+      if (normalized == null || id == null || grams <= 0) return;
+      final ref = db.collection(normalized).doc(id.toString());
       out[ref] = (out[ref] ?? 0) + grams;
     }
 
-    final type = '${m['type'] ?? ''}';
+    Map<String, dynamic>? asMap(dynamic v) {
+      if (v is Map) {
+        return v.cast<String, dynamic>();
+      }
+      return null;
+    }
 
+    List<Map<String, dynamic>> asList(dynamic v) {
+      if (v is List) {
+        return v
+            .map(
+              (e) => (e is Map)
+                  ? e.cast<String, dynamic>()
+                  : <String, dynamic>{},
+            )
+            .toList();
+      }
+      return const [];
+    }
+
+    List<Map<String, dynamic>> lineItems(Map<String, dynamic> data) {
+      return [
+        ...asList(data['components']),
+        ...asList(data['items']),
+        ...asList(data['lines']),
+        ...asList(data['cart_items']),
+        ...asList(data['order_items']),
+        ...asList(data['products']),
+      ];
+    }
+
+    String? collFromRow(Map<String, dynamic> row) {
+      final raw =
+          row['coll'] ?? row['collection'] ?? row['coll_name'] ?? row['coll'];
+      final normalized = _normalizeColl(raw?.toString());
+      if (normalized != null) return normalized;
+
+      if (row['blend_id'] != null || row['blendId'] != null) return 'blends';
+      if (row['single_id'] != null || row['singleId'] != null) {
+        return 'singles';
+      }
+
+      final type =
+          (row['type'] ?? row['line_type'] ?? row['item_type'] ?? '').toString();
+      if (type == 'single') return 'singles';
+      if (type == 'ready_blend' || type == 'blend') return 'blends';
+
+      return null;
+    }
+
+    dynamic idFromRow(Map<String, dynamic> row) {
+      return row['id'] ??
+          row['item_id'] ??
+          row['itemId'] ??
+          row['single_id'] ??
+          row['singleId'] ??
+          row['blend_id'] ??
+          row['blendId'];
+    }
+
+    double gramsFromRow(Map<String, dynamic> row) {
+      return d(
+        row['grams'] ??
+            row['weight'] ??
+            row['grams_used'] ??
+            row['used_grams'] ??
+            row['usedGrams'],
+      );
+    }
+
+    final rawType = (m['type'] ?? '').toString();
+    final linesType = (m['lines_type'] ?? '').toString();
+    final type = rawType.isNotEmpty
+        ? rawType
+        : (linesType.isNotEmpty ? linesType : detectSaleType(m)).toString();
     if (type == 'single' || type == 'ready_blend') {
       final coll = (type == 'single') ? 'singles' : 'blends';
       final id = m['single_id'] ?? m['blend_id'] ?? m['item_id'] ?? m['id'];
       final grams = d(m['grams']);
       acc(coll, id, grams);
-      return out;
     }
 
-    if (type == 'custom_blend') {
-      List<Map<String, dynamic>> asList(dynamic v) {
-        if (v is List) {
-          return v
-              .map(
-                (e) => (e is Map)
-                    ? e.cast<String, dynamic>()
-                    : <String, dynamic>{},
-              )
-              .toList();
-        }
-        return const [];
-      }
-
-      final rows = [
-        ...asList(m['components']),
-        ...asList(m['items']),
-        ...asList(m['lines']),
-      ];
-
-      for (final r in rows) {
-        final grams = d(r['grams']);
-        String? coll = (r['coll'] ?? r['collection'])?.toString();
-        dynamic id = r['id'] ?? r['item_id'] ?? r['single_id'] ?? r['blend_id'];
-
-        coll ??= (r['blend_id'] != null)
-            ? 'blends'
-            : (r['single_id'] != null)
-                ? 'singles'
-                : null;
-
+    if (out.isEmpty) {
+      final rows = lineItems(m);
+      for (final row in rows) {
+        final grams = gramsFromRow(row);
+        if (grams <= 0) continue;
+        final coll = collFromRow(row);
+        final id = idFromRow(row);
         acc(coll, id, grams);
       }
-      return out;
+    }
+
+    if (out.isEmpty && _isDrinkSale(m)) {
+      final qtyRaw =
+          m['quantity'] ?? m['qty'] ?? m['count'] ?? m['pieces'];
+      var qty = d(qtyRaw);
+      if (qty <= 0) qty = 1;
+
+      final variant =
+          (m['variant'] ?? m['drink_variant'] ?? m['size'] ?? '')
+              .toString()
+              .trim();
+      final roast = (m['roast'] ?? m['roast_level'] ?? m['roastLevel'] ?? '')
+          .toString()
+          .trim();
+      final variantKey = variant.toLowerCase();
+      final roastKey = roast.toLowerCase();
+
+      double amountFromVariant(Map<String, dynamic> byVariant) {
+        if (variantKey.isEmpty) return 0.0;
+        if (byVariant.containsKey(variant)) {
+          return d(byVariant[variant]);
+        }
+        for (final entry in byVariant.entries) {
+          if (entry.key.toString().trim().toLowerCase() == variantKey) {
+            return d(entry.value);
+          }
+        }
+        return 0.0;
+      }
+
+      Map<String, dynamic>? pickUsage(Map<String, dynamic> source) {
+        final roastUsage = asList(source['roastUsage'] ?? source['roast_usage']);
+        if (roastUsage.isNotEmpty) {
+          if (roastKey.isNotEmpty) {
+            for (final entry in roastUsage) {
+              final key =
+                  (entry['roast'] ?? entry['name'])?.toString().toLowerCase();
+              if (key != null && key.trim() == roastKey) return entry;
+            }
+          }
+          return roastUsage.first;
+        }
+        final usedItem = asMap(
+          source['usedItem'] ??
+              source['used_item'] ??
+              source['ingredient'] ??
+              source['item'],
+        );
+        return usedItem != null ? source : null;
+      }
+
+      void applyUsage(Map<String, dynamic> source) {
+        if (out.isNotEmpty) return;
+        final usage = pickUsage(source);
+        if (usage == null) return;
+        final item = asMap(
+          usage['usedItem'] ??
+              usage['used_item'] ??
+              usage['ingredient'] ??
+              usage['item'],
+        );
+        if (item == null) return;
+
+        final rawColl =
+            item['collection'] ?? item['coll'] ?? usage['collection'];
+        final coll = _normalizeColl(rawColl?.toString());
+        final id = item['id'] ??
+            item['item_id'] ??
+            item['itemId'] ??
+            item['single_id'] ??
+            item['blend_id'];
+        if (coll == null || id == null) return;
+
+        final byVariant = asMap(
+          usage['usedAmountByVariant'] ??
+              usage['used_amount_by_variant'] ??
+              usage['usedAmounts'] ??
+              usage['used_amounts'],
+        );
+        var amount = byVariant != null ? amountFromVariant(byVariant) : 0.0;
+        if (amount <= 0) {
+          amount = d(
+            usage['usedAmount'] ??
+                usage['used_amount'] ??
+                usage['used_grams'] ??
+                usage['grams_per_cup'] ??
+                usage['gramsPerCup'],
+          );
+        }
+        if (amount <= 0) return;
+        acc(coll, id, amount * qty);
+      }
+
+      if (usageSource != null) {
+        applyUsage(usageSource);
+      } else {
+        applyUsage(m);
+      }
+      if (out.isEmpty) {
+        final meta = asMap(m['meta']);
+        if (meta != null && meta != usageSource) {
+          applyUsage(meta);
+        }
+      }
     }
 
     return out;
@@ -172,8 +369,32 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
 
       final newSale = {...oldSale, ...updates};
 
-      final oldOps = _opsFromSale(oldSale);
-      final newOps = _opsFromSale(newSale);
+      final drinkCache = <String, Map<String, dynamic>>{};
+
+      Future<Map<DocumentReference<Map<String, dynamic>>, double>> opsForSale(
+        Map<String, dynamic> sale,
+      ) async {
+        final base = _opsFromSale(sale);
+        if (base.isNotEmpty || !_isDrinkSale(sale)) return base;
+
+        final drinkId = _drinkIdFromSale(sale);
+        if (drinkId == null || drinkId.isEmpty) return base;
+
+        final cached = drinkCache[drinkId];
+        if (cached != null) {
+          return _opsFromSale(sale, usageSource: cached);
+        }
+
+        final drinkRef = saleRef.firestore.collection('drinks').doc(drinkId);
+        final drinkSnap = await tx.get(drinkRef);
+        final drinkData = drinkSnap.data();
+        if (drinkData == null) return base;
+        drinkCache[drinkId] = drinkData;
+        return _opsFromSale(sale, usageSource: drinkData);
+      }
+
+      final oldOps = await opsForSale(oldSale);
+      final newOps = await opsForSale(newSale);
 
       final refs = {...oldOps.keys, ...newOps.keys};
       for (final r in refs) {
@@ -411,6 +632,23 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
       if (type == 'single' || type == 'ready_blend') {
         grams = grams > 0 ? grams : _numOf(_m['grams']);
         updates['grams'] = grams;
+        final int ginsengGrams = _intOf(
+          _ginsengCtrl.text.isEmpty ? null : _ginsengCtrl.text,
+          0,
+        ).clamp(0, 100000).toInt();
+        updates['ginseng_grams'] = ginsengGrams;
+        final rawMeta = _m['meta'];
+        final metaMap =
+            rawMeta is Map ? Map<String, dynamic>.from(rawMeta) : null;
+        if (metaMap != null || ginsengGrams > 0) {
+          final updatedMeta = metaMap ?? <String, dynamic>{};
+          if (ginsengGrams > 0) {
+            updatedMeta['ginseng_grams'] = ginsengGrams;
+          } else {
+            updatedMeta.remove('ginseng_grams');
+          }
+          updates['meta'] = updatedMeta;
+        }
 
         final beansAmount = pricePerG * grams;
         final beansCost = costPerG * grams;
@@ -429,8 +667,19 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
         }
         if (spiceCostPerKg < 0) spiceCostPerKg = 0.0;
 
+        double ginsengPricePerKg = 0.0;
+        double ginsengCostPerKg = 0.0;
+        if (ginsengGrams > 0) {
+          final ginsengRates = await fetchGinsengRatesForSale(saleForRates);
+          ginsengPricePerKg = ginsengRates.pricePerKg;
+          ginsengCostPerKg = ginsengRates.costPerKg;
+          if (ginsengCostPerKg < 0) ginsengCostPerKg = 0.0;
+        }
+
         double spiceAmount = 0.0;
         double spiceCostAmount = 0.0;
+        double ginsengAmount = 0.0;
+        double ginsengCostAmount = 0.0;
 
         if (_isComplimentary) {
           newTotalPrice = 0.0;
@@ -440,6 +689,10 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
           updates['spice_cost_per_kg'] = 0.0;
           updates['spice_amount'] = 0.0;
           updates['spice_cost_amount'] = 0.0;
+          updates['ginseng_rate_per_kg'] = 0.0;
+          updates['ginseng_cost_per_kg'] = 0.0;
+          updates['ginseng_amount'] = 0.0;
+          updates['ginseng_cost_amount'] = 0.0;
           updates['total_price'] = newTotalPrice;
           updates['total_cost'] = newTotalCost;
           updates['profit_total'] = 0.0;
@@ -448,20 +701,32 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
             spiceAmount = (grams / 1000.0) * spicePricePerKg;
             spiceCostAmount = (grams / 1000.0) * spiceCostPerKg;
           }
-          final beansAmountFromUi = (uiTotalPrice - spiceAmount).clamp(
+          if (ginsengGrams > 0) {
+            ginsengAmount = (ginsengGrams / 1000.0) * ginsengPricePerKg;
+            ginsengCostAmount = (ginsengGrams / 1000.0) * ginsengCostPerKg;
+          }
+          final beansAmountFromUi =
+              (uiTotalPrice - spiceAmount - ginsengAmount).clamp(
             0.0,
             double.infinity,
           );
           newTotalPrice = uiTotalPrice;
-          newTotalCost = beansCost + spiceCostAmount;
+          newTotalCost = beansCost + spiceCostAmount + ginsengCostAmount;
 
           updates['beans_amount'] = beansAmountFromUi;
           updates['spice_rate_per_kg'] = _isSpiced ? spicePricePerKg : 0.0;
           updates['spice_cost_per_kg'] = _isSpiced ? spiceCostPerKg : 0.0;
           updates['spice_amount'] = spiceAmount;
           updates['spice_cost_amount'] = spiceCostAmount;
+          updates['ginseng_rate_per_kg'] =
+              ginsengGrams > 0 ? ginsengPricePerKg : 0.0;
+          updates['ginseng_cost_per_kg'] =
+              ginsengGrams > 0 ? ginsengCostPerKg : 0.0;
+          updates['ginseng_amount'] = ginsengAmount;
+          updates['ginseng_cost_amount'] = ginsengCostAmount;
 
-          final autoPrice = beansAmount + (_isSpiced ? spiceAmount : 0.0);
+          final autoPrice =
+              beansAmount + (_isSpiced ? spiceAmount : 0.0) + ginsengAmount;
           updates['manual_override'] = true;
           updates['discount_amount'] = (autoPrice - newTotalPrice);
 
@@ -475,14 +740,24 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
             spiceAmount = (grams / 1000.0) * spicePricePerKg;
             spiceCostAmount = (grams / 1000.0) * spiceCostPerKg;
           }
-          newTotalPrice = beansAmount + spiceAmount;
-          newTotalCost = beansCost + spiceCostAmount;
+          if (ginsengGrams > 0) {
+            ginsengAmount = (ginsengGrams / 1000.0) * ginsengPricePerKg;
+            ginsengCostAmount = (ginsengGrams / 1000.0) * ginsengCostPerKg;
+          }
+          newTotalPrice = beansAmount + spiceAmount + ginsengAmount;
+          newTotalCost = beansCost + spiceCostAmount + ginsengCostAmount;
 
           updates['beans_amount'] = beansAmount;
           updates['spice_rate_per_kg'] = _isSpiced ? spicePricePerKg : 0.0;
           updates['spice_cost_per_kg'] = _isSpiced ? spiceCostPerKg : 0.0;
           updates['spice_amount'] = spiceAmount;
           updates['spice_cost_amount'] = spiceCostAmount;
+          updates['ginseng_rate_per_kg'] =
+              ginsengGrams > 0 ? ginsengPricePerKg : 0.0;
+          updates['ginseng_cost_per_kg'] =
+              ginsengGrams > 0 ? ginsengCostPerKg : 0.0;
+          updates['ginseng_amount'] = ginsengAmount;
+          updates['ginseng_cost_amount'] = ginsengCostAmount;
 
           updates['total_price'] = newTotalPrice;
           updates['total_cost'] = newTotalCost;
@@ -684,6 +959,17 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
                     keyboardType: TextInputType.number,
                     decoration: const InputDecoration(
                       labelText: AppStrings.gramsQuantityLabel,
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextFormField(
+                    controller: _ginsengCtrl,
+                    textAlign: TextAlign.center,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: AppStrings.ginsengGramsLabel,
                       border: OutlineInputBorder(),
                       isDense: true,
                     ),

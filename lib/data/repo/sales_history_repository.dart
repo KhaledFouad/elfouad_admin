@@ -391,7 +391,18 @@ class SalesHistoryRepository {
       if (!snap.exists) return;
       final data = snap.data() ?? <String, dynamic>{};
 
-      final ops = _stockOpsFromSale(data);
+      var ops = _stockOpsFromSale(data);
+      if (ops.isEmpty && _isDrinkSale(data)) {
+        final drinkId = _drinkIdFromSale(data);
+        if (drinkId != null && drinkId.isNotEmpty) {
+          final drinkRef = _firestore.collection('drinks').doc(drinkId);
+          final drinkSnap = await transaction.get(drinkRef);
+          final drinkData = drinkSnap.data();
+          if (drinkData != null) {
+            ops = _stockOpsFromSale(data, usageSource: drinkData);
+          }
+        }
+      }
       for (final entry in ops.entries) {
         final grams = entry.value;
         if (grams > 0) {
@@ -532,6 +543,63 @@ class SalesHistoryRepository {
     return int.tryParse(value?.toString() ?? '') ?? 0;
   }
 
+  bool _isDrinkSale(Map<String, dynamic> data) {
+    final type = (data['type'] ?? '').toString();
+    if (type == 'drink') return true;
+    return data.containsKey('drink_id') ||
+        data.containsKey('drinkId') ||
+        data.containsKey('drink_name') ||
+        data.containsKey('drinkName');
+  }
+
+  String? _drinkIdFromSale(Map<String, dynamic> data) {
+    final raw = data['drink_id'] ?? data['drinkId'] ?? data['drinkID'];
+    final id = raw?.toString().trim() ?? '';
+    return id.isEmpty ? null : id;
+  }
+
+  String? _normalizeColl(String? raw) {
+    if (raw == null) return null;
+    final value = raw.trim().toLowerCase();
+    if (value.isEmpty) return null;
+    if (value == 'single' || value == 'singles' || value == 'bean') {
+      return 'singles';
+    }
+    if (value == 'beans') return 'singles';
+    if (value == 'blend' || value == 'blends') return 'blends';
+    return null;
+  }
+
+  String _resolveSaleType(Map<String, dynamic> data) {
+    final rawType = (data['type'] ?? '').toString();
+    if (rawType.isNotEmpty) return rawType;
+    final linesType = (data['lines_type'] ?? '').toString();
+    if (linesType == 'single' || linesType == 'ready_blend') return linesType;
+    if (data.containsKey('components')) return 'custom_blend';
+    if (data.containsKey('drink_id') || data.containsKey('drink_name')) {
+      return 'drink';
+    }
+    if (data.containsKey('single_id') || data.containsKey('single_name')) {
+      return 'single';
+    }
+    if (data.containsKey('blend_id') || data.containsKey('blend_name')) {
+      return 'ready_blend';
+    }
+    if (data.containsKey('extra_id') || data.containsKey('extra_name')) {
+      return 'extra';
+    }
+    final items = data['items'];
+    if (items is List) {
+      for (final item in items) {
+        if (item is Map &&
+            (item.containsKey('grams') || item.containsKey('weight'))) {
+          return 'single';
+        }
+      }
+    }
+    return '';
+  }
+
   bool _isExtraSale(Map<String, dynamic> data) {
     final type = (data['type'] ?? '').toString();
     if (type == 'extra') return true;
@@ -539,14 +607,23 @@ class SalesHistoryRepository {
   }
 
   Map<DocumentReference<Map<String, dynamic>>, double> _stockOpsFromSale(
-    Map<String, dynamic> data,
-  ) {
+    Map<String, dynamic> data, {
+    Map<String, dynamic>? usageSource,
+  }) {
     final out = <DocumentReference<Map<String, dynamic>>, double>{};
 
     void acc(String? coll, dynamic id, double grams) {
-      if (coll == null || id == null || grams <= 0) return;
-      final ref = _firestore.collection(coll).doc(id.toString());
+      final normalized = _normalizeColl(coll);
+      if (normalized == null || id == null || grams <= 0) return;
+      final ref = _firestore.collection(normalized).doc(id.toString());
       out[ref] = (out[ref] ?? 0.0) + grams;
+    }
+
+    Map<String, dynamic>? asMap(dynamic value) {
+      if (value is Map) {
+        return value.cast<String, dynamic>();
+      }
+      return null;
     }
 
     List<Map<String, dynamic>> asList(dynamic value) {
@@ -564,7 +641,57 @@ class SalesHistoryRepository {
       return const [];
     }
 
-    final type = (data['type'] ?? '').toString();
+    List<Map<String, dynamic>> lineItems(Map<String, dynamic> m) {
+      return [
+        ...asList(m['components']),
+        ...asList(m['items']),
+        ...asList(m['lines']),
+        ...asList(m['cart_items']),
+        ...asList(m['order_items']),
+        ...asList(m['products']),
+      ];
+    }
+
+    String? collFromRow(Map<String, dynamic> row) {
+      final raw =
+          row['coll'] ?? row['collection'] ?? row['coll_name'] ?? row['coll'];
+      final normalized = _normalizeColl(raw?.toString());
+      if (normalized != null) return normalized;
+
+      if (row['blend_id'] != null || row['blendId'] != null) return 'blends';
+      if (row['single_id'] != null || row['singleId'] != null) {
+        return 'singles';
+      }
+
+      final type = (row['type'] ?? row['line_type'] ?? row['item_type'] ?? '')
+          .toString();
+      if (type == 'single') return 'singles';
+      if (type == 'ready_blend' || type == 'blend') return 'blends';
+
+      return null;
+    }
+
+    dynamic idFromRow(Map<String, dynamic> row) {
+      return row['id'] ??
+          row['item_id'] ??
+          row['itemId'] ??
+          row['single_id'] ??
+          row['singleId'] ??
+          row['blend_id'] ??
+          row['blendId'];
+    }
+
+    double gramsFromRow(Map<String, dynamic> row) {
+      return _parseDouble(
+        row['grams'] ??
+            row['weight'] ??
+            row['grams_used'] ??
+            row['used_grams'] ??
+            row['usedGrams'],
+      );
+    }
+
+    final type = _resolveSaleType(data);
     if (type == 'single' || type == 'ready_blend') {
       final coll = type == 'single' ? 'singles' : 'blends';
       final id =
@@ -573,26 +700,126 @@ class SalesHistoryRepository {
           data['item_id'] ??
           data['id'];
       acc(coll, id, _parseDouble(data['grams']));
-      return out;
     }
 
-    if (type == 'custom_blend') {
-      final rows = [
-        ...asList(data['components']),
-        ...asList(data['items']),
-        ...asList(data['lines']),
-      ];
+    if (out.isEmpty) {
+      final rows = lineItems(data);
       for (final row in rows) {
-        final grams = _parseDouble(row['grams']);
-        String? coll = (row['coll'] ?? row['collection'])?.toString();
-        final id =
-            row['id'] ?? row['item_id'] ?? row['single_id'] ?? row['blend_id'];
-        coll ??= (row['blend_id'] != null)
-            ? 'blends'
-            : (row['single_id'] != null)
-            ? 'singles'
-            : null;
+        final grams = gramsFromRow(row);
+        if (grams <= 0) continue;
+        final coll = collFromRow(row);
+        final id = idFromRow(row);
         acc(coll, id, grams);
+      }
+    }
+
+    if (out.isEmpty && _isDrinkSale(data)) {
+      final qtyRaw =
+          data['quantity'] ?? data['qty'] ?? data['count'] ?? data['pieces'];
+      var qty = _parseDouble(qtyRaw);
+      if (qty <= 0) qty = 1;
+
+      final variant =
+          (data['variant'] ?? data['drink_variant'] ?? data['size'] ?? '')
+              .toString()
+              .trim();
+      final roast =
+          (data['roast'] ?? data['roast_level'] ?? data['roastLevel'] ?? '')
+              .toString()
+              .trim();
+      final variantKey = (variant).toLowerCase();
+      final roastKey = (roast).toLowerCase();
+
+      double amountFromVariant(Map<String, dynamic> byVariant) {
+        if (variantKey.isEmpty) return 0.0;
+        if (byVariant.containsKey(variant)) {
+          return _parseDouble(byVariant[variant]);
+        }
+        for (final entry in byVariant.entries) {
+          if (entry.key.toString().trim().toLowerCase() == variantKey) {
+            return _parseDouble(entry.value);
+          }
+        }
+        return 0.0;
+      }
+
+      Map<String, dynamic>? pickUsage(Map<String, dynamic> source) {
+        final roastUsage = asList(
+          source['roastUsage'] ?? source['roast_usage'],
+        );
+        if (roastUsage.isNotEmpty) {
+          if (roastKey.isNotEmpty) {
+            for (final entry in roastUsage) {
+              final key = (entry['roast'] ?? entry['name'])
+                  ?.toString()
+                  .toLowerCase();
+              if (key != null && key.trim() == roastKey) return entry;
+            }
+          }
+          return roastUsage.first;
+        }
+        final usedItem = asMap(
+          source['usedItem'] ??
+              source['used_item'] ??
+              source['ingredient'] ??
+              source['item'],
+        );
+        return usedItem != null ? source : null;
+      }
+
+      void applyUsage(Map<String, dynamic> source) {
+        if (out.isNotEmpty) return;
+        final usage = pickUsage(source);
+        if (usage == null) return;
+        final item = asMap(
+          usage['usedItem'] ??
+              usage['used_item'] ??
+              usage['ingredient'] ??
+              usage['item'],
+        );
+        if (item == null) return;
+
+        final rawColl =
+            item['collection'] ?? item['coll'] ?? usage['collection'];
+        final coll = _normalizeColl(rawColl?.toString());
+        final id =
+            item['id'] ??
+            item['item_id'] ??
+            item['itemId'] ??
+            item['single_id'] ??
+            item['blend_id'];
+        if (coll == null || id == null) return;
+
+        final byVariant = asMap(
+          usage['usedAmountByVariant'] ??
+              usage['used_amount_by_variant'] ??
+              usage['usedAmounts'] ??
+              usage['used_amounts'],
+        );
+        var amount = byVariant != null ? amountFromVariant(byVariant) : 0.0;
+        if (amount <= 0) {
+          amount = _parseDouble(
+            usage['usedAmount'] ??
+                usage['used_amount'] ??
+                usage['used_grams'] ??
+                usage['grams_per_cup'] ??
+                usage['gramsPerCup'],
+          );
+        }
+        if (amount <= 0) return;
+        acc(coll, id, amount * qty);
+      }
+
+      if (usageSource != null) {
+        applyUsage(usageSource);
+      } else {
+        applyUsage(data);
+      }
+      if (out.isEmpty) {
+        final meta = asMap(data['meta']);
+        if (meta != null && meta != usageSource) {
+          applyUsage(meta);
+        }
       }
     }
 

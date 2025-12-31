@@ -11,7 +11,6 @@ class SideMenu extends StatelessWidget {
   Widget build(BuildContext context) {
     final selected = context.watch<NavCubit>().state;
 
-    // ????? ?????? + Material ????? ???? ListTile
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -29,6 +28,12 @@ class SideMenu extends StatelessWidget {
               const _Header(),
 
               const SizedBox(height: 12),
+              _MenuItem(
+                icon: Icons.dashboard_rounded,
+                label: AppStrings.tabHome,
+                selected: selected == AppTab.home,
+                onTap: () => _go(context, AppTab.home),
+              ),
               _MenuItem(
                 icon: Icons.receipt_long,
                 label: AppStrings.tabHistory,
@@ -146,7 +151,11 @@ class _MenuItem extends StatelessWidget {
         leading: Icon(icon, color: fg),
         title: Text(
           label,
-          style: TextStyle(color: fg, fontWeight: FontWeight.w700),
+          style: TextStyle(
+            color: fg,
+            fontWeight: FontWeight.w900,
+            fontSize: 25,
+          ),
         ),
         onTap: onTap,
       ),

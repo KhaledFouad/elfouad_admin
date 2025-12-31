@@ -1,6 +1,5 @@
-import 'package:awesome_drawer_bar/awesome_drawer_bar.dart';
 import 'package:elfouad_admin/presentation/forecast/pages/beans_forecast_page.dart';
-import 'package:elfouad_admin/presentation/home/drawer_menu.dart';
+import 'package:elfouad_admin/presentation/home/home_dashboard_page.dart';
 import 'package:elfouad_admin/presentation/recipes/pages/recipes_list_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -15,15 +14,14 @@ class NavShell extends StatefulWidget {
 }
 
 class _NavShellState extends State<NavShell> {
-  final AwesomeDrawerBarController _drawerController =
-      AwesomeDrawerBarController();
-
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<NavCubit, AppTab>(
       builder: (context, tab) {
         Widget screenFor(AppTab t) {
           switch (t) {
+            case AppTab.home:
+              return const HomeDashboardPage();
             case AppTab.history:
               return const HistoryScreen(); // ????
             case AppTab.stats:
@@ -43,17 +41,8 @@ class _NavShellState extends State<NavShell> {
           }
         }
 
-        return AwesomeDrawerBar(
-          controller: _drawerController,
-          menuScreen: const SideMenu(), // ?? ???????
-          mainScreen: Scaffold(
-            // ?? ???? Scaffold ???
-            body: screenFor(tab),
-          ),
-          // ???????: ??? ???? ????????? ??????
-          slideWidth: MediaQuery.sizeOf(context).width * 0.78,
-          shadowColor: Colors.black54,
-          backgroundColor: const Color(0xFF543824),
+        return Scaffold(
+          body: screenFor(tab),
         );
       },
     );

@@ -13,6 +13,7 @@ import 'package:elfouad_admin/presentation/recipes/bloc/recipes_cubit.dart';
 import 'package:elfouad_admin/presentation/stats/bloc/stats_cubit.dart';
 import 'package:elfouad_admin/services/archive/auto_archiver.dart.dart'
     show runAutoArchiveIfNeeded;
+import 'package:elfouad_admin/core/widgets/app_background.dart';
 import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -58,7 +59,7 @@ ThemeData _lightTheme() {
       seedColor: primary,
       brightness: Brightness.light,
     ).copyWith(primary: primary, secondary: secondary, surface: Colors.white),
-    scaffoldBackgroundColor: Colors.white,
+    scaffoldBackgroundColor: Colors.transparent,
     textTheme: GoogleFonts.cairoTextTheme(),
 
     // appBarTheme: const AppBarTheme(
@@ -119,15 +120,18 @@ class MyApp extends StatelessWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      builder: (context, child) => ResponsiveBreakpoints.builder(
-        child: child!,
-        breakpoints: const [
-          Breakpoint(start: 0, end: 450, name: MOBILE),
-          Breakpoint(start: 451, end: 800, name: TABLET),
-          Breakpoint(start: 801, end: 1920, name: DESKTOP),
-          Breakpoint(start: 1921, end: double.infinity, name: '4K'),
-        ],
-      ),
+      builder: (context, child) {
+        final responsive = ResponsiveBreakpoints.builder(
+          child: child ?? const SizedBox.shrink(),
+          breakpoints: const [
+            Breakpoint(start: 0, end: 450, name: MOBILE),
+            Breakpoint(start: 451, end: 800, name: TABLET),
+            Breakpoint(start: 801, end: 1920, name: DESKTOP),
+            Breakpoint(start: 1921, end: double.infinity, name: '4K'),
+          ],
+        );
+        return AppBackgroundShell(child: responsive);
+      },
       theme: _lightTheme(),
       debugShowCheckedModeBanner: false,
       home: const _BootstrapGate(),
@@ -162,7 +166,7 @@ class _BootstrapGateState extends State<_BootstrapGate> {
         BlocProvider(create: (_) => InventoryCubit()),
         BlocProvider(create: (_) => DrinksCubit()),
         BlocProvider(create: (_) => ExtrasCubit()),
-        BlocProvider(create: (_) => ManageTabCubit()),
+        BlocProvider(create: (_) => ManageTabCubit()..loadLastTab()),
         BlocProvider(create: (_) => GrindCubit()),
         BlocProvider(create: (_) => StatsCubit()),
       ],
@@ -197,48 +201,14 @@ class _BootstrapGateState extends State<_BootstrapGate> {
   }
 }
 
-class _SplashScreen extends StatefulWidget {
+class _SplashScreen extends StatelessWidget {
   const _SplashScreen();
 
   @override
-  State<_SplashScreen> createState() => _SplashScreenState();
-}
-
-class _SplashScreenState extends State<_SplashScreen>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 12),
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final shortest = MediaQuery.of(context).size.shortestSide;
-    final logoSize = (shortest * 0.35).clamp(120.0, 200.0);
-
-    return Scaffold(
+    return const Scaffold(
       body: Center(
-        child: RotationTransition(
-          turns: _controller,
-          child: Image.asset(
-            'assets/logo2.png',
-            width: logoSize,
-            height: logoSize,
-            fit: BoxFit.contain,
-          ),
-        ),
+        child: CircularProgressIndicator(),
       ),
     );
   }

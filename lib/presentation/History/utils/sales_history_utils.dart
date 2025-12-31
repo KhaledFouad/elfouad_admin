@@ -72,6 +72,60 @@ Future<({double pricePerKg, double costPerKg})> fetchSpiceRatesForSale(
   return (pricePerKg: price, costPerKg: cost);
 }
 
+Future<({double pricePerKg, double costPerKg})> fetchGinsengRatesForSale(
+  Map<String, dynamic> sale,
+) async {
+  final db = FirebaseFirestore.instance;
+  double price = _numOf(
+    sale['ginseng_rate_per_kg'] ??
+        sale['ginsengPricePerKg'] ??
+        sale['ginseng_price_per_kg'],
+  );
+  double cost = _numOf(
+    sale['ginseng_cost_per_kg'] ??
+        sale['ginsengCostPerKg'] ??
+        sale['ginseng_cost_per_kg'],
+  );
+
+  final type = '${sale['type'] ?? ''}';
+  String? coll;
+  String? id =
+      sale['single_id']?.toString() ??
+      sale['blend_id']?.toString() ??
+      sale['item_id']?.toString() ??
+      sale['id']?.toString();
+
+  if (type == 'single' ||
+      sale.containsKey('single_id') ||
+      sale['lines_type'] == 'single') {
+    coll = 'singles';
+  } else if (type == 'ready_blend' ||
+      sale.containsKey('blend_id') ||
+      sale['lines_type'] == 'ready_blend') {
+    coll = 'blends';
+  }
+
+  if ((price <= 0 || cost <= 0) && coll != null && id != null) {
+    try {
+      final doc = await db.collection(coll).doc(id).get();
+      final m = doc.data();
+      if (m != null) {
+        if (price <= 0) {
+          price = _numOf(m['ginsengPricePerKg'] ?? m['ginseng_price_per_kg']);
+        }
+        if (cost <= 0) {
+          cost = _numOf(m['ginsengCostPerKg'] ?? m['ginseng_cost_per_kg']);
+        }
+      }
+    } catch (_) {}
+  }
+
+  if (price < 0) price = 0.0;
+  if (cost < 0) cost = 0.0;
+
+  return (pricePerKg: price, costPerKg: cost);
+}
+
 double _numOf(dynamic v) {
   if (v is num) return v.toDouble();
   return double.tryParse(v?.toString() ?? '0') ?? 0.0;

@@ -1,6 +1,8 @@
-import 'package:awesome_drawer_bar/awesome_drawer_bar.dart';
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:elfouad_admin/core/app_strings.dart';
+import 'package:elfouad_admin/presentation/home/nav_state.dart';
 import 'package:elfouad_admin/presentation/inventory/bloc/inventory_cubit.dart';
 import 'package:elfouad_admin/presentation/inventory/models/inventory_row.dart';
 import 'package:elfouad_admin/presentation/inventory/utils/inventory_crud.dart';
@@ -38,6 +40,12 @@ class _ManagePageState extends State<ManagePage> {
   late final _PagedQuery<ExtraRow> _extras;
   late final _PagedQuery<InventoryRow> _singles;
   late final _PagedQuery<InventoryRow> _blends;
+  final Set<ManageTab> _pendingRealtimeRefresh = <ManageTab>{};
+  Timer? _realtimeDebounce;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _drinksSub;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _extrasSub;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _singlesSub;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _blendsSub;
 
   @override
   void initState() {
@@ -68,14 +76,66 @@ class _ManagePageState extends State<ManagePage> {
       sort: sortByNameVariant,
       onUpdate: _safeSetState,
     );
+    _startRealtime();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _ensureTabLoaded(context.read<ManageTabCubit>().state.tab);
     });
   }
 
+  @override
+  void dispose() {
+    _realtimeDebounce?.cancel();
+    _drinksSub?.cancel();
+    _extrasSub?.cancel();
+    _singlesSub?.cancel();
+    _blendsSub?.cancel();
+    super.dispose();
+  }
+
   void _safeSetState() {
     if (mounted) setState(() {});
+  }
+
+  void _startRealtime() {
+    final db = FirebaseFirestore.instance;
+    _drinksSub = db
+        .collection('drinks')
+        .orderBy('name')
+        .snapshots()
+        .skip(1)
+        .listen((_) => _scheduleRealtimeRefresh(ManageTab.drinks));
+    _extrasSub = db
+        .collection('extras')
+        .orderBy('name')
+        .snapshots()
+        .skip(1)
+        .listen((_) => _scheduleRealtimeRefresh(ManageTab.extras));
+    _singlesSub = db
+        .collection('singles')
+        .orderBy('name')
+        .snapshots()
+        .skip(1)
+        .listen((_) => _scheduleRealtimeRefresh(ManageTab.singles));
+    _blendsSub = db
+        .collection('blends')
+        .orderBy('name')
+        .snapshots()
+        .skip(1)
+        .listen((_) => _scheduleRealtimeRefresh(ManageTab.blends));
+  }
+
+  void _scheduleRealtimeRefresh(ManageTab tab) {
+    _pendingRealtimeRefresh.add(tab);
+    _realtimeDebounce?.cancel();
+    _realtimeDebounce = Timer(const Duration(milliseconds: 350), () async {
+      if (!mounted) return;
+      final tabs = List<ManageTab>.from(_pendingRealtimeRefresh);
+      _pendingRealtimeRefresh.clear();
+      for (final pending in tabs) {
+        await _refreshForTab(pending);
+      }
+    });
   }
 
   void _ensureTabLoaded(ManageTab tab) {
@@ -104,31 +164,23 @@ class _ManagePageState extends State<ManagePage> {
   Future<void> _refreshForTab(ManageTab tab) async {
     switch (tab) {
       case ManageTab.drinks:
-        _drinks.reset();
-        await _drinks.loadInitial();
+        await _drinks.refresh();
         break;
       case ManageTab.singles:
-        _singles.reset();
-        await _singles.loadInitial();
+        await _singles.refresh();
         break;
       case ManageTab.blends:
-        _blends.reset();
-        await _blends.loadInitial();
+        await _blends.refresh();
         break;
       case ManageTab.extras:
-        _extras.reset();
-        await _extras.loadInitial();
+        await _extras.refresh();
         break;
       case ManageTab.all:
-        _extras.reset();
-        _blends.reset();
-        _singles.reset();
-        _drinks.reset();
         await Future.wait([
-          _extras.loadInitial(),
-          _blends.loadInitial(),
-          _singles.loadInitial(),
-          _drinks.loadInitial(),
+          _extras.refresh(),
+          _blends.refresh(),
+          _singles.refresh(),
+          _drinks.refresh(),
         ]);
         break;
     }
@@ -447,8 +499,10 @@ class _ManagePageState extends State<ManagePage> {
             child: AppBar(
               automaticallyImplyLeading: false,
               leading: IconButton(
-                icon: const Icon(Icons.menu, color: Colors.white),
-                onPressed: () => AwesomeDrawerBar.of(context)?.toggle(),
+                icon: const Icon(Icons.home_rounded, color: Colors.white),
+                onPressed: () =>
+                    context.read<NavCubit>().setTab(AppTab.home),
+                tooltip: AppStrings.tabHome,
               ),
               title: const Text(
                 AppStrings.tabEdits,
@@ -865,6 +919,27 @@ class _PagedQuery<T> {
     hasMore = true;
     _lastDoc = null;
     onUpdate();
+  }
+
+  Future<void> refresh() async {
+    if (loading) return;
+    loading = true;
+    error = null;
+    onUpdate();
+    try {
+      final snap = await query.limit(pageSize).get();
+      _lastDoc = snap.docs.isEmpty ? null : snap.docs.last;
+      hasMore = snap.docs.length == pageSize;
+      final nextItems = snap.docs.map(mapDoc).toList();
+      items
+        ..clear()
+        ..addAll(sort == null ? nextItems : sort!(nextItems));
+    } catch (e) {
+      error = e;
+    } finally {
+      loading = false;
+      onUpdate();
+    }
   }
 
   void _appendDocs(List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) {

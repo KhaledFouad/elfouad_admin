@@ -28,8 +28,7 @@ class SaleTile extends StatelessWidget {
     final profit = record.isComplimentary
         ? 0.0
         : parseDouble(record.data['profit_total']);
-    final resolvedProfit =
-        profit != 0 ? profit : (totalPrice - totalCost);
+    final resolvedProfit = profit != 0 ? profit : (totalPrice - totalCost);
 
     final tile = ExpansionTile(
       tilePadding: const EdgeInsets.symmetric(horizontal: 8),
@@ -52,14 +51,8 @@ class SaleTile extends StatelessWidget {
         runSpacing: 4,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          _KeyValue(
-            label: AppStrings.labelInvoiceTotal,
-            value: totalPrice,
-          ),
-          _KeyValue(
-            label: AppStrings.costLabelDefinite,
-            value: totalCost,
-          ),
+          _KeyValue(label: AppStrings.labelInvoiceTotal, value: totalPrice),
+          _KeyValue(label: AppStrings.costLabelDefinite, value: totalCost),
           _KeyValue(
             label: AppStrings.profitLabelDefinite,
             value: resolvedProfit,
@@ -221,7 +214,8 @@ class _TitleRow extends StatelessWidget {
             border: Colors.orange.shade200,
             fill: Colors.orange.shade50,
           ),
-        if (record.isDeferred && !record.isPaid) DeferredBadge(note: record.note),
+        if (record.isDeferred && !record.isPaid)
+          DeferredBadge(note: record.note),
         if (record.isDeferred && record.isPaid)
           _Chip(
             label: AppStrings.labelDeferredPast,
@@ -371,12 +365,36 @@ class _ComponentRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final label = component.label;
     final quantity = component.quantityLabel(normalizeUnit);
+    final addons = <String>[];
+    if (component.spicedEnabled == true) {
+      addons.add(
+        component.spiced == true
+            ? AppStrings.labelSpiced
+            : AppStrings.labelPlain,
+      );
+    }
+    if (component.ginsengGrams > 0) {
+      addons.add(
+        '${AppStrings.labelGinseng} ${component.ginsengGrams} ${AppStrings.labelGramsShort}',
+      );
+    }
+    final subtitle = addons.isEmpty ? null : addons.join(' • ');
 
     return ListTile(
       dense: true,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16),
       leading: const Icon(Icons.circle, size: 8),
       title: Text(label),
+      subtitle: subtitle == null
+          ? null
+          : Text(
+              subtitle,
+              style: const TextStyle(
+                fontSize: 12,
+                color: Colors.black54,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [

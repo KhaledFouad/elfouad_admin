@@ -1,19 +1,20 @@
-import 'package:awesome_drawer_bar/awesome_drawer_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:elfouad_admin/core/app_strings.dart';
+import 'package:elfouad_admin/presentation/home/nav_state.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 class BrandedAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String title;
   final List<Widget>? actions;
   final bool showBack;
-  final bool showMenu;
+  final bool showHome;
 
   const BrandedAppBar({
     super.key,
     required this.title,
     this.actions,
     this.showBack = false,
-    this.showMenu = false,
+    this.showHome = false,
   });
 
   @override
@@ -27,23 +28,12 @@ class BrandedAppBar extends StatelessWidget implements PreferredSizeWidget {
         borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
         child: AppBar(
           automaticallyImplyLeading: false,
-          leading: showMenu
-              ? Builder(
-                  builder: (ctx) => IconButton(
-                    icon: const Icon(Icons.menu, color: Colors.white),
-                    onPressed: () {
-                      final drawer = AwesomeDrawerBar.of(ctx);
-                      if (drawer != null) {
-                        drawer.toggle();
-                        return;
-                      }
-                      final scaffold = Scaffold.maybeOf(ctx);
-                      if (scaffold != null) {
-                        scaffold.openDrawer();
-                      }
-                    },
-                    tooltip: AppStrings.menuTooltip,
-                  ),
+          leading: showHome
+              ? IconButton(
+                  icon: const Icon(Icons.home_rounded, color: Colors.white),
+                  onPressed: () =>
+                      context.read<NavCubit>().setTab(AppTab.home),
+                  tooltip: AppStrings.tabHome,
                 )
               : (showBack
                     ? IconButton(

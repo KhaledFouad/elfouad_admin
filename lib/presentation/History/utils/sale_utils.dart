@@ -1,7 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:elfouad_admin/core/app_strings.dart';
 import 'package:flutter/material.dart';
-
 import '../models/sale_component.dart';
 
 const _deferredReferenceHour = 5;
@@ -186,8 +185,8 @@ List<SaleComponent> extractComponents(Map<String, dynamic> data, String type) {
 
   // 4) الأنواع المنفردة
   if (type == 'drink') {
-    final name =
-        (data['drink_name'] ?? data['name'] ?? AppStrings.labelDrink).toString();
+    final name = (data['drink_name'] ?? data['name'] ?? AppStrings.labelDrink)
+        .toString();
     final variant = (data['roast'] ?? data['variant'] ?? '').toString();
     final quantity = parseDouble(data['quantity'] ?? data['qty'] ?? 1);
     final unit = (data['unit'] ?? 'cup').toString();
@@ -195,17 +194,16 @@ List<SaleComponent> extractComponents(Map<String, dynamic> data, String type) {
     final unitCost = parseDouble(data['unit_cost']);
     final totalPrice = parseDouble(data['total_price']);
     final totalCost = parseDouble(data['total_cost']);
-    return [
-      SaleComponent(
-        name: name,
-        variant: variant,
-        grams: 0,
-        quantity: quantity,
-        unit: unit,
-        lineTotalPrice: totalPrice > 0 ? totalPrice : unitPrice * quantity,
-        lineTotalCost: totalCost > 0 ? totalCost : unitCost * quantity,
-      ),
-    ];
+    final map = <String, dynamic>{
+      'name': name,
+      'variant': variant,
+      'qty': quantity,
+      'unit': unit,
+      'total_price': totalPrice > 0 ? totalPrice : unitPrice * quantity,
+      'total_cost': totalCost > 0 ? totalCost : unitCost * quantity,
+      'meta': data['meta'],
+    };
+    return [SaleComponent.fromMap(map)];
   }
 
   if (type == 'single' || type == 'ready_blend') {
@@ -214,22 +212,21 @@ List<SaleComponent> extractComponents(Map<String, dynamic> data, String type) {
     final grams = parseDouble(data['grams']);
     final totalPrice = parseDouble(data['total_price']);
     final totalCost = parseDouble(data['total_cost']);
-    return [
-      SaleComponent(
-        name: name,
-        variant: variant,
-        grams: grams,
-        quantity: 0,
-        unit: 'g',
-        lineTotalPrice: totalPrice,
-        lineTotalCost: totalCost,
-      ),
-    ];
+    final map = <String, dynamic>{
+      'name': name,
+      'variant': variant,
+      'grams': grams,
+      'unit': 'g',
+      'total_price': totalPrice,
+      'total_cost': totalCost,
+      'meta': data['meta'],
+    };
+    return [SaleComponent.fromMap(map)];
   }
 
   if (type == 'extra') {
-    final name =
-        (data['extra_name'] ?? data['name'] ?? AppStrings.labelExtra).toString();
+    final name = (data['extra_name'] ?? data['name'] ?? AppStrings.labelExtra)
+        .toString();
     final variant = (data['variant'] ?? '').toString();
     final quantity = parseDouble(data['quantity'] ?? data['qty'] ?? 1);
     final unit = (data['unit'] ?? 'piece').toString();
@@ -237,17 +234,16 @@ List<SaleComponent> extractComponents(Map<String, dynamic> data, String type) {
     final unitCost = parseDouble(data['unit_cost']);
     final totalPrice = parseDouble(data['total_price']);
     final totalCost = parseDouble(data['total_cost']);
-    return [
-      SaleComponent(
-        name: name,
-        variant: variant,
-        grams: 0,
-        quantity: quantity,
-        unit: unit,
-        lineTotalPrice: totalPrice > 0 ? totalPrice : unitPrice * quantity,
-        lineTotalCost: totalCost > 0 ? totalCost : unitCost * quantity,
-      ),
-    ];
+    final map = <String, dynamic>{
+      'name': name,
+      'variant': variant,
+      'qty': quantity,
+      'unit': unit,
+      'total_price': totalPrice > 0 ? totalPrice : unitPrice * quantity,
+      'total_cost': totalCost > 0 ? totalCost : unitCost * quantity,
+      'meta': data['meta'],
+    };
+    return [SaleComponent.fromMap(map)];
   }
 
   return const [];

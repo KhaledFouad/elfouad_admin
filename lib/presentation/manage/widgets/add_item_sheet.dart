@@ -48,11 +48,34 @@ class _RoastUsageEntry {
   _RoastUsageEntry() : gramsCtrl = TextEditingController();
 
   final TextEditingController gramsCtrl;
+  final Map<String, TextEditingController> variantGramsCtrls = {};
   InventoryRow? item;
   String? coll;
 
+  void syncVariants(Set<String> activeIds) {
+    for (final id in activeIds) {
+      variantGramsCtrls.putIfAbsent(id, () => TextEditingController());
+    }
+    final removeIds =
+        variantGramsCtrls.keys.where((id) => !activeIds.contains(id)).toList();
+    for (final id in removeIds) {
+      variantGramsCtrls[id]?.dispose();
+      variantGramsCtrls.remove(id);
+    }
+  }
+
+  TextEditingController gramsFor(String variantId) {
+    return variantGramsCtrls.putIfAbsent(
+      variantId,
+      () => TextEditingController(),
+    );
+  }
+
   void dispose() {
     gramsCtrl.dispose();
+    for (final ctrl in variantGramsCtrls.values) {
+      ctrl.dispose();
+    }
   }
 }
 
@@ -120,6 +143,7 @@ class _AddItemSheetState extends State<AddItemSheet> {
   final List<_OptionEntry> _drinkRoasts = [];
   final Map<String, _DrinkPriceEntry> _drinkPrices = {};
   final Map<String, _RoastUsageEntry> _roastUsage = {};
+  final Map<String, TextEditingController> _variantGrams = {};
   final _drinkUsedGrams = TextEditingController();
   InventoryRow? _drinkIngredient;
   String? _drinkIngredientColl;
@@ -167,6 +191,9 @@ class _AddItemSheetState extends State<AddItemSheet> {
     }
     for (final entry in _roastUsage.values) {
       entry.dispose();
+    }
+    for (final ctrl in _variantGrams.values) {
+      ctrl.dispose();
     }
     super.dispose();
   }
@@ -491,7 +518,25 @@ class _AddItemSheetState extends State<AddItemSheet> {
     _drinkPrices.clear();
   }
 
+  void _syncVariantUsage() {
+    final activeIds = _drinkVariants.map((e) => e.id).toSet();
+    for (final id in activeIds) {
+      _variantGrams.putIfAbsent(id, () => TextEditingController());
+    }
+    final removeIds = _variantGrams.keys
+        .where((id) => !activeIds.contains(id))
+        .toList();
+    for (final id in removeIds) {
+      _variantGrams[id]?.dispose();
+      _variantGrams.remove(id);
+    }
+    for (final entry in _roastUsage.values) {
+      entry.syncVariants(activeIds);
+    }
+  }
+
   void _syncDrinkPricing() {
+    _syncVariantUsage();
     if (_drinkVariants.isEmpty && _drinkRoasts.isEmpty) {
       _clearDrinkPrices();
       return;
@@ -536,6 +581,10 @@ class _AddItemSheetState extends State<AddItemSheet> {
     for (final id in removeIds) {
       _roastUsage[id]?.dispose();
       _roastUsage.remove(id);
+    }
+    final variantIds = _drinkVariants.map((e) => e.id).toSet();
+    for (final entry in _roastUsage.values) {
+      entry.syncVariants(variantIds);
     }
   }
 
@@ -967,6 +1016,37 @@ class _AddItemSheetState extends State<AddItemSheet> {
   Widget _buildDrinkIngredientSection() {
     final inventoryState = context.watch<InventoryCubit>().state;
     final hasRoasts = _drinkRoasts.isNotEmpty;
+    final hasVariants = _drinkVariants.isNotEmpty;
+    final numKeyboard = const TextInputType.numberWithOptions(decimal: true);
+
+    List<Widget> buildVariantGramsFields(
+      TextEditingController Function(String) controllerFor, {
+      bool required = false,
+    }) {
+      final fields = <Widget>[];
+      for (final variant in _drinkVariants) {
+        if (fields.isNotEmpty) {
+          fields.add(const SizedBox(height: 8));
+        }
+        final label = variant.name.isEmpty
+            ? AppStrings.unnamedLabel
+            : variant.name;
+        fields.add(
+          _tf(
+            controllerFor(variant.id),
+            '${AppStrings.usedGramsLabel} ($label)',
+            numKeyboard,
+            validator: required
+                ? (v) => _requiredPositive(
+                    v,
+                    AppStrings.fillRoastUsageGramsPrompt,
+                  )
+                : null,
+          ),
+        );
+      }
+      return fields;
+    }
 
     if (hasRoasts) {
       _syncRoastUsage();
@@ -1081,15 +1161,21 @@ class _AddItemSheetState extends State<AddItemSheet> {
                       ],
                     ),
                     const SizedBox(height: 8),
-                    _tf(
-                      usage.gramsCtrl,
-                      AppStrings.usedGramsLabel,
-                      const TextInputType.numberWithOptions(decimal: true),
-                      validator: (v) => _requiredPositive(
-                        v,
-                        AppStrings.fillRoastUsageGramsPrompt,
+                    if (hasVariants)
+                      ...buildVariantGramsFields(
+                        usage.gramsFor,
+                        required: true,
+                      )
+                    else
+                      _tf(
+                        usage.gramsCtrl,
+                        AppStrings.usedGramsLabel,
+                        numKeyboard,
+                        validator: (v) => _requiredPositive(
+                          v,
+                          AppStrings.fillRoastUsageGramsPrompt,
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -1168,11 +1254,19 @@ class _AddItemSheetState extends State<AddItemSheet> {
           ),
         ),
         const SizedBox(height: 8),
-        _tf(
-          _drinkUsedGrams,
-          AppStrings.usedGramsLabel,
-          const TextInputType.numberWithOptions(decimal: true),
-        ),
+        if (hasVariants)
+          ...buildVariantGramsFields(
+            (id) => _variantGrams.putIfAbsent(
+              id,
+              () => TextEditingController(),
+            ),
+          )
+        else
+          _tf(
+            _drinkUsedGrams,
+            AppStrings.usedGramsLabel,
+            numKeyboard,
+          ),
       ],
     );
   }
@@ -1305,6 +1399,7 @@ class _AddItemSheetState extends State<AddItemSheet> {
       if (_t == NewItemType.drink) {
         final variants = _drinkVariants.map((e) => e.name).toList();
         final roasts = _drinkRoasts.map((e) => e.name).toList();
+        final hasVariants = variants.isNotEmpty;
 
         final hasMatrix = variants.isNotEmpty || roasts.isNotEmpty;
         final pricing = <Map<String, dynamic>>[];
@@ -1365,17 +1460,29 @@ class _AddItemSheetState extends State<AddItemSheet> {
           for (final roast in _drinkRoasts) {
             final usage = _roastUsage[roast.id]!;
             final item = usage.item!;
-            final grams = _num(usage.gramsCtrl.text);
-            roastUsage.add({
+            final entry = <String, dynamic>{
               'roast': roast.name,
-              'usedAmount': grams,
-                'usedItem': {
-                  'id': item.id,
-                  'name': item.name,
-                  'variant': item.variant,
-                  'collection': usage.coll,
-                },
-              });
+              'usedItem': {
+                'id': item.id,
+                'name': item.name,
+                'variant': item.variant,
+                'collection': usage.coll,
+              },
+            };
+            if (hasVariants) {
+              final usedAmounts = <String, double>{};
+              for (final variant in _drinkVariants) {
+                usedAmounts[variant.name] =
+                    _num(usage.gramsFor(variant.id).text);
+              }
+              if (usedAmounts.isNotEmpty) {
+                entry['usedAmounts'] = usedAmounts;
+                entry['usedAmount'] = usedAmounts.values.first;
+              }
+            } else {
+              entry['usedAmount'] = _num(usage.gramsCtrl.text);
+            }
+            roastUsage.add(entry);
           }
         }
 
@@ -1414,7 +1521,19 @@ class _AddItemSheetState extends State<AddItemSheet> {
           if (usedItem != null) {
             payload['usedItem'] = usedItem;
           }
-          if (usedAmount > 0) {
+          if (hasVariants) {
+            final usedByVariant = <String, double>{};
+            for (final variant in _drinkVariants) {
+              final grams = _num(_variantGrams[variant.id]?.text);
+              if (grams > 0) {
+                usedByVariant[variant.name] = grams;
+              }
+            }
+            if (usedByVariant.isNotEmpty) {
+              payload['usedAmountByVariant'] = usedByVariant;
+              payload['usedAmount'] = usedByVariant.values.first;
+            }
+          } else if (usedAmount > 0) {
             payload['usedAmount'] = usedAmount;
           }
         }

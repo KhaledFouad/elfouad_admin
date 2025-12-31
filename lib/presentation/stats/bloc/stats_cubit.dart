@@ -23,8 +23,15 @@ class StatsCubit extends Cubit<StatsState> {
   }
 
   List<Map<String, dynamic>> _rawMonth = const [];
+  List<Map<String, dynamic>> _rawExpenses = const [];
+  final Map<String, List<Map<String, dynamic>>> _rawMonthCache = {};
+  final Map<String, List<Map<String, dynamic>>> _rawExpensesCache = {};
 
-  Future<void> refresh() => _loadMonth(state.month, state.period);
+  Future<void> refresh() => _loadMonth(
+        state.month,
+        state.period,
+        force: true,
+      );
 
   Future<void> setMonth(DateTime month) =>
       _loadMonth(DateTime(month.year, month.month, 1), state.period);
@@ -34,7 +41,11 @@ class StatsCubit extends Cubit<StatsState> {
     await _computeOverview(period, state.month);
   }
 
-  Future<void> _loadMonth(DateTime month, StatsPeriod period) async {
+  Future<void> _loadMonth(
+    DateTime month,
+    StatsPeriod period, {
+    bool force = false,
+  }) async {
     emit(
       state.copyWith(
         month: month,
@@ -46,7 +57,25 @@ class StatsCubit extends Cubit<StatsState> {
       ),
     );
     try {
-      _rawMonth = prepareStatsData(await fetchSalesRawForMonth(month));
+      final key = _cacheKey(month);
+      if (!force &&
+          _rawMonthCache.containsKey(key) &&
+          _rawExpensesCache.containsKey(key)) {
+        _rawMonth = _rawMonthCache[key] ?? const [];
+        _rawExpenses = _rawExpensesCache[key] ?? const [];
+      } else {
+        _rawMonth = prepareStatsData(
+          await fetchSalesRawForMonth(month, cacheFirst: !force),
+        );
+        final fullRange = statsComputeRange(month, StatsPeriod.fullMonth);
+        _rawExpenses = await fetchStatsExpenses(
+          startUtc: fullRange.startUtc,
+          endUtc: fullRange.endUtc,
+          cacheFirst: !force,
+        );
+        _rawMonthCache[key] = _rawMonth;
+        _rawExpensesCache[key] = _rawExpenses;
+      }
       final preview = _buildThirdsPreview(_rawMonth, month);
       emit(
         state.copyWith(
@@ -76,7 +105,8 @@ class StatsCubit extends Cubit<StatsState> {
         startUtc: range.startUtc,
         endUtc: range.endUtc,
       );
-      final expenses = await fetchStatsExpenses(
+      final expenses = filterStatsExpenses(
+        _rawExpenses,
         startUtc: range.startUtc,
         endUtc: range.endUtc,
       );
@@ -139,4 +169,7 @@ class StatsCubit extends Cubit<StatsState> {
       month: kpisForRange(rm.startUtc, rm.endUtc),
     );
   }
+
+  String _cacheKey(DateTime month) =>
+      '${month.year.toString().padLeft(4, '0')}-${month.month.toString().padLeft(2, '0')}';
 }

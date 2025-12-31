@@ -8,6 +8,11 @@ class AppStrings {
   static const drawerTitle = 'لوحة إدارة بن الفؤاد';
   static const drawerClose = 'إغلاق';
 
+  static const tabHome = 'الرئيسية';
+  static const homeTitle = 'لوحة التحكم';
+  static const homeSubtitle = 'كل أقسام الإدارة';
+  static const homeQuickAccess = 'اختصارات سريعة';
+  static const homeCardHint = 'دخول سريع';
   static const tabHistory = 'السجل';
   static const tabStats = 'الإحصائيات';
   static const tabInventory = 'المخزون';
@@ -30,13 +35,16 @@ class AppStrings {
   static const forecastNeedKgLabel = 'الكمية المتوقعة (كجم)';
   static const forecastUsedGramsLabel = 'الاستهلاك خلال الفترة (جم)';
   static const forecastNoData = 'لا توجد بيانات كافية في الفترة.';
-  static const forecastNote = 'التوقع يعتمد على المبيعات المسجلة بالجرام.';
-  static const forecastBlendComponentsTitle = 'توقع مكونات التوليفات';
+  static const forecastNote =
+      'التوقع يعتمد على الاتجاه ووزن الأيام الأخيرة من المبيعات.';
+  static const forecastBlendComponentsTitle = 'احتياج مكونات التوليفات';
   static const forecastBlendLabel = 'التوليفة';
   static const forecastComponentLabel = 'المكون';
   static const forecastPercentLabel = 'النسبة %';
   static const forecastComponentKgLabel = 'احتياج المكون (كجم)';
-  static const forecastNoBlendComponents = 'لا توجد وصفات مطابقة للتوليفات المباعة.';
+  static const forecastBlendTotalKgLabel = 'إجمالي التوليفات (كجم)';
+  static const forecastNoBlendComponents =
+      'لا توجد وصفات مطابقة للتوليفات المباعة.';
   static const actionCancel = 'إلغاء';
   static const actionDelete = 'حذف';
   static const actionEdit = 'تعديل';
@@ -137,6 +145,7 @@ class AppStrings {
   static const totalPriceLabel = 'السعر الإجمالي (total_price)';
   static const cupsCountLabel = 'عدد الأكواب (quantity)';
   static const gramsQuantityLabel = 'الكمية بالجرامات (grams)';
+  static const ginsengGramsLabel = 'جرامات الجنسنج (ginseng_grams)';
   static const quantityLabel = 'العدد (quantity)';
   static const increaseLabel = 'زيادة';
   static const decreaseLabel = 'نقصان';
@@ -193,6 +202,12 @@ class AppStrings {
   static const statusLabel = 'الحالة';
   static const inactiveLabel = 'غير مفعّل';
   static const priceLabel = 'سعر';
+  static const labelGramsShort = 'جم';
+
+  static const labelWater = 'مياه';
+  static const labelSpiced = 'محوّج';
+  static const labelPlain = 'سادة';
+  static const labelGinseng = 'جينسنج';
   static const categoryLabel = 'التصنيف';
   static const sellPriceLabel = 'سعر البيع';
   static const extrasLabel = 'الإضافات';

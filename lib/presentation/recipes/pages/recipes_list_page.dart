@@ -1,6 +1,5 @@
-import 'package:awesome_drawer_bar/awesome_drawer_bar.dart'
-    show AwesomeDrawerBar;
 import 'package:elfouad_admin/core/app_strings.dart';
+import 'package:elfouad_admin/presentation/home/nav_state.dart';
 import 'package:elfouad_admin/presentation/inventory/bloc/inventory_cubit.dart';
 import 'package:elfouad_admin/presentation/recipes/bloc/recipes_cubit.dart';
 import 'package:elfouad_admin/presentation/recipes/models/recipe_price_cost.dart';
@@ -98,8 +97,10 @@ class _RecipesListPageState extends State<RecipesListPage> {
             child: AppBar(
               automaticallyImplyLeading: false,
               leading: IconButton(
-                icon: const Icon(Icons.menu, color: Colors.white),
-                onPressed: () => AwesomeDrawerBar.of(context)?.toggle(),
+                icon: const Icon(Icons.home_rounded, color: Colors.white),
+                onPressed: () =>
+                    context.read<NavCubit>().setTab(AppTab.home),
+                tooltip: AppStrings.tabHome,
               ),
               title: const Text(
                 AppStrings.recipesTitle,

@@ -1,5 +1,5 @@
-import 'package:awesome_drawer_bar/awesome_drawer_bar.dart';
 import 'package:elfouad_admin/core/app_strings.dart';
+import 'package:elfouad_admin/presentation/home/nav_state.dart';
 import 'package:elfouad_admin/presentation/stats/bloc/stats_cubit.dart';
 import 'package:elfouad_admin/presentation/stats/widgets/beans_by_name_table.dart';
 import 'package:elfouad_admin/presentation/stats/widgets/drinks_by_type_table.dart';
@@ -412,8 +412,9 @@ class _StatsPageState extends State<StatsPage> {
         borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
         child: AppBar(
           leading: IconButton(
-            icon: const Icon(Icons.menu, color: Colors.white),
-            onPressed: () => AwesomeDrawerBar.of(context)?.toggle(),
+            icon: const Icon(Icons.home_rounded, color: Colors.white),
+            onPressed: () => context.read<NavCubit>().setTab(AppTab.home),
+            tooltip: AppStrings.tabHome,
           ),
           title: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
