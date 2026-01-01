@@ -1,6 +1,5 @@
 import 'dart:async' show unawaited;
-import 'package:elfouad_admin/core/firestore_tuning.dart'
-    show configureFirestore;
+import 'package:elfouad_admin/core/utils/firestore_tuning.dart';
 import 'package:elfouad_admin/presentation/Expenses/bloc/expenses_cubit.dart';
 import 'package:elfouad_admin/presentation/grind/state/grind_providers.dart';
 import 'package:elfouad_admin/presentation/home/app_shell.dart';
@@ -22,7 +21,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 import 'services/firebase_options.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:elfouad_admin/core/app_strings.dart';
+import 'package:elfouad_admin/core/utils/app_strings.dart';
 
 const _primaryHex = 0xFF543824;
 const _accentHex = 0xFFC49A6C;
@@ -206,10 +205,6 @@ class _SplashScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(
-        child: CircularProgressIndicator(),
-      ),
-    );
+    return const Scaffold(body: Center(child: CircularProgressIndicator()));
   }
 }

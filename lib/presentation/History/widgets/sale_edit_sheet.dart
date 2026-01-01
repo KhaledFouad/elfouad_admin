@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:elfouad_admin/core/app_strings.dart';
+import 'package:elfouad_admin/core/utils/app_strings.dart';
 
 import '../utils/sale_utils.dart';
 import '../utils/sales_history_utils.dart';
@@ -84,8 +84,10 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
     final ginsengMeta = meta is Map
         ? (meta['ginseng_grams'] ?? meta['ginsengGrams'])
         : null;
-    final ginsengGrams =
-        _intOf(_m['ginseng_grams'] ?? _m['ginsengGrams'] ?? ginsengMeta, 0);
+    final ginsengGrams = _intOf(
+      _m['ginseng_grams'] ?? _m['ginsengGrams'] ?? ginsengMeta,
+      0,
+    );
     if (ginsengGrams > 0) {
       _ginsengCtrl.text = ginsengGrams.toString();
     }
@@ -171,9 +173,8 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
       if (v is List) {
         return v
             .map(
-              (e) => (e is Map)
-                  ? e.cast<String, dynamic>()
-                  : <String, dynamic>{},
+              (e) =>
+                  (e is Map) ? e.cast<String, dynamic>() : <String, dynamic>{},
             )
             .toList();
       }
@@ -202,8 +203,8 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
         return 'singles';
       }
 
-      final type =
-          (row['type'] ?? row['line_type'] ?? row['item_type'] ?? '').toString();
+      final type = (row['type'] ?? row['line_type'] ?? row['item_type'] ?? '')
+          .toString();
       if (type == 'single') return 'singles';
       if (type == 'ready_blend' || type == 'blend') return 'blends';
 
@@ -254,15 +255,13 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
     }
 
     if (out.isEmpty && _isDrinkSale(m)) {
-      final qtyRaw =
-          m['quantity'] ?? m['qty'] ?? m['count'] ?? m['pieces'];
+      final qtyRaw = m['quantity'] ?? m['qty'] ?? m['count'] ?? m['pieces'];
       var qty = d(qtyRaw);
       if (qty <= 0) qty = 1;
 
-      final variant =
-          (m['variant'] ?? m['drink_variant'] ?? m['size'] ?? '')
-              .toString()
-              .trim();
+      final variant = (m['variant'] ?? m['drink_variant'] ?? m['size'] ?? '')
+          .toString()
+          .trim();
       final roast = (m['roast'] ?? m['roast_level'] ?? m['roastLevel'] ?? '')
           .toString()
           .trim();
@@ -283,12 +282,15 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
       }
 
       Map<String, dynamic>? pickUsage(Map<String, dynamic> source) {
-        final roastUsage = asList(source['roastUsage'] ?? source['roast_usage']);
+        final roastUsage = asList(
+          source['roastUsage'] ?? source['roast_usage'],
+        );
         if (roastUsage.isNotEmpty) {
           if (roastKey.isNotEmpty) {
             for (final entry in roastUsage) {
-              final key =
-                  (entry['roast'] ?? entry['name'])?.toString().toLowerCase();
+              final key = (entry['roast'] ?? entry['name'])
+                  ?.toString()
+                  .toLowerCase();
               if (key != null && key.trim() == roastKey) return entry;
             }
           }
@@ -318,7 +320,8 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
         final rawColl =
             item['collection'] ?? item['coll'] ?? usage['collection'];
         final coll = _normalizeColl(rawColl?.toString());
-        final id = item['id'] ??
+        final id =
+            item['id'] ??
             item['item_id'] ??
             item['itemId'] ??
             item['single_id'] ??
@@ -474,7 +477,7 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
         ).clamp(1, 100000);
         final double uiTotal =
             double.tryParse(_totalPriceCtrl.text.replaceAll(',', '.')) ??
-                oldTotalPrice;
+            oldTotalPrice;
 
         final bool manualOverride = !_isComplimentary && _userEditedTotal;
 
@@ -545,13 +548,13 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
 
       final uiTotalPrice =
           double.tryParse(_totalPriceCtrl.text.replaceAll(',', '.')) ??
-              oldTotalPrice;
+          oldTotalPrice;
       double qty =
           double.tryParse(_qtyCtrl.text.replaceAll(',', '.')) ??
-              _numOf(_m['quantity']);
+          _numOf(_m['quantity']);
       double grams =
           double.tryParse(_gramsCtrl.text.replaceAll(',', '.')) ??
-              _numOf(_m['grams']);
+          _numOf(_m['grams']);
       final baseGrams = _numOf(_m['grams']);
       final gramsForRate = baseGrams > 0 ? baseGrams : grams;
       final baseBeansAmount = _numOf(_m['beans_amount']);
@@ -638,8 +641,9 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
         ).clamp(0, 100000).toInt();
         updates['ginseng_grams'] = ginsengGrams;
         final rawMeta = _m['meta'];
-        final metaMap =
-            rawMeta is Map ? Map<String, dynamic>.from(rawMeta) : null;
+        final metaMap = rawMeta is Map
+            ? Map<String, dynamic>.from(rawMeta)
+            : null;
         if (metaMap != null || ginsengGrams > 0) {
           final updatedMeta = metaMap ?? <String, dynamic>{};
           if (ginsengGrams > 0) {
@@ -662,8 +666,9 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
           final name =
               (_m['name'] ?? _m['single_name'] ?? _m['blend_name'] ?? '')
                   .toString();
-          spicePricePerKg =
-              (type == 'single') ? spiceRatePerKgForSingle(name) : 40.0;
+          spicePricePerKg = (type == 'single')
+              ? spiceRatePerKgForSingle(name)
+              : 40.0;
         }
         if (spiceCostPerKg < 0) spiceCostPerKg = 0.0;
 
@@ -705,11 +710,8 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
             ginsengAmount = (ginsengGrams / 1000.0) * ginsengPricePerKg;
             ginsengCostAmount = (ginsengGrams / 1000.0) * ginsengCostPerKg;
           }
-          final beansAmountFromUi =
-              (uiTotalPrice - spiceAmount - ginsengAmount).clamp(
-            0.0,
-            double.infinity,
-          );
+          final beansAmountFromUi = (uiTotalPrice - spiceAmount - ginsengAmount)
+              .clamp(0.0, double.infinity);
           newTotalPrice = uiTotalPrice;
           newTotalCost = beansCost + spiceCostAmount + ginsengCostAmount;
 
@@ -718,10 +720,12 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
           updates['spice_cost_per_kg'] = _isSpiced ? spiceCostPerKg : 0.0;
           updates['spice_amount'] = spiceAmount;
           updates['spice_cost_amount'] = spiceCostAmount;
-          updates['ginseng_rate_per_kg'] =
-              ginsengGrams > 0 ? ginsengPricePerKg : 0.0;
-          updates['ginseng_cost_per_kg'] =
-              ginsengGrams > 0 ? ginsengCostPerKg : 0.0;
+          updates['ginseng_rate_per_kg'] = ginsengGrams > 0
+              ? ginsengPricePerKg
+              : 0.0;
+          updates['ginseng_cost_per_kg'] = ginsengGrams > 0
+              ? ginsengCostPerKg
+              : 0.0;
           updates['ginseng_amount'] = ginsengAmount;
           updates['ginseng_cost_amount'] = ginsengCostAmount;
 
@@ -752,10 +756,12 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
           updates['spice_cost_per_kg'] = _isSpiced ? spiceCostPerKg : 0.0;
           updates['spice_amount'] = spiceAmount;
           updates['spice_cost_amount'] = spiceCostAmount;
-          updates['ginseng_rate_per_kg'] =
-              ginsengGrams > 0 ? ginsengPricePerKg : 0.0;
-          updates['ginseng_cost_per_kg'] =
-              ginsengGrams > 0 ? ginsengCostPerKg : 0.0;
+          updates['ginseng_rate_per_kg'] = ginsengGrams > 0
+              ? ginsengPricePerKg
+              : 0.0;
+          updates['ginseng_cost_per_kg'] = ginsengGrams > 0
+              ? ginsengCostPerKg
+              : 0.0;
           updates['ginseng_amount'] = ginsengAmount;
           updates['ginseng_cost_amount'] = ginsengCostAmount;
 
@@ -789,8 +795,9 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
         double spiceAmount = 0.0;
         if (_isSpiced && !_isComplimentary) {
           final rates = await fetchSpiceRatesForSale({..._m, 'type': type});
-          final spiceRatePerKg =
-              (rates.pricePerKg > 0) ? rates.pricePerKg : 50.0;
+          final spiceRatePerKg = (rates.pricePerKg > 0)
+              ? rates.pricePerKg
+              : 50.0;
           spiceAmount = (gramsAll / 1000.0) * spiceRatePerKg;
           updates['spice_rate_per_kg'] = spiceRatePerKg;
           updates['spice_amount'] = spiceAmount;
@@ -801,7 +808,7 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
 
         final uiTotalPrice =
             double.tryParse(_totalPriceCtrl.text.replaceAll(',', '.')) ??
-                oldTotalPrice;
+            oldTotalPrice;
 
         final autoPrice = linesAmount + spiceAmount;
         double newTotalPrice;
@@ -837,7 +844,7 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
       {
         final uiTotalPrice =
             double.tryParse(_totalPriceCtrl.text.replaceAll(',', '.')) ??
-                oldTotalPrice;
+            oldTotalPrice;
 
         double newTotalPrice, newTotalCost;
         if (_isComplimentary) {
@@ -1050,8 +1057,8 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
                           final q = _intOf(_qtyCtrl.text, 1).clamp(1, 100000);
                           final back =
                               _userEditedTotal && _lastNonComplPrice != null
-                                  ? _lastNonComplPrice!
-                                  : (_unitPriceCache * q);
+                              ? _lastNonComplPrice!
+                              : (_unitPriceCache * q);
                           _setTotalPriceText(back);
                         }
                       }

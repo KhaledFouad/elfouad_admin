@@ -1,4 +1,4 @@
-import 'package:elfouad_admin/core/app_strings.dart';
+import 'package:elfouad_admin/core/utils/app_strings.dart';
 import 'package:elfouad_admin/presentation/recipes/models/recipe_component.dart';
 import 'package:elfouad_admin/presentation/recipes/models/recipe_list_item.dart';
 
@@ -40,16 +40,17 @@ List<BlendComponentForecastRow> buildBlendComponentForecastRows({
     }
   }
 
-  final rows = totals.values
-      .map(
-        (acc) => BlendComponentForecastRow(
-          componentName: acc.componentName,
-          forecastGrams: acc.componentGrams,
-          blendGrams: acc.blendGrams,
-        ),
-      )
-      .toList()
-    ..sort((a, b) => b.forecastGrams.compareTo(a.forecastGrams));
+  final rows =
+      totals.values
+          .map(
+            (acc) => BlendComponentForecastRow(
+              componentName: acc.componentName,
+              forecastGrams: acc.componentGrams,
+              blendGrams: acc.blendGrams,
+            ),
+          )
+          .toList()
+        ..sort((a, b) => b.forecastGrams.compareTo(a.forecastGrams));
 
   return rows;
 }

@@ -1,5 +1,5 @@
 class AppStrings {
-  static const appTitle = 'ELfouad Admin';
+  static const appTitle = 'Elfouad Admin';
   static const localeAr = 'ar';
   static const localeEn = 'en';
   static const systemUserId = 'system';
@@ -16,6 +16,22 @@ class AppStrings {
   static const tabHistory = 'السجل';
   static const tabStats = 'الإحصائيات';
   static const tabInventory = 'المخزون';
+  static const tabStocktake = 'الجرد';
+  static const stocktakeTitle = 'الجرد';
+  static const stocktakeRecord = 'تسجيل الجرد';
+  static const stocktakeLog = 'سجل الجرد';
+  static const stocktakeOverwrite = 'تحديث المخزون (Overwrite)';
+  static const stocktakeSearchHint = 'بحث...';
+  static const stocktakeCountedLabelKg = 'الكمية الفعلية (كجم)';
+  static const stocktakeCountedLabelUnits = 'الكمية الفعلية (وحدات)';
+  static const stocktakeDiffLabel = 'الفرق';
+  static const stocktakeNoDiff = 'لا توجد فروقات';
+  static const stocktakeSaved = 'تم تسجيل الجرد';
+  static const stocktakeSaveFailed = 'فشل تسجيل الجرد';
+  static const stocktakeNoInput = 'أدخل كميات فعلية لبعض العناصر أولاً';
+  static const stocktakeConfirmTitle = 'تأكيد الجرد';
+  static const stocktakeConfirmBody =
+      'سيتم تسجيل الفروقات في سجل الجرد. إذا كان خيار Overwrite مفعّلًا سيتم تحديث المخزون. هل تريد المتابعة؟';
   static const tabEdits = 'التعديلات';
   static const tabRecipes = 'تحضير التوليفات';
   static const tabExpenses = 'المصروفات';

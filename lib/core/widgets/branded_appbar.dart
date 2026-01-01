@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:elfouad_admin/core/app_strings.dart';
+import 'package:elfouad_admin/core/utils/app_strings.dart';
 import 'package:elfouad_admin/presentation/home/nav_state.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -31,8 +31,7 @@ class BrandedAppBar extends StatelessWidget implements PreferredSizeWidget {
           leading: showHome
               ? IconButton(
                   icon: const Icon(Icons.home_rounded, color: Colors.white),
-                  onPressed: () =>
-                      context.read<NavCubit>().setTab(AppTab.home),
+                  onPressed: () => context.read<NavCubit>().setTab(AppTab.home),
                   tooltip: AppStrings.tabHome,
                 )
               : (showBack

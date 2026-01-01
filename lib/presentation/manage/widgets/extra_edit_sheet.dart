@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:elfouad_admin/core/app_strings.dart';
+import 'package:elfouad_admin/core/utils/app_strings.dart';
 
 class ExtraEditSheet extends StatefulWidget {
   final DocumentSnapshot<Map<String, dynamic>> snap;
@@ -92,9 +92,7 @@ class _ExtraEditSheetState extends State<ExtraEditSheet> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(
-        SnackBar(content: Text(AppStrings.saveFailedAccented(e))),
-      );
+      ).showSnackBar(SnackBar(content: Text(AppStrings.saveFailedAccented(e))));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -115,88 +113,87 @@ class _ExtraEditSheetState extends State<ExtraEditSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-          Container(
-            height: 4,
-            width: 42,
-            margin: const EdgeInsets.only(bottom: 12),
-            decoration: BoxDecoration(
-              color: Colors.black26,
-              borderRadius: BorderRadius.circular(100),
+            Container(
+              height: 4,
+              width: 42,
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: Colors.black26,
+                borderRadius: BorderRadius.circular(100),
+              ),
             ),
-          ),
-          const Text(
-            AppStrings.editExtraTitle,
-            textAlign: TextAlign.center,
-            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
-          ),
-          const SizedBox(height: 12),
-          _field(
-            AppStrings.nameLabel,
-            _name,
-            validator: (v) =>
-                _requiredText(v, AppStrings.nameRequiredPrompt),
-          ),
-          const SizedBox(height: 8),
-          _field(
-            AppStrings.categoryLabel,
-            _category,
-            validator: (v) =>
-                _requiredText(v, AppStrings.categoryRequiredPrompt),
-          ),
-          const SizedBox(height: 8),
-          _field(AppStrings.unitLabel, _unit),
-          const SizedBox(height: 8),
-          _field(AppStrings.stockUnitsLabel, _stockUnits, numKeyboard: true),
-          const SizedBox(height: 8),
-          _field(
-            AppStrings.sellPricePerUnitLabel,
-            _priceSell,
-            numKeyboard: true,
-            validator: (v) =>
-                _requiredPositive(v, AppStrings.sellPriceRequiredPrompt),
-          ),
-          const SizedBox(height: 8),
-          _field(
-            AppStrings.costPerUnitShortLabel,
-            _costUnit,
-            numKeyboard: true,
-            validator: (v) =>
-                _requiredPositive(v, AppStrings.costPriceRequiredPrompt),
-          ),
-          const SizedBox(height: 8),
-          SwitchListTile.adaptive(
-            value: _active,
-            onChanged: (v) => setState(() => _active = v),
-            title: const Text(AppStrings.activeQuestionLabel),
-            contentPadding: EdgeInsets.zero,
-            dense: true,
-          ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: _busy ? null : () => Navigator.pop(context),
-                  child: const Text(AppStrings.actionCancel),
+            const Text(
+              AppStrings.editExtraTitle,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
+            ),
+            const SizedBox(height: 12),
+            _field(
+              AppStrings.nameLabel,
+              _name,
+              validator: (v) => _requiredText(v, AppStrings.nameRequiredPrompt),
+            ),
+            const SizedBox(height: 8),
+            _field(
+              AppStrings.categoryLabel,
+              _category,
+              validator: (v) =>
+                  _requiredText(v, AppStrings.categoryRequiredPrompt),
+            ),
+            const SizedBox(height: 8),
+            _field(AppStrings.unitLabel, _unit),
+            const SizedBox(height: 8),
+            _field(AppStrings.stockUnitsLabel, _stockUnits, numKeyboard: true),
+            const SizedBox(height: 8),
+            _field(
+              AppStrings.sellPricePerUnitLabel,
+              _priceSell,
+              numKeyboard: true,
+              validator: (v) =>
+                  _requiredPositive(v, AppStrings.sellPriceRequiredPrompt),
+            ),
+            const SizedBox(height: 8),
+            _field(
+              AppStrings.costPerUnitShortLabel,
+              _costUnit,
+              numKeyboard: true,
+              validator: (v) =>
+                  _requiredPositive(v, AppStrings.costPriceRequiredPrompt),
+            ),
+            const SizedBox(height: 8),
+            SwitchListTile.adaptive(
+              value: _active,
+              onChanged: (v) => setState(() => _active = v),
+              title: const Text(AppStrings.activeQuestionLabel),
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _busy ? null : () => Navigator.pop(context),
+                    child: const Text(AppStrings.actionCancel),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: _busy ? null : _save,
-                  icon: _busy
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.save),
-                  label: const Text(AppStrings.actionSave),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: _busy ? null : _save,
+                    icon: _busy
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.save),
+                    label: const Text(AppStrings.actionSave),
+                  ),
                 ),
-              ),
-            ],
-          ),
-        ],
+              ],
+            ),
+          ],
         ),
       ),
     );

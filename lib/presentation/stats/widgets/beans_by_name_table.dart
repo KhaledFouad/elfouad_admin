@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:elfouad_admin/core/app_strings.dart';
+import 'package:elfouad_admin/core/utils/app_strings.dart';
 
 class BeanRow {
   final String name; // name أو name - variant

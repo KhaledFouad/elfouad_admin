@@ -4,6 +4,7 @@ import 'package:elfouad_admin/presentation/home/home_dashboard_page.dart';
 import 'package:elfouad_admin/presentation/manage/pages/products_manage_page.dart';
 import 'package:elfouad_admin/presentation/recipes/pages/recipes_list_page.dart'
     show RecipesListPage;
+import 'package:elfouad_admin/presentation/stocktake/pages/stocktake_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'nav_state.dart';
@@ -36,13 +37,13 @@ class _AppShellState extends State<AppShell> {
 
     return BlocBuilder<NavCubit, AppTab>(
       builder: (context, tab) {
-        return WillPopScope(
-          onWillPop: () async {
+        return PopScope(
+          canPop: tab == AppTab.home,
+          onPopInvokedWithResult: (didPop, _) {
+            if (didPop) return;
             if (tab != AppTab.home) {
               context.read<NavCubit>().setTab(AppTab.home);
-              return false;
             }
-            return true;
           },
           child: Directionality(
             textDirection: TextDirection.rtl,
@@ -71,36 +72,36 @@ class _MainStackState extends State<_MainStack> {
     growable: false,
   );
 
-  Widget _buildRealPage(int i) {
-    switch (i) {
-      case 0:
+  Widget _buildRealPage(AppTab tab) {
+    switch (tab) {
+      case AppTab.home:
         return const HomeDashboardPage();
-      case 1:
+      case AppTab.history:
         return const SalesHistoryPage();
-      case 2:
+      case AppTab.stats:
         return const StatsPage();
-      case 3:
+      case AppTab.inventory:
         return const InventoryPage();
-      case 4:
+      case AppTab.stocktake:
+        return const StocktakePage();
+      case AppTab.edits:
         return const ManagePage();
-      case 5:
+      case AppTab.expenses:
         return const ExpensesPage();
-      // case 6:
-      //   return const GrindPage();
-      case 7:
+
+      case AppTab.recipes:
         return const RecipesListPage();
-      case 8:
+      case AppTab.forecast:
         return const BeansForecastPage();
-      default:
-        return const SizedBox.shrink();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final index = widget.current.index;
+    final tab = widget.current;
+    final index = tab.index;
 
-    _tabs[index] ??= _buildRealPage(index);
+    _tabs[index] ??= _buildRealPage(tab);
 
     final children = List<Widget>.generate(_tabs.length, (i) {
       return _tabs[i] ?? const SizedBox.shrink();

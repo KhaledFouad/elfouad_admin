@@ -1,7 +1,7 @@
 import 'package:awesome_drawer_bar/awesome_drawer_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:elfouad_admin/core/app_strings.dart';
+import 'package:elfouad_admin/core/utils/app_strings.dart';
 import 'nav_state.dart';
 
 class SideMenu extends StatelessWidget {
@@ -46,12 +46,7 @@ class SideMenu extends StatelessWidget {
                 selected: selected == AppTab.stats,
                 onTap: () => _go(context, AppTab.stats),
               ),
-              _MenuItem(
-                icon: Icons.auto_graph_outlined,
-                label: AppStrings.tabForecast,
-                selected: selected == AppTab.forecast,
-                onTap: () => _go(context, AppTab.forecast),
-              ),
+
               _MenuItem(
                 icon: Icons.inventory_2_outlined,
                 label: AppStrings.tabInventory,
@@ -70,6 +65,7 @@ class SideMenu extends StatelessWidget {
                 selected: selected == AppTab.recipes,
                 onTap: () => _go(context, AppTab.recipes),
               ),
+
               _MenuItem(
                 icon: Icons.account_balance_wallet_outlined,
                 label: AppStrings.tabExpenses,
@@ -77,10 +73,10 @@ class SideMenu extends StatelessWidget {
                 onTap: () => _go(context, AppTab.expenses),
               ),
               _MenuItem(
-                icon: Icons.coffee_outlined,
-                label: AppStrings.tabGrind,
-                selected: selected == AppTab.grind,
-                onTap: () => _go(context, AppTab.grind),
+                icon: Icons.auto_graph_outlined,
+                label: AppStrings.tabForecast,
+                selected: selected == AppTab.forecast,
+                onTap: () => _go(context, AppTab.forecast),
               ),
 
               const Divider(height: 24),

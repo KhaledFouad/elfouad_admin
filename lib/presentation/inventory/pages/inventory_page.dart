@@ -1,4 +1,4 @@
-import 'package:elfouad_admin/core/app_strings.dart';
+import 'package:elfouad_admin/core/utils/app_strings.dart';
 import 'package:elfouad_admin/presentation/home/nav_state.dart';
 import 'package:elfouad_admin/presentation/inventory/bloc/inventory_cubit.dart';
 import 'package:elfouad_admin/presentation/inventory/models/inventory_tab.dart';
@@ -38,8 +38,7 @@ class InventoryPage extends StatelessWidget {
               automaticallyImplyLeading: false,
               leading: IconButton(
                 icon: const Icon(Icons.home_rounded, color: Colors.white),
-                onPressed: () =>
-                    context.read<NavCubit>().setTab(AppTab.home),
+                onPressed: () => context.read<NavCubit>().setTab(AppTab.home),
                 tooltip: AppStrings.tabHome,
               ),
               title: const Text(

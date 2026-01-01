@@ -1,4 +1,4 @@
-import 'package:elfouad_admin/core/app_strings.dart';
+import 'package:elfouad_admin/core/utils/app_strings.dart';
 import 'package:elfouad_admin/presentation/home/nav_state.dart';
 import 'package:elfouad_admin/presentation/inventory/bloc/inventory_cubit.dart';
 import 'package:elfouad_admin/presentation/recipes/bloc/recipes_cubit.dart';
@@ -98,8 +98,7 @@ class _RecipesListPageState extends State<RecipesListPage> {
               automaticallyImplyLeading: false,
               leading: IconButton(
                 icon: const Icon(Icons.home_rounded, color: Colors.white),
-                onPressed: () =>
-                    context.read<NavCubit>().setTab(AppTab.home),
+                onPressed: () => context.read<NavCubit>().setTab(AppTab.home),
                 tooltip: AppStrings.tabHome,
               ),
               title: const Text(
@@ -231,7 +230,8 @@ class _RecipesListPageState extends State<RecipesListPage> {
                                   child: LinearProgressIndicator(minHeight: 2),
                                 );
                               }
-                              final pc = ps.data ??
+                              final pc =
+                                  ps.data ??
                                   const RecipePriceCost(
                                     pricePerKg: 0,
                                     costPerKg: 0,
@@ -264,8 +264,9 @@ class _RecipesListPageState extends State<RecipesListPage> {
                               Expanded(
                                 child: FilledButton.icon(
                                   icon: const Icon(Icons.scale_outlined),
-                                  label:
-                                      const Text(AppStrings.prepareBlendLabel),
+                                  label: const Text(
+                                    AppStrings.prepareBlendLabel,
+                                  ),
                                   onPressed: () => _openPrepare(item.id),
                                 ),
                               ),

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:elfouad_admin/core/app_strings.dart';
+import 'package:elfouad_admin/core/utils/app_strings.dart';
 
 import '../models/history_summary.dart';
 import '../models/sales_day_group.dart';
@@ -22,8 +22,7 @@ class HistoryDaySection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final baseSummary =
-        summary ?? HistorySummary.fromRecords(group.entries);
+    final baseSummary = summary ?? HistorySummary.fromRecords(group.entries);
     final daySummary = overrideTotal != null
         ? baseSummary.copyWith(sales: overrideTotal)
         : baseSummary;

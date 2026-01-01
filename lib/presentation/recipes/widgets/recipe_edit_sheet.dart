@@ -1,5 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:elfouad_admin/core/app_strings.dart';
+import 'package:elfouad_admin/core/utils/app_strings.dart';
 import 'package:elfouad_admin/presentation/inventory/bloc/inventory_cubit.dart';
 import 'package:elfouad_admin/presentation/inventory/models/inventory_row.dart';
 import 'package:elfouad_admin/presentation/recipes/models/recipe_component.dart';
@@ -54,9 +54,9 @@ class _RecipeEditSheetState extends State<RecipeEditSheet> {
   }
 
   int get _sumPercentInt => _comps.fold<int>(
-        0,
-        (s, c) => s + (c.percent.isNaN ? 0 : c.percent.round()),
-      );
+    0,
+    (s, c) => s + (c.percent.isNaN ? 0 : c.percent.round()),
+  );
   int get _remainingInt => (100 - _sumPercentInt);
 
   bool get _validToSave =>
@@ -102,9 +102,9 @@ class _RecipeEditSheetState extends State<RecipeEditSheet> {
         SnackBar(content: Text(AppStrings.saveFailed(e.message ?? e))),
       );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppStrings.saveFailed(e))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(AppStrings.saveFailed(e))));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -121,7 +121,9 @@ class _RecipeEditSheetState extends State<RecipeEditSheet> {
         final search = TextEditingController();
         return AlertDialog(
           title: Text(
-            coll == 'singles' ? AppStrings.pickSingleItem : AppStrings.pickBlend,
+            coll == 'singles'
+                ? AppStrings.pickSingleItem
+                : AppStrings.pickBlend,
           ),
           content: SizedBox(
             width: 460,
@@ -148,8 +150,8 @@ class _RecipeEditSheetState extends State<RecipeEditSheet> {
                             final filtered = q.isEmpty
                                 ? source
                                 : source.where((r) {
-                                    final t =
-                                        '${r.name} ${r.variant}'.toLowerCase();
+                                    final t = '${r.name} ${r.variant}'
+                                        .toLowerCase();
                                     return t.contains(q);
                                   }).toList();
                             if (filtered.isEmpty) {
@@ -175,7 +177,9 @@ class _RecipeEditSheetState extends State<RecipeEditSheet> {
                                         AppStrings.stockGramsInline(r.stockG),
                                       ),
                                       Text(
-                                        AppStrings.pricePerKgInline(r.sellPerKg),
+                                        AppStrings.pricePerKgInline(
+                                          r.sellPerKg,
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -431,7 +435,7 @@ class _RecipeEditSheetState extends State<RecipeEditSheet> {
                               onChanged: (v) {
                                 final x =
                                     double.tryParse(v.replaceAll(',', '.')) ??
-                                        c.percent;
+                                    c.percent;
                                 updatePercent(x);
                               },
                               decoration: const InputDecoration(

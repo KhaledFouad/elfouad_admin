@@ -1,4 +1,4 @@
-import 'package:elfouad_admin/core/app_strings.dart';
+import 'package:elfouad_admin/core/utils/app_strings.dart';
 import 'package:elfouad_admin/domain/entities/expense.dart';
 import 'package:flutter/material.dart';
 
@@ -41,7 +41,12 @@ class ExpensesList extends StatelessWidget {
     }
 
     return ListView.builder(
-      padding: EdgeInsets.fromLTRB(horizontalPadding, 8, horizontalPadding, 100),
+      padding: EdgeInsets.fromLTRB(
+        horizontalPadding,
+        8,
+        horizontalPadding,
+        100,
+      ),
       itemCount: dayKeys.length,
       itemBuilder: (context, i) {
         final day = dayKeys[i];
@@ -86,32 +91,23 @@ class ExpensesList extends StatelessWidget {
                     leading: CircleAvatar(
                       radius: 18,
                       backgroundColor: Colors.brown.shade100,
-                      child: const Icon(
-                        Icons.payments,
-                        color: Colors.brown,
-                      ),
+                      child: const Icon(Icons.payments, color: Colors.brown),
                     ),
                     title: Text(
                       e.title,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                      ),
+                      style: const TextStyle(fontWeight: FontWeight.w700),
                       overflow: TextOverflow.ellipsis,
                     ),
                     subtitle: Text(
                       '$hh:$mm',
-                      style: const TextStyle(
-                        color: Colors.black54,
-                      ),
+                      style: const TextStyle(color: Colors.black54),
                     ),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
                           e.amount.toStringAsFixed(2),
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w800,
-                          ),
+                          style: const TextStyle(fontWeight: FontWeight.w800),
                         ),
                         const SizedBox(width: 8),
                         IconButton(

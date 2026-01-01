@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:elfouad_admin/core/app_strings.dart';
+import 'package:elfouad_admin/core/utils/app_strings.dart';
 
 import '../models/credit_account.dart';
 
@@ -132,7 +132,9 @@ class _CreditAccountTile extends StatelessWidget {
                     Text(
                       '${AppStrings.labelTotalOwed}: ${totalOwed.toStringAsFixed(2)}',
                       style: TextStyle(
-                        color: hasDebt ? Colors.orange.shade900 : Colors.black54,
+                        color: hasDebt
+                            ? Colors.orange.shade900
+                            : Colors.black54,
                         fontWeight: FontWeight.w600,
                       ),
                     ),

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:elfouad_admin/core/app_strings.dart';
+import 'package:elfouad_admin/core/utils/app_strings.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 
 import '../bloc/sales_history_cubit.dart';
@@ -112,9 +112,9 @@ class _CreditAccountsPageState extends State<CreditAccountsPage> {
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppStrings.saveFailed(error))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(AppStrings.saveFailed(error))));
     }
   }
 }
@@ -132,10 +132,10 @@ class _CreditAccountsAppBar extends StatelessWidget
     final titleSize = width < 600
         ? 22.0
         : width < 1024
-            ? 26.0
-            : width < 1400
-                ? 28.0
-                : 32.0;
+        ? 26.0
+        : width < 1400
+        ? 28.0
+        : 32.0;
 
     return ClipRRect(
       borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),

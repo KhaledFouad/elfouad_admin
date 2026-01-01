@@ -1,7 +1,7 @@
 import 'package:elfouad_admin/presentation/stats/models/stats_models.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
-import 'package:elfouad_admin/core/app_strings.dart';
+import 'package:elfouad_admin/core/utils/app_strings.dart';
 
 class TripleTrendChart extends StatelessWidget {
   final List<DayVal> line1; // إجمالي (مبيعات أو ربح)

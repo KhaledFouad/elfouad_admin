@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:responsive_framework/responsive_framework.dart';
-import 'package:elfouad_admin/core/app_strings.dart';
+import 'package:elfouad_admin/core/utils/app_strings.dart';
 import 'package:elfouad_admin/data/repo/sales_history_repository.dart';
 import 'package:elfouad_admin/presentation/home/nav_state.dart';
 import '../bloc/sales_history_cubit.dart';
@@ -201,14 +201,13 @@ class _HistoryAppBar extends StatelessWidget implements PreferredSizeWidget {
           borderRadius: const BorderRadius.vertical(
             bottom: Radius.circular(24),
           ),
-            child: AppBar(
-              automaticallyImplyLeading: false,
-              leading: IconButton(
-                icon: const Icon(Icons.home_rounded, color: Colors.white),
-                onPressed: () =>
-                    context.read<NavCubit>().setTab(AppTab.home),
-                tooltip: AppStrings.tabHome,
-              ),
+          child: AppBar(
+            automaticallyImplyLeading: false,
+            leading: IconButton(
+              icon: const Icon(Icons.home_rounded, color: Colors.white),
+              onPressed: () => context.read<NavCubit>().setTab(AppTab.home),
+              tooltip: AppStrings.tabHome,
+            ),
             actions: [
               IconButton(
                 tooltip: AppStrings.tooltipFilterByDate,

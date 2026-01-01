@@ -2,7 +2,7 @@
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:elfouad_admin/core/app_strings.dart';
+import 'package:elfouad_admin/core/utils/app_strings.dart';
 
 import '../models/stats_models.dart';
 import '../utils/op_day.dart';
@@ -21,8 +21,7 @@ Future<QuerySnapshot<Map<String, dynamic>>> _getQuerySnapshot(
 }) async {
   if (!cacheFirst) return query.get();
   try {
-    final cached =
-        await query.get(const GetOptions(source: Source.cache));
+    final cached = await query.get(const GetOptions(source: Source.cache));
     if (cached.docs.isNotEmpty) return cached;
   } catch (_) {}
   return query.get();
@@ -127,10 +126,15 @@ Map<String, dynamic> _normalizeLineItem(Map<String, dynamic> c) {
     lineCost = unitCost * qty;
   }
 
-  final name = _pickStr(
-    out,
-    ['name', 'item_name', 'product_name', 'drink_name', 'single_name', 'blend_name', 'title'],
-  ).trim();
+  final name = _pickStr(out, [
+    'name',
+    'item_name',
+    'product_name',
+    'drink_name',
+    'single_name',
+    'blend_name',
+    'title',
+  ]).trim();
   final variant = _pickStr(out, ['variant', 'roast', 'size']).trim();
   final unitValue = unit.isNotEmpty ? unit : (grams > 0 ? 'g' : '');
 
@@ -207,10 +211,14 @@ Map<String, dynamic> _applyTotalsFallback(
   double profit = _pickNum(out, ['profit_total', 'profit']);
 
   if (lines != null && lines.isNotEmpty) {
-    final linePrice =
-        lines.fold<double>(0.0, (s, r) => s + _d(r['line_total_price']));
-    final lineCost =
-        lines.fold<double>(0.0, (s, r) => s + _d(r['line_total_cost']));
+    final linePrice = lines.fold<double>(
+      0.0,
+      (s, r) => s + _d(r['line_total_price']),
+    );
+    final lineCost = lines.fold<double>(
+      0.0,
+      (s, r) => s + _d(r['line_total_cost']),
+    );
     if (price <= 0 && linePrice > 0) price = linePrice;
     if (cost <= 0 && lineCost > 0) cost = lineCost;
   }
@@ -246,10 +254,14 @@ List<Map<String, dynamic>> _expandCartSales(List<Map<String, dynamic>> data) {
     }
 
     final lines = rawLines.map(_normalizeLineItem).toList();
-    final lineTotal =
-        lines.fold<double>(0.0, (s, r) => s + _d(r['line_total_price']));
-    final lineCostTotal =
-        lines.fold<double>(0.0, (s, r) => s + _d(r['line_total_cost']));
+    final lineTotal = lines.fold<double>(
+      0.0,
+      (s, r) => s + _d(r['line_total_price']),
+    );
+    final lineCostTotal = lines.fold<double>(
+      0.0,
+      (s, r) => s + _d(r['line_total_cost']),
+    );
     final parentTotal = _d(fixed['total_price']);
     final tolerance = parentTotal > 0 ? parentTotal * 0.01 : 0.0;
     final withinTolerance =
@@ -263,7 +275,10 @@ List<Map<String, dynamic>> _expandCartSales(List<Map<String, dynamic>> data) {
 
     final saleId = (fixed['sale_id'] ?? fixed['id'] ?? '').toString();
     for (final line in lines) {
-      final lineType = _inferLineType(line, fallbackType: type.isNotEmpty ? type : null);
+      final lineType = _inferLineType(
+        line,
+        fallbackType: type.isNotEmpty ? type : null,
+      );
       final merged = Map<String, dynamic>.from(fixed);
       merged.addAll(line);
       merged['type'] = lineType;
@@ -376,12 +391,7 @@ Future<List<Map<String, dynamic>>> _fetchSalesRawForMonth(
   final dim = DateUtils.getDaysInMonth(y, m);
 
   final startUtc = DateTime(y, m, 1, 4).toUtc();
-  final endUtc = DateTime(
-    y,
-    m,
-    dim,
-    4,
-  ).add(const Duration(days: 1)).toUtc();
+  final endUtc = DateTime(y, m, dim, 4).add(const Duration(days: 1)).toUtc();
   final startIso = startUtc.toIso8601String();
   final endIso = endUtc.toIso8601String();
   final startMs = startUtc.millisecondsSinceEpoch;
@@ -389,20 +399,20 @@ Future<List<Map<String, dynamic>>> _fetchSalesRawForMonth(
 
   final snap = await _getQuerySnapshot(
     FirebaseFirestore.instance
-      .collection('sales')
-      .where('created_at', isGreaterThanOrEqualTo: startUtc)
-      .where('created_at', isLessThan: endUtc)
-      .orderBy('created_at', descending: false),
+        .collection('sales')
+        .where('created_at', isGreaterThanOrEqualTo: startUtc)
+        .where('created_at', isLessThan: endUtc)
+        .orderBy('created_at', descending: false),
     cacheFirst: cacheFirst,
   );
   QuerySnapshot<Map<String, dynamic>>? snapOrig;
   try {
     snapOrig = await _getQuerySnapshot(
       FirebaseFirestore.instance
-        .collection('sales')
-        .where('original_created_at', isGreaterThanOrEqualTo: startUtc)
-        .where('original_created_at', isLessThan: endUtc)
-        .orderBy('original_created_at', descending: false),
+          .collection('sales')
+          .where('original_created_at', isGreaterThanOrEqualTo: startUtc)
+          .where('original_created_at', isLessThan: endUtc)
+          .orderBy('original_created_at', descending: false),
       cacheFirst: cacheFirst,
     );
   } catch (_) {
@@ -433,10 +443,10 @@ Future<List<Map<String, dynamic>>> _fetchSalesRawForMonth(
   try {
     snapStr = await _getQuerySnapshot(
       FirebaseFirestore.instance
-        .collection('sales')
-        .where('created_at', isGreaterThanOrEqualTo: startIso)
-        .where('created_at', isLessThan: endIso)
-        .orderBy('created_at', descending: false),
+          .collection('sales')
+          .where('created_at', isGreaterThanOrEqualTo: startIso)
+          .where('created_at', isLessThan: endIso)
+          .orderBy('created_at', descending: false),
       cacheFirst: cacheFirst,
     );
   } catch (_) {
@@ -454,10 +464,10 @@ Future<List<Map<String, dynamic>>> _fetchSalesRawForMonth(
   try {
     snapNum = await _getQuerySnapshot(
       FirebaseFirestore.instance
-        .collection('sales')
-        .where('created_at', isGreaterThanOrEqualTo: startMs)
-        .where('created_at', isLessThan: endMs)
-        .orderBy('created_at', descending: false),
+          .collection('sales')
+          .where('created_at', isGreaterThanOrEqualTo: startMs)
+          .where('created_at', isLessThan: endMs)
+          .orderBy('created_at', descending: false),
       cacheFirst: cacheFirst,
     );
   } catch (_) {
@@ -515,6 +525,7 @@ List<Map<String, dynamic>> _filterStatsExpenses(
     return _inRangeUtc(ts, startUtc, endUtc);
   }).toList();
 }
+
 /// ============ KPIs (الربح من الداتا + استبعاد الأجل غير المدفوع) ============
 Kpis _buildKpis(
   List<Map<String, dynamic>> data,
@@ -598,8 +609,8 @@ List<GroupRow> _buildExtrasRows(
     final isExtra = type == 'extra' || m.containsKey('extra_id');
     if (!isExtra) continue;
 
-    final name =
-        ('${m['name'] ?? m['extra_name'] ?? AppStrings.noNameLabel}').trim();
+    final name = ('${m['name'] ?? m['extra_name'] ?? AppStrings.noNameLabel}')
+        .trim();
     final variant = ('${m['variant'] ?? ''}').trim();
     final key = variant.isEmpty ? name : '$name - $variant';
 
@@ -853,28 +864,22 @@ List<GroupRow> _buildBeansRows(
         .toString();
     String variant = (c['variant'] ?? c['roast'] ?? '').toString();
     double grams = _pickNum(c, ['grams', 'weight', 'gram', 'total_grams']);
-    double linePrice = _pickNum(
-      c,
-      [
-        'line_total_price',
-        'total_price',
-        'price',
-        'line_price',
-        'amount',
-        'total',
-        'subtotal',
-      ],
-    );
-    double lineCost = _pickNum(
-      c,
-      [
-        'line_total_cost',
-        'total_cost',
-        'cost',
-        'line_cost',
-        'cost_amount',
-      ],
-    );
+    double linePrice = _pickNum(c, [
+      'line_total_price',
+      'total_price',
+      'price',
+      'line_price',
+      'amount',
+      'total',
+      'subtotal',
+    ]);
+    double lineCost = _pickNum(c, [
+      'line_total_cost',
+      'total_cost',
+      'cost',
+      'line_cost',
+      'cost_amount',
+    ]);
     final isSpiced = (c['is_spiced'] ?? fallbackSpiced) == true;
     return {
       'name': name.trim(),
@@ -1069,8 +1074,9 @@ TrendsBundle _buildTrends(
 
 DateTime _monthStart(DateTime d) => DateTime(d.year, d.month, 1);
 
-DateTime _nextMonth(DateTime d) =>
-    d.month == 12 ? DateTime(d.year + 1, 1, 1) : DateTime(d.year, d.month + 1, 1);
+DateTime _nextMonth(DateTime d) => d.month == 12
+    ? DateTime(d.year + 1, 1, 1)
+    : DateTime(d.year, d.month + 1, 1);
 
 Future<List<Map<String, dynamic>>> fetchSalesRawForRange({
   required DateTime startLocal,
@@ -1083,10 +1089,7 @@ Future<List<Map<String, dynamic>>> fetchSalesRawForRange({
 
   var cursor = start;
   while (!cursor.isAfter(end)) {
-    final raw = await _fetchSalesRawForMonth(
-      cursor,
-      cacheFirst: cacheFirst,
-    );
+    final raw = await _fetchSalesRawForMonth(cursor, cacheFirst: cacheFirst);
     for (final entry in raw) {
       final id = (entry['id'] ?? entry['sale_id'] ?? '').toString();
       if (id.isNotEmpty) {
@@ -1104,8 +1107,7 @@ Future<List<Map<String, dynamic>>> fetchSalesRawForRange({
 Future<List<Map<String, dynamic>>> fetchSalesRawForMonth(
   DateTime month, {
   bool cacheFirst = false,
-}) =>
-    _fetchSalesRawForMonth(month, cacheFirst: cacheFirst);
+}) => _fetchSalesRawForMonth(month, cacheFirst: cacheFirst);
 
 List<Map<String, dynamic>> prepareStatsData(List<Map<String, dynamic>> data) =>
     _prepareStatsData(data);
@@ -1114,73 +1116,57 @@ List<Map<String, dynamic>> filterStatsSales(
   List<Map<String, dynamic>> rawMonth, {
   required DateTime startUtc,
   required DateTime endUtc,
-}) =>
-    _filterStatsSales(rawMonth, startUtc: startUtc, endUtc: endUtc);
+}) => _filterStatsSales(rawMonth, startUtc: startUtc, endUtc: endUtc);
 
 Future<List<Map<String, dynamic>>> fetchStatsExpenses({
   required DateTime startUtc,
   required DateTime endUtc,
   bool cacheFirst = false,
-}) =>
-    _fetchStatsExpenses(
-      startUtc: startUtc,
-      endUtc: endUtc,
-      cacheFirst: cacheFirst,
-    );
+}) => _fetchStatsExpenses(
+  startUtc: startUtc,
+  endUtc: endUtc,
+  cacheFirst: cacheFirst,
+);
 
 List<Map<String, dynamic>> filterStatsExpenses(
   List<Map<String, dynamic>> rawMonth, {
   required DateTime startUtc,
   required DateTime endUtc,
-}) =>
-    _filterStatsExpenses(rawMonth, startUtc: startUtc, endUtc: endUtc);
+}) => _filterStatsExpenses(rawMonth, startUtc: startUtc, endUtc: endUtc);
 
 Kpis buildKpis(
   List<Map<String, dynamic>> data,
   List<Map<String, dynamic>> expensesList, {
   required DateTime startUtc,
   required DateTime endUtc,
-}) =>
-    _buildKpis(
-      data,
-      expensesList,
-      startUtc: startUtc,
-      endUtc: endUtc,
-    );
+}) => _buildKpis(data, expensesList, startUtc: startUtc, endUtc: endUtc);
 
 List<GroupRow> buildExtrasRows(
   List<Map<String, dynamic>> data, {
   required DateTime startUtc,
   required DateTime endUtc,
-}) =>
-    _buildExtrasRows(data, startUtc: startUtc, endUtc: endUtc);
+}) => _buildExtrasRows(data, startUtc: startUtc, endUtc: endUtc);
 
 List<GroupRow> buildDrinksRows(
   List<Map<String, dynamic>> data, {
   required DateTime startUtc,
   required DateTime endUtc,
-}) =>
-    _buildDrinksRows(data, startUtc: startUtc, endUtc: endUtc);
+}) => _buildDrinksRows(data, startUtc: startUtc, endUtc: endUtc);
 
 List<GroupRow> buildBeansRows(
   List<Map<String, dynamic>> data, {
   required DateTime startUtc,
   required DateTime endUtc,
-}) =>
-    _buildBeansRows(data, startUtc: startUtc, endUtc: endUtc);
+}) => _buildBeansRows(data, startUtc: startUtc, endUtc: endUtc);
 
 StatsHighlights buildHighlights(
   List<Map<String, dynamic>> data, {
   required DateTime startUtc,
   required DateTime endUtc,
-}) =>
-    _buildHighlights(data, startUtc: startUtc, endUtc: endUtc);
+}) => _buildHighlights(data, startUtc: startUtc, endUtc: endUtc);
 
 TrendsBundle buildTrends(
   List<Map<String, dynamic>> data, {
   required DateTime startUtc,
   required DateTime endUtc,
-}) =>
-    _buildTrends(data, startUtc: startUtc, endUtc: endUtc);
-
-
+}) => _buildTrends(data, startUtc: startUtc, endUtc: endUtc);

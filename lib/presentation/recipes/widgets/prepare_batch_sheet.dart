@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:elfouad_admin/core/app_strings.dart';
+import 'package:elfouad_admin/core/utils/app_strings.dart';
 
 class PrepareBatchSheet extends StatefulWidget {
   final DocumentSnapshot<Map<String, dynamic>> recipeSnap;
@@ -23,9 +23,9 @@ class _PrepareBatchSheetState extends State<PrepareBatchSheet> {
   Future<void> _prepare() async {
     final kg = double.tryParse(_kgCtrl.text.replaceAll(',', '.')) ?? 0;
     if (kg <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(AppStrings.enterKgPrompt)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text(AppStrings.enterKgPrompt)));
       return;
     }
 

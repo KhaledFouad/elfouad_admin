@@ -1,5 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:elfouad_admin/core/app_strings.dart';
+import 'package:elfouad_admin/core/utils/app_strings.dart';
 import 'package:elfouad_admin/presentation/inventory/bloc/inventory_cubit.dart';
 import 'package:elfouad_admin/presentation/inventory/models/inventory_row.dart';
 import 'package:flutter/material.dart';
@@ -53,8 +53,9 @@ class _RoastUsageEntry {
     for (final id in activeIds) {
       variantGramsCtrls.putIfAbsent(id, () => TextEditingController());
     }
-    final removeIds =
-        variantGramsCtrls.keys.where((id) => !activeIds.contains(id)).toList();
+    final removeIds = variantGramsCtrls.keys
+        .where((id) => !activeIds.contains(id))
+        .toList();
     for (final id in removeIds) {
       variantGramsCtrls[id]?.dispose();
       variantGramsCtrls.remove(id);
@@ -426,8 +427,7 @@ class _ProductEditSheetState extends State<ProductEditSheet> {
         if (hasVariants) {
           final usedAmounts = <String, double>{};
           for (final variant in _drinkVariants) {
-            usedAmounts[variant.name] =
-                _num(usage.gramsFor(variant.id).text);
+            usedAmounts[variant.name] = _num(usage.gramsFor(variant.id).text);
           }
           if (usedAmounts.isNotEmpty) {
             entry['usedAmounts'] = usedAmounts;
@@ -992,16 +992,15 @@ class _ProductEditSheetState extends State<ProductEditSheet> {
             '${AppStrings.usedGramsLabel} ($label)',
             numKeyboard,
             validator: required
-                ? (v) => _requiredPositive(
-                    v,
-                    AppStrings.fillRoastUsageGramsPrompt,
-                  )
+                ? (v) =>
+                      _requiredPositive(v, AppStrings.fillRoastUsageGramsPrompt)
                 : null,
           ),
         );
       }
       return fields;
     }
+
     if (hasRoasts) {
       _syncRoastUsage();
       return Column(
@@ -1116,10 +1115,7 @@ class _ProductEditSheetState extends State<ProductEditSheet> {
                     ),
                     const SizedBox(height: 8),
                     if (hasVariants)
-                      ...buildVariantGramsFields(
-                        usage.gramsFor,
-                        required: true,
-                      )
+                      ...buildVariantGramsFields(usage.gramsFor, required: true)
                     else
                       _tf(
                         usage.gramsCtrl,
@@ -1210,17 +1206,11 @@ class _ProductEditSheetState extends State<ProductEditSheet> {
         const SizedBox(height: 8),
         if (hasVariants)
           ...buildVariantGramsFields(
-            (id) => _variantGrams.putIfAbsent(
-              id,
-              () => TextEditingController(),
-            ),
+            (id) =>
+                _variantGrams.putIfAbsent(id, () => TextEditingController()),
           )
         else
-          _tf(
-            _drinkUsedGrams,
-            AppStrings.usedGramsLabel,
-            numKeyboard,
-          ),
+          _tf(_drinkUsedGrams, AppStrings.usedGramsLabel, numKeyboard),
       ],
     );
   }
@@ -1443,12 +1433,12 @@ class _ProductEditSheetState extends State<ProductEditSheet> {
           for (final usedEntry in usedAmounts.entries) {
             final variant = _findVariantByName(usedEntry.key);
             if (variant == null) continue;
-            usageEntry.gramsFor(variant.id).text =
-                _format(_num(usedEntry.value));
+            usageEntry.gramsFor(variant.id).text = _format(
+              _num(usedEntry.value),
+            );
           }
         } else {
-          usageEntry.gramsCtrl.text =
-              _format(_num(usedAmounts.values.first));
+          usageEntry.gramsCtrl.text = _format(_num(usedAmounts.values.first));
         }
       } else {
         final usedAmount = _num(entry['usedAmount']);

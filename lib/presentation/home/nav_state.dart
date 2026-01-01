@@ -5,9 +5,9 @@ enum AppTab {
   history,
   stats,
   inventory,
+  stocktake,
   edits,
   expenses,
-  grind,
   recipes,
   forecast,
 }

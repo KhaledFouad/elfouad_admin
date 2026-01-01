@@ -1,7 +1,7 @@
 import 'package:elfouad_admin/presentation/stats/models/stats_models.dart'
     show GroupRow;
 import 'package:flutter/material.dart';
-import 'package:elfouad_admin/core/app_strings.dart';
+import 'package:elfouad_admin/core/utils/app_strings.dart';
 
 class BreakdownTable extends StatelessWidget {
   final List<GroupRow> rows;
@@ -28,12 +28,20 @@ class BreakdownTable extends StatelessWidget {
             ),
           ),
           if (showCups)
-            DataColumn(label: Text(AppStrings.cupsLabelShort, style: headerStyle)),
+            DataColumn(
+              label: Text(AppStrings.cupsLabelShort, style: headerStyle),
+            ),
           if (showGrams)
             DataColumn(label: Text(AppStrings.gramsLabel, style: headerStyle)),
-          DataColumn(label: Text(AppStrings.salesLabelDefinite, style: headerStyle)),
-          DataColumn(label: Text(AppStrings.costLabelDefinite, style: headerStyle)),
-          DataColumn(label: Text(AppStrings.profitLabelDefinite, style: headerStyle)),
+          DataColumn(
+            label: Text(AppStrings.salesLabelDefinite, style: headerStyle),
+          ),
+          DataColumn(
+            label: Text(AppStrings.costLabelDefinite, style: headerStyle),
+          ),
+          DataColumn(
+            label: Text(AppStrings.profitLabelDefinite, style: headerStyle),
+          ),
         ],
         rows: rows
             .map(

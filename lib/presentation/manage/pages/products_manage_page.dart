@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:elfouad_admin/core/app_strings.dart';
+import 'package:elfouad_admin/core/utils/app_strings.dart';
 import 'package:elfouad_admin/presentation/home/nav_state.dart';
 import 'package:elfouad_admin/presentation/inventory/bloc/inventory_cubit.dart';
 import 'package:elfouad_admin/presentation/inventory/models/inventory_row.dart';
@@ -367,16 +367,12 @@ class _ManagePageState extends State<ManagePage> {
     Widget singles0() =>
         invList('singles', AppStrings.inventorySingles, _singles);
 
-    Widget blends0() =>
-        invList('blends', AppStrings.inventoryBlends, _blends);
+    Widget blends0() => invList('blends', AppStrings.inventoryBlends, _blends);
 
     Widget extras0() {
       if (_extras.loading && _extras.items.isEmpty) return _loading();
       if (_extras.error != null) {
-        return _err(AppStrings.extrasLabel)(
-          _extras.error!,
-          StackTrace.empty,
-        );
+        return _err(AppStrings.extrasLabel)(_extras.error!, StackTrace.empty);
       }
       final rows = _extras.items;
       if (rows.isEmpty) return emptyState();
@@ -490,130 +486,127 @@ class _ManagePageState extends State<ManagePage> {
       child: Directionality(
         textDirection: TextDirection.rtl,
         child: Scaffold(
-        appBar: PreferredSize(
-          preferredSize: const Size.fromHeight(64),
-          child: ClipRRect(
-            borderRadius: const BorderRadius.vertical(
-              bottom: Radius.circular(24),
-            ),
-            child: AppBar(
-              automaticallyImplyLeading: false,
-              leading: IconButton(
-                icon: const Icon(Icons.home_rounded, color: Colors.white),
-                onPressed: () =>
-                    context.read<NavCubit>().setTab(AppTab.home),
-                tooltip: AppStrings.tabHome,
+          appBar: PreferredSize(
+            preferredSize: const Size.fromHeight(64),
+            child: ClipRRect(
+              borderRadius: const BorderRadius.vertical(
+                bottom: Radius.circular(24),
               ),
-              title: const Text(
-                AppStrings.tabEdits,
-                style: TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 35,
-                  color: Colors.white,
+              child: AppBar(
+                automaticallyImplyLeading: false,
+                leading: IconButton(
+                  icon: const Icon(Icons.home_rounded, color: Colors.white),
+                  onPressed: () => context.read<NavCubit>().setTab(AppTab.home),
+                  tooltip: AppStrings.tabHome,
                 ),
-              ),
-              centerTitle: true,
-              elevation: 8,
-              backgroundColor: Colors.transparent,
-              flexibleSpace: Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Color(0xFF5D4037), Color(0xFF795548)],
+                title: const Text(
+                  AppStrings.tabEdits,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 35,
+                    color: Colors.white,
                   ),
                 ),
-              ),
-            ),
-          ),
-        ),
-        body: Align(
-          alignment: Alignment.topCenter,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: contentMaxWidth),
-            child: RefreshIndicator(
-              onRefresh: () => _refreshForTab(tab),
-              child: ListView(
-                padding: EdgeInsets.fromLTRB(
-                  horizontalPadding,
-                  8,
-                  horizontalPadding,
-                  96,
-                ),
-                children: [
-                  Wrap(
-                    spacing: 8,
-                    children: [
-                      _mChip(
-                        context,
-                        AppStrings.inventoryAll,
-                        ManageTab.all,
-                        tab,
-                      ),
-                      _mChip(
-                        context,
-                        AppStrings.drinksLabelDefinite,
-                        ManageTab.drinks,
-                        tab,
-                      ),
-                      _mChip(
-                        context,
-                        AppStrings.inventorySingles,
-                        ManageTab.singles,
-                        tab,
-                      ),
-                      _mChip(
-                        context,
-                        AppStrings.inventoryBlends,
-                        ManageTab.blends,
-                        tab,
-                      ),
-                      _mChip(
-                        context,
-                        AppStrings.snacksLabel,
-                        ManageTab.extras,
-                        tab,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  content(),
-                ],
-              ),
-            ),
-          ),
-        ),
-        floatingActionButton: FloatingActionButton.extended(
-          heroTag: 'manage_fab',
-          onPressed: tab == ManageTab.extras
-              ? null
-              : () => showModalBottomSheet(
-                  context: context,
-                  useSafeArea: true,
-                  isScrollControlled: true,
-                  shape: const RoundedRectangleBorder(
-                    borderRadius: BorderRadius.vertical(
-                      top: Radius.circular(18),
+                centerTitle: true,
+                elevation: 8,
+                backgroundColor: Colors.transparent,
+                flexibleSpace: Container(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Color(0xFF5D4037), Color(0xFF795548)],
                     ),
                   ),
-                  builder: (_) => MultiBlocProvider(
-                    providers: [
-                      BlocProvider.value(
-                        value: context.read<InventoryCubit>(),
-                      ),
-                      BlocProvider.value(
-                        value: context.read<ExtrasCubit>(),
-                      ),
-                    ],
-                    child: AddItemSheet(initialType: _newTypeForTab(tab)),
-                  ),
                 ),
-          icon: const Icon(Icons.add),
-          label: const Text(AppStrings.actionAdd),
-          tooltip: AppStrings.addNewItemTooltip,
-          backgroundColor: ManagePage.kDarkBrown,
-          foregroundColor: Colors.white,
-        ),
+              ),
+            ),
+          ),
+          body: Align(
+            alignment: Alignment.topCenter,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: contentMaxWidth),
+              child: RefreshIndicator(
+                onRefresh: () => _refreshForTab(tab),
+                child: ListView(
+                  padding: EdgeInsets.fromLTRB(
+                    horizontalPadding,
+                    8,
+                    horizontalPadding,
+                    96,
+                  ),
+                  children: [
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        _mChip(
+                          context,
+                          AppStrings.inventoryAll,
+                          ManageTab.all,
+                          tab,
+                        ),
+                        _mChip(
+                          context,
+                          AppStrings.drinksLabelDefinite,
+                          ManageTab.drinks,
+                          tab,
+                        ),
+                        _mChip(
+                          context,
+                          AppStrings.inventorySingles,
+                          ManageTab.singles,
+                          tab,
+                        ),
+                        _mChip(
+                          context,
+                          AppStrings.inventoryBlends,
+                          ManageTab.blends,
+                          tab,
+                        ),
+                        _mChip(
+                          context,
+                          AppStrings.snacksLabel,
+                          ManageTab.extras,
+                          tab,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    content(),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          floatingActionButton: FloatingActionButton.extended(
+            heroTag: 'manage_fab',
+            onPressed: tab == ManageTab.extras
+                ? null
+                : () => showModalBottomSheet(
+                    context: context,
+                    useSafeArea: true,
+                    isScrollControlled: true,
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.vertical(
+                        top: Radius.circular(18),
+                      ),
+                    ),
+                    builder: (_) => MultiBlocProvider(
+                      providers: [
+                        BlocProvider.value(
+                          value: context.read<InventoryCubit>(),
+                        ),
+                        BlocProvider.value(value: context.read<ExtrasCubit>()),
+                      ],
+                      child: AddItemSheet(initialType: _newTypeForTab(tab)),
+                    ),
+                  ),
+            icon: const Icon(Icons.add),
+            label: const Text(AppStrings.actionAdd),
+            tooltip: AppStrings.addNewItemTooltip,
+            backgroundColor: ManagePage.kDarkBrown,
+            foregroundColor: Colors.white,
+          ),
         ),
       ),
     );

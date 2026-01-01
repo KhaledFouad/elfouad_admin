@@ -2,7 +2,7 @@
 
 import 'dart:ui';
 
-import 'package:elfouad_admin/core/app_strings.dart';
+import 'package:elfouad_admin/core/utils/app_strings.dart';
 import 'package:elfouad_admin/presentation/home/nav_state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -223,16 +223,16 @@ class _HeroCard extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 12),
-                        Container(
+                        SizedBox(
                           width: 125,
                           height: 90,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
-                          ),
-                          child: Image.asset(
-                            'assets/Group8.png',
-                            fit: BoxFit.contain,
+                          child: Center(
+                            child: Image.asset(
+                              'assets/Group8.png',
+                              width: 70,
+                              height: 70,
+                              fit: BoxFit.contain,
+                            ),
                           ),
                         ),
                       ],
@@ -462,6 +462,13 @@ const _features = <_HomeFeature>[
     icon: Icons.inventory_2_outlined,
     accent: Color(0xFF6C5B3E),
     gradient: [Color(0xFFF2EEE8), Color(0xFFE1D7C8)],
+  ),
+  _HomeFeature(
+    tab: AppTab.stocktake,
+    title: AppStrings.tabStocktake,
+    icon: Icons.fact_check_outlined,
+    accent: Color(0xFF3C6E71),
+    gradient: [Color(0xFFE9F4F4), Color(0xFFD2E6E7)],
   ),
   _HomeFeature(
     tab: AppTab.edits,

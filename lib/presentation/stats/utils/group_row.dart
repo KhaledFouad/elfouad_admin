@@ -1,4 +1,4 @@
-import 'package:elfouad_admin/core/app_strings.dart';
+import 'package:elfouad_admin/core/utils/app_strings.dart';
 
 enum GroupMetric { cups, grams }
 

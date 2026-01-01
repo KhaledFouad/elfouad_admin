@@ -1,4 +1,4 @@
-import 'package:elfouad_admin/core/app_strings.dart';
+import 'package:elfouad_admin/core/utils/app_strings.dart';
 import 'package:elfouad_admin/presentation/grind/state/grind_providers.dart';
 import 'package:elfouad_admin/presentation/home/nav_state.dart';
 import 'package:flutter/material.dart';
@@ -33,8 +33,7 @@ class GrindPage extends StatelessWidget {
               automaticallyImplyLeading: false,
               leading: IconButton(
                 icon: const Icon(Icons.home_rounded, color: Colors.white),
-                onPressed: () =>
-                    context.read<NavCubit>().setTab(AppTab.home),
+                onPressed: () => context.read<NavCubit>().setTab(AppTab.home),
                 tooltip: AppStrings.tabHome,
               ),
               title: const Text(
@@ -94,8 +93,9 @@ class GrindPage extends StatelessWidget {
                     ),
                     onChanged: (t) => context.read<GrindCubit>().setQuery(t),
                     controller: TextEditingController(text: state.query)
-                      ..selection =
-                          TextSelection.collapsed(offset: state.query.length),
+                      ..selection = TextSelection.collapsed(
+                        offset: state.query.length,
+                      ),
                   ),
                 ),
 
@@ -103,20 +103,18 @@ class GrindPage extends StatelessWidget {
                   child: state.loading
                       ? const Center(child: CircularProgressIndicator())
                       : filtered.isEmpty
-                          ? const Center(child: Text(AppStrings.noItems))
-                          : ListView.separated(
-                              padding: EdgeInsets.fromLTRB(
-                                horizontalPadding,
-                                8,
-                                horizontalPadding,
-                                12,
-                              ),
-                              itemCount: filtered.length,
-                              separatorBuilder: (_, _) =>
-                                  const SizedBox(height: 8),
-                              itemBuilder: (_, i) =>
-                                  _ItemCard(row: filtered[i]),
-                            ),
+                      ? const Center(child: Text(AppStrings.noItems))
+                      : ListView.separated(
+                          padding: EdgeInsets.fromLTRB(
+                            horizontalPadding,
+                            8,
+                            horizontalPadding,
+                            12,
+                          ),
+                          itemCount: filtered.length,
+                          separatorBuilder: (_, _) => const SizedBox(height: 8),
+                          itemBuilder: (_, i) => _ItemCard(row: filtered[i]),
+                        ),
                 ),
               ],
             ),

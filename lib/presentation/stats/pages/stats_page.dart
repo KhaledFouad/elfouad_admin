@@ -1,4 +1,4 @@
-import 'package:elfouad_admin/core/app_strings.dart';
+import 'package:elfouad_admin/core/utils/app_strings.dart';
 import 'package:elfouad_admin/presentation/home/nav_state.dart';
 import 'package:elfouad_admin/presentation/stats/bloc/stats_cubit.dart';
 import 'package:elfouad_admin/presentation/stats/widgets/beans_by_name_table.dart';

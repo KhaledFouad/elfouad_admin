@@ -1,4 +1,4 @@
-import 'package:elfouad_admin/core/app_strings.dart';
+import 'package:elfouad_admin/core/utils/app_strings.dart';
 
 import '../utils/sale_utils.dart';
 import 'sale_record.dart';
@@ -21,13 +21,13 @@ class HistorySummary {
   final double grams;
 
   factory HistorySummary.empty() => const HistorySummary(
-        sales: 0,
-        cost: 0,
-        profit: 0,
-        drinks: 0,
-        snacks: 0,
-        grams: 0,
-      );
+    sales: 0,
+    cost: 0,
+    profit: 0,
+    drinks: 0,
+    snacks: 0,
+    grams: 0,
+  );
 
   HistorySummary copyWith({
     double? sales,
@@ -123,9 +123,7 @@ int _recordQuantity(SaleRecord record) {
     0.0,
     (total, component) => total + component.quantity,
   );
-  final fallback = parseDouble(
-    record.data['quantity'] ?? record.data['qty'],
-  );
+  final fallback = parseDouble(record.data['quantity'] ?? record.data['qty']);
   final qty = byComponents > 0 ? byComponents : fallback;
   return _roundQty(qty);
 }

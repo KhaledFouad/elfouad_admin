@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:elfouad_admin/core/app_strings.dart';
+import 'package:elfouad_admin/core/utils/app_strings.dart';
 import '../models/recipe_component.dart';
 
 class RecipePrepareSheet extends StatefulWidget {
@@ -249,7 +249,9 @@ class _RecipePrepareSheetState extends State<RecipePrepareSheet> {
             if (s.hasError) {
               return SizedBox(
                 height: 160,
-                child: Center(child: Text(AppStrings.loadFailedSimple(s.error!))),
+                child: Center(
+                  child: Text(AppStrings.loadFailedSimple(s.error!)),
+                ),
               );
             }
 

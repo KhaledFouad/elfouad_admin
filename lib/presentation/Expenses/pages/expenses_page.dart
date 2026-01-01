@@ -1,4 +1,4 @@
-import 'package:elfouad_admin/core/app_strings.dart';
+import 'package:elfouad_admin/core/utils/app_strings.dart';
 import 'package:elfouad_admin/domain/entities/expense.dart' show Expense;
 import 'package:elfouad_admin/presentation/home/nav_state.dart';
 import 'package:flutter/material.dart';
@@ -40,8 +40,7 @@ class ExpensesPage extends StatelessWidget {
               automaticallyImplyLeading: false,
               leading: IconButton(
                 icon: const Icon(Icons.home_rounded, color: Colors.white),
-                onPressed: () =>
-                    context.read<NavCubit>().setTab(AppTab.home),
+                onPressed: () => context.read<NavCubit>().setTab(AppTab.home),
                 tooltip: AppStrings.tabHome,
               ),
               title: const Text(
@@ -86,8 +85,8 @@ class ExpensesPage extends StatelessWidget {
                       );
                       final end = endBase.add(const Duration(days: 1));
                       context.read<ExpensesCubit>().setRange(
-                            DateTimeRange(start: start, end: end),
-                          );
+                        DateTimeRange(start: start, end: end),
+                      );
                     }
                   },
                   icon: const Icon(Icons.filter_alt_rounded),
@@ -97,9 +96,9 @@ class ExpensesPage extends StatelessWidget {
                   IconButton(
                     tooltip: AppStrings.actionOperationalDay,
                     onPressed: () {
-                      context
-                          .read<ExpensesCubit>()
-                          .setRange(todayOperationalRangeLocal());
+                      context.read<ExpensesCubit>().setRange(
+                        todayOperationalRangeLocal(),
+                      );
                     },
                     icon: const Icon(Icons.restart_alt),
                     color: Colors.white,
@@ -132,8 +131,12 @@ class ExpensesPage extends StatelessWidget {
             child: Column(
               children: [
                 Padding(
-                  padding:
-                      EdgeInsets.fromLTRB(horizontalPadding, 10, horizontalPadding, 4),
+                  padding: EdgeInsets.fromLTRB(
+                    horizontalPadding,
+                    10,
+                    horizontalPadding,
+                    4,
+                  ),
                   child: Row(
                     children: [
                       ExpenseSummaryPill(
@@ -152,23 +155,21 @@ class ExpensesPage extends StatelessWidget {
                   child: state.loading
                       ? const Center(child: CircularProgressIndicator())
                       : state.error != null
-                          ? Center(
-                              child: Text(
-                                AppStrings.expensesLoadError(
-                                  state.error ?? 'unknown',
-                                ),
-                              ),
-                            )
-                          : list.isEmpty
-                              ? const Center(
-                                  child: Text(AppStrings.expensesEmptyRange),
-                                )
-                              : ExpensesList(
-                                  items: list,
-                                  horizontalPadding: horizontalPadding,
-                                  onEdit: (e) => _openEditSheet(context, e),
-                                  onDelete: (id) => _deleteExpense(context, id),
-                                ),
+                      ? Center(
+                          child: Text(
+                            AppStrings.expensesLoadError(
+                              state.error ?? 'unknown',
+                            ),
+                          ),
+                        )
+                      : list.isEmpty
+                      ? const Center(child: Text(AppStrings.expensesEmptyRange))
+                      : ExpensesList(
+                          items: list,
+                          horizontalPadding: horizontalPadding,
+                          onEdit: (e) => _openEditSheet(context, e),
+                          onDelete: (id) => _deleteExpense(context, id),
+                        ),
                 ),
               ],
             ),
