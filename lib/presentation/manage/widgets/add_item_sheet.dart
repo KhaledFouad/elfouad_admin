@@ -909,13 +909,13 @@ class _AddItemSheetState extends State<AddItemSheet> {
                 _requiredPositive(v, AppStrings.sellPriceRequiredPrompt),
           ),
           const SizedBox(height: 8),
-          // _tf(
-          //   _costCup,
-          //   AppStrings.cupCostLabel,
-          //   numKeyboard,
-          //   validator: (v) =>
-          //       _requiredPositive(v, AppStrings.costPriceRequiredPrompt),
-          // ),
+          _tf(
+            _costCup,
+            AppStrings.cupCostLabel,
+            numKeyboard,
+            validator: (v) =>
+                _requiredPositive(v, AppStrings.costPriceRequiredPrompt),
+          ),
           if (_drinkSpicedEnabled) ...[
             const SizedBox(height: 8),
             _tf(

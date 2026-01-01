@@ -863,13 +863,13 @@ class _ProductEditSheetState extends State<ProductEditSheet> {
                 _requiredPositive(v, AppStrings.sellPriceRequiredPrompt),
           ),
           const SizedBox(height: 8),
-          // _tf(
-          //   _costPrice,
-          //   AppStrings.cupCostLabel,
-          //   numKeyboard,
-          //   validator: (v) =>
-          //       _requiredPositive(v, AppStrings.costPriceRequiredPrompt),
-          // ),
+          _tf(
+            _costPrice,
+            AppStrings.cupCostLabel,
+            numKeyboard,
+            validator: (v) =>
+                _requiredPositive(v, AppStrings.costPriceRequiredPrompt),
+          ),
           if (_drinkSpicedEnabled) ...[
             const SizedBox(height: 8),
             _tf(
@@ -1586,7 +1586,14 @@ class _ProductEditSheetState extends State<ProductEditSheet> {
 
   List<String> _stringList(dynamic raw) {
     if (raw is Iterable) {
-      return raw.map((e) => e.toString()).toList();
+      final values = <String>[];
+      for (final entry in raw) {
+        if (entry == null) continue;
+        final value = entry.toString().trim();
+        if (value.isEmpty) continue;
+        values.add(value);
+      }
+      return values;
     }
     return const [];
   }

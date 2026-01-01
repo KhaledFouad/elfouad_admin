@@ -244,6 +244,7 @@ class AppStrings {
   static const spicePricePerKgLabel = 'سعر التحويج/كجم (spicesPrice)';
   static const spiceCostPerKgLabel = 'تكلفة التحويج/كجم (spicesCost)';
   static const cupPriceLabel = 'سعر الكوب';
+  static const cupCostLabel = 'تكلفة الكوب';
 
   static const usedAmountLabel = 'استخدام خامة/كوب (usedAmount)';
   static const doubleCostOptionalLabel = 'تكلفة الدوبل (اختياري)';
