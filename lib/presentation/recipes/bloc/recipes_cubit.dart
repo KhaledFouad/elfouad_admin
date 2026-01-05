@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:elfouad_admin/services/archive/archive_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../models/recipe_list_item.dart';
@@ -31,8 +32,11 @@ class RecipesCubit extends Cubit<RecipesState> {
     );
   }
 
-  Future<void> deleteRecipe(String id) =>
-      _db.collection('recipes').doc(id).delete();
+  Future<void> deleteRecipe(String id) => archiveThenDelete(
+        srcRef: _db.collection('recipes').doc(id),
+        kind: 'recipe',
+        reason: 'manual_delete',
+      );
 
   @override
   Future<void> close() async {

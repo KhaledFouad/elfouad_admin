@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:elfouad_admin/services/archive/archive_service.dart';
 import 'package:flutter/material.dart';
 
 class SalesPageResult {
@@ -366,20 +367,12 @@ class SalesHistoryRepository {
       return;
     }
 
-    const batchLimit = 400;
-    var batch = _firestore.batch();
-    var opCount = 0;
     for (final doc in combined.values) {
-      batch.delete(doc.reference);
-      opCount++;
-      if (opCount >= batchLimit) {
-        await batch.commit();
-        batch = _firestore.batch();
-        opCount = 0;
-      }
-    }
-    if (opCount > 0) {
-      await batch.commit();
+      await archiveThenDelete(
+        srcRef: doc.reference,
+        kind: 'sale',
+        reason: 'credit_customer_delete',
+      );
     }
   }
 
@@ -403,11 +396,23 @@ class SalesHistoryRepository {
           }
         }
       }
+      final missingStockRefs = <String>[];
       for (final entry in ops.entries) {
+        final ref = entry.key;
         final grams = entry.value;
-        if (grams > 0) {
-          transaction.update(entry.key, {'stock': FieldValue.increment(grams)});
+        if (grams <= 0) continue;
+
+        final stockSnap = await transaction.get(ref);
+        if (!stockSnap.exists) {
+          missingStockRefs.add(ref.path);
+          continue;
         }
+        final stockData = stockSnap.data() ?? <String, dynamic>{};
+        final current = _safeNum(stockData['stock']);
+        transaction.update(ref, {
+          'stock': current + grams,
+          'updated_at': FieldValue.serverTimestamp(),
+        });
       }
 
       if (_isExtraSale(data)) {
@@ -427,7 +432,81 @@ class SalesHistoryRepository {
         }
       }
 
+      final archiveRef =
+          _firestore.collection(archiveBinCollection).doc();
+      final archiveData = buildArchiveEntry(
+        srcRef: saleRef,
+        kind: 'sale',
+        data: data,
+        reason: 'manual_delete',
+      );
+      archiveData['rollback_missing_refs'] = missingStockRefs;
+      archiveData['rollback_ops_count'] = ops.length;
+      archiveData['rollback_applied_count'] =
+          ops.length - missingStockRefs.length;
+      transaction.set(archiveRef, archiveData);
       transaction.delete(saleRef);
+    });
+  }
+
+  Future<void> restoreSaleFromArchive(
+    DocumentReference<Map<String, dynamic>> archiveRef,
+  ) async {
+    await _firestore.runTransaction((transaction) async {
+      final archiveSnap = await transaction.get(archiveRef);
+      if (!archiveSnap.exists) return;
+      final archiveData = archiveSnap.data() ?? <String, dynamic>{};
+
+      final originalPath = archiveData['original_path']?.toString() ?? '';
+      final rawSale = archiveData['data'];
+      if (originalPath.isEmpty || rawSale is! Map) return;
+      final saleData = rawSale.cast<String, dynamic>();
+
+      final saleRef = _firestore.doc(originalPath);
+
+      var ops = _stockOpsFromSale(saleData);
+      if (ops.isEmpty && _isDrinkSale(saleData)) {
+        final drinkId = _drinkIdFromSale(saleData);
+        if (drinkId != null && drinkId.isNotEmpty) {
+          final drinkRef = _firestore.collection('drinks').doc(drinkId);
+          final drinkSnap = await transaction.get(drinkRef);
+          final drinkData = drinkSnap.data();
+          if (drinkData != null) {
+            ops = _stockOpsFromSale(saleData, usageSource: drinkData);
+          }
+        }
+      }
+      for (final entry in ops.entries) {
+        final grams = entry.value;
+        if (grams > 0) {
+          transaction.update(entry.key, {
+            'stock': FieldValue.increment(-grams),
+          });
+        }
+      }
+
+      if (_isExtraSale(saleData)) {
+        final qty = _parseInt(saleData['quantity']);
+        final extraId = saleData['extra_id']?.toString() ?? '';
+        if (qty > 0 && extraId.isNotEmpty) {
+          final extraRef = _firestore.collection('extras').doc(extraId);
+          final extraSnap = await transaction.get(extraRef);
+          if (extraSnap.exists) {
+            final extra = extraSnap.data() ?? <String, dynamic>{};
+            final current = _parseInt(extra['stock_units']);
+            if (current < qty) {
+              throw Exception('Insufficient extra stock to restore sale.');
+            }
+            transaction.update(extraRef, {
+              'stock_units': current - qty,
+              'updated_at': FieldValue.serverTimestamp(),
+            });
+          }
+        }
+      }
+
+      transaction.set(saleRef, saleData);
+      transaction.delete(archiveRef);
     });
   }
 
@@ -531,6 +610,11 @@ class SalesHistoryRepository {
   double _parseDouble(dynamic value) {
     if (value is num) return value.toDouble();
     return double.tryParse(value?.toString() ?? '0') ?? 0;
+  }
+
+  double _safeNum(dynamic value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '') ?? 0.0;
   }
 
   bool _isCreditHidden(Map<String, dynamic> data) {
@@ -672,13 +756,15 @@ class SalesHistoryRepository {
     }
 
     dynamic idFromRow(Map<String, dynamic> row) {
-      return row['id'] ??
-          row['item_id'] ??
-          row['itemId'] ??
+      return row['product_id'] ??
+          row['productId'] ??
           row['single_id'] ??
           row['singleId'] ??
           row['blend_id'] ??
-          row['blendId'];
+          row['blendId'] ??
+          row['item_id'] ??
+          row['itemId'] ??
+          row['id'];
     }
 
     double gramsFromRow(Map<String, dynamic> row) {
@@ -695,6 +781,8 @@ class SalesHistoryRepository {
     if (type == 'single' || type == 'ready_blend') {
       final coll = type == 'single' ? 'singles' : 'blends';
       final id =
+          data['product_id'] ??
+          data['productId'] ??
           data['single_id'] ??
           data['blend_id'] ??
           data['item_id'] ??

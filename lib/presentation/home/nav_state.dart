@@ -8,6 +8,7 @@ enum AppTab {
   stocktake,
   edits,
   expenses,
+  recycleBin,
   recipes,
   forecast,
 }

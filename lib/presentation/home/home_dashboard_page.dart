@@ -491,6 +491,13 @@ const _features = <_HomeFeature>[
     accent: Color(0xFF7B6D3F),
     gradient: [Color(0xFFF5F0E0), Color(0xFFE6D9B7)],
   ),
+  _HomeFeature(
+    tab: AppTab.recycleBin,
+    title: AppStrings.tabRecycleBin,
+    icon: Icons.delete_sweep_outlined,
+    accent: Color(0xFF6D4C41),
+    gradient: [Color(0xFFF4EDE9), Color(0xFFE8D9D2)],
+  ),
   // Hidden per request: remove Grind tile from home.
   // _HomeFeature(
   //   tab: AppTab.grind,

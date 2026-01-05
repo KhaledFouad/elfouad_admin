@@ -4,6 +4,7 @@ import 'package:elfouad_admin/presentation/home/home_dashboard_page.dart';
 import 'package:elfouad_admin/presentation/manage/pages/products_manage_page.dart';
 import 'package:elfouad_admin/presentation/recipes/pages/recipes_list_page.dart'
     show RecipesListPage;
+import 'package:elfouad_admin/presentation/archive/pages/trash_page.dart';
 import 'package:elfouad_admin/presentation/stocktake/pages/stocktake_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -31,6 +32,7 @@ class _AppShellState extends State<AppShell> {
       ManagePage(),
       ExpensesPage(),
       // GrindPage(),
+      TrashPage(),
       RecipesListPage(),
       BeansForecastPage(),
     ];
@@ -88,6 +90,8 @@ class _MainStackState extends State<_MainStack> {
         return const ManagePage();
       case AppTab.expenses:
         return const ExpensesPage();
+      case AppTab.recycleBin:
+        return const TrashPage();
 
       case AppTab.recipes:
         return const RecipesListPage();

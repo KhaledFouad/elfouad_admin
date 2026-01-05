@@ -209,6 +209,7 @@ class ExpensesPage extends StatelessWidget {
   }
 
   void _openEditSheet(BuildContext context, [Expense? e]) {
+    final cubit = context.read<ExpensesCubit>();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -216,7 +217,10 @@ class ExpensesPage extends StatelessWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (_) => ExpenseEditSheet(expense: e),
+      builder: (_) => BlocProvider.value(
+        value: cubit,
+        child: ExpenseEditSheet(expense: e),
+      ),
     );
   }
 }

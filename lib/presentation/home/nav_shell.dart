@@ -2,6 +2,7 @@ import 'package:elfouad_admin/presentation/forecast/pages/beans_forecast_page.da
 import 'package:elfouad_admin/presentation/home/home_dashboard_page.dart';
 import 'package:elfouad_admin/presentation/recipes/pages/recipes_list_page.dart';
 import 'package:elfouad_admin/presentation/stocktake/pages/stocktake_page.dart';
+import 'package:elfouad_admin/presentation/archive/pages/trash_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'nav_state.dart';
@@ -35,6 +36,8 @@ class _NavShellState extends State<NavShell> {
               return const EditsScreen(); // ???????
             case AppTab.expenses:
               return const ExpensesScreen(); // ???????
+            case AppTab.recycleBin:
+              return const TrashPage();
 
             case AppTab.recipes:
               return const RecipesListPage(); // ???????

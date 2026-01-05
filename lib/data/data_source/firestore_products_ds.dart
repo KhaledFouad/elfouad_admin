@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:elfouad_admin/services/archive/archive_service.dart';
 import '../../domain/entities/product.dart';
 import '../mappers/product_mapper.dart';
 
@@ -113,13 +114,25 @@ class FirestoreProductsDs {
 
     // لو موجود في كوليكشن تاني → نحذفه من هناك وننشئه/نكتبه في الهدف بنفس الـ id
     if (existsInSingles && targetCol != 'singles') {
-      await _db.collection('singles').doc(p.id).delete();
+      await archiveThenDelete(
+        srcRef: _db.collection('singles').doc(p.id),
+        kind: 'product_single',
+        reason: 'move',
+      );
     }
     if (existsInBlends && targetCol != 'blends') {
-      await _db.collection('blends').doc(p.id).delete();
+      await archiveThenDelete(
+        srcRef: _db.collection('blends').doc(p.id),
+        kind: 'blend',
+        reason: 'move',
+      );
     }
     if (existsInDrinks && targetCol != 'drinks') {
-      await _db.collection('drinks').doc(p.id).delete();
+      await archiveThenDelete(
+        srcRef: _db.collection('drinks').doc(p.id),
+        kind: 'drink',
+        reason: 'move',
+      );
     }
 
     await _db
@@ -132,17 +145,29 @@ class FirestoreProductsDs {
   Future<void> delete(String id) async {
     final docSingles = await _db.collection('singles').doc(id).get();
     if (docSingles.exists) {
-      await _db.collection('singles').doc(id).delete();
+      await archiveThenDelete(
+        srcRef: _db.collection('singles').doc(id),
+        kind: 'product_single',
+        reason: 'manual_delete',
+      );
       return;
     }
     final docBlends = await _db.collection('blends').doc(id).get();
     if (docBlends.exists) {
-      await _db.collection('blends').doc(id).delete();
+      await archiveThenDelete(
+        srcRef: _db.collection('blends').doc(id),
+        kind: 'blend',
+        reason: 'manual_delete',
+      );
       return;
     }
     final docDrinks = await _db.collection('drinks').doc(id).get();
     if (docDrinks.exists) {
-      await _db.collection('drinks').doc(id).delete();
+      await archiveThenDelete(
+        srcRef: _db.collection('drinks').doc(id),
+        kind: 'drink',
+        reason: 'manual_delete',
+      );
       return;
     }
     // لو مش موجود في أي مكان: لا شيء

@@ -73,6 +73,12 @@ class SideMenu extends StatelessWidget {
                 onTap: () => _go(context, AppTab.expenses),
               ),
               _MenuItem(
+                icon: Icons.delete_sweep_outlined,
+                label: AppStrings.tabRecycleBin,
+                selected: selected == AppTab.recycleBin,
+                onTap: () => _go(context, AppTab.recycleBin),
+              ),
+              _MenuItem(
                 icon: Icons.auto_graph_outlined,
                 label: AppStrings.tabForecast,
                 selected: selected == AppTab.forecast,

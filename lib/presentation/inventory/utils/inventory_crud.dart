@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:elfouad_admin/services/archive/archive_service.dart';
 
 import '../models/inventory_row.dart';
 
@@ -34,7 +35,11 @@ Future<void> updateInventoryRow(
   await row.ref.update(data);
 }
 
-Future<void> deleteInventoryRow(InventoryRow row) => row.ref.delete();
+Future<void> deleteInventoryRow(InventoryRow row) => archiveThenDelete(
+      srcRef: row.ref,
+      kind: 'inventory_row',
+      reason: 'manual_delete',
+    );
 
 Future<void> createInventoryRow({
   required bool isBlend,

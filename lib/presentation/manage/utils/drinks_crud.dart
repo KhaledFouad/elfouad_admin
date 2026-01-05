@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:elfouad_admin/services/archive/archive_service.dart';
 
 import '../models/drink_row.dart';
 
@@ -21,8 +22,11 @@ Future<void> updateDrinkRow(
   return ref.update(upd);
 }
 
-Future<void> deleteDrink(String id) =>
-    FirebaseFirestore.instance.collection('drinks').doc(id).delete();
+Future<void> deleteDrink(String id) => archiveThenDelete(
+      srcRef: FirebaseFirestore.instance.collection('drinks').doc(id),
+      kind: 'drink',
+      reason: 'manual_delete',
+    );
 
 Future<void> createDrink({
   required String name,

@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:elfouad_admin/services/archive/archive_service.dart';
 import '../../domain/entities/expense.dart';
 
 class FirestoreExpensesDs {
@@ -78,6 +79,10 @@ class FirestoreExpensesDs {
   }
 
   Future<void> delete(String id) async {
-    await _db.collection(_col).doc(id).delete();
+    await archiveThenDelete(
+      srcRef: _db.collection(_col).doc(id),
+      kind: 'expense',
+      reason: 'manual_delete',
+    );
   }
 }

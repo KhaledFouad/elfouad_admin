@@ -19,17 +19,24 @@ Future<({double pricePerKg, double costPerKg})> fetchSpiceRatesForSale(
   final type = '${sale['type'] ?? ''}';
   String? coll;
   String? id =
+      sale['product_id']?.toString() ??
+      sale['productId']?.toString() ??
       sale['single_id']?.toString() ??
+      sale['singleId']?.toString() ??
       sale['blend_id']?.toString() ??
+      sale['blendId']?.toString() ??
       sale['item_id']?.toString() ??
+      sale['itemId']?.toString() ??
       sale['id']?.toString();
 
   if (type == 'single' ||
       sale.containsKey('single_id') ||
+      sale.containsKey('singleId') ||
       sale['lines_type'] == 'single') {
     coll = 'singles';
   } else if (type == 'ready_blend' ||
       sale.containsKey('blend_id') ||
+      sale.containsKey('blendId') ||
       sale['lines_type'] == 'ready_blend') {
     coll = 'blends';
   }
@@ -90,17 +97,24 @@ Future<({double pricePerKg, double costPerKg})> fetchGinsengRatesForSale(
   final type = '${sale['type'] ?? ''}';
   String? coll;
   String? id =
+      sale['product_id']?.toString() ??
+      sale['productId']?.toString() ??
       sale['single_id']?.toString() ??
+      sale['singleId']?.toString() ??
       sale['blend_id']?.toString() ??
+      sale['blendId']?.toString() ??
       sale['item_id']?.toString() ??
+      sale['itemId']?.toString() ??
       sale['id']?.toString();
 
   if (type == 'single' ||
       sale.containsKey('single_id') ||
+      sale.containsKey('singleId') ||
       sale['lines_type'] == 'single') {
     coll = 'singles';
   } else if (type == 'ready_blend' ||
       sale.containsKey('blend_id') ||
+      sale.containsKey('blendId') ||
       sale['lines_type'] == 'ready_blend') {
     coll = 'blends';
   }

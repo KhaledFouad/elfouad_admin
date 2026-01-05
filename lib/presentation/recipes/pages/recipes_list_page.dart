@@ -6,6 +6,7 @@ import 'package:elfouad_admin/presentation/recipes/models/recipe_price_cost.dart
 import 'package:elfouad_admin/presentation/recipes/utils/recipes_utils.dart';
 import 'package:elfouad_admin/presentation/recipes/widgets/recipe_edit_sheet.dart';
 import 'package:elfouad_admin/presentation/recipes/widgets/recipe_prepare_sheet.dart';
+import 'package:elfouad_admin/presentation/recipes/pages/recipe_prep_log_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:responsive_framework/responsive_framework.dart';
@@ -76,6 +77,12 @@ class _RecipesListPageState extends State<RecipesListPage> {
     );
   }
 
+  void _openPrepLog() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const RecipePrepLogPage()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = context.watch<RecipesCubit>().state;
@@ -110,6 +117,13 @@ class _RecipesListPageState extends State<RecipesListPage> {
                 ),
               ),
               centerTitle: true,
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.history),
+                  tooltip: AppStrings.recipePrepLogTitle,
+                  onPressed: _openPrepLog,
+                ),
+              ],
               elevation: 8,
               backgroundColor: Colors.transparent,
               flexibleSpace: Container(

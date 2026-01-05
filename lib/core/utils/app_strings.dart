@@ -20,7 +20,7 @@ class AppStrings {
   static const stocktakeTitle = 'الجرد';
   static const stocktakeRecord = 'تسجيل الجرد';
   static const stocktakeLog = 'سجل الجرد';
-  static const stocktakeOverwrite = 'تحديث المخزون (Overwrite)';
+  static const stocktakeOverwrite = 'تحديث المخزون';
   static const stocktakeSearchHint = 'بحث...';
   static const stocktakeCountedLabelKg = 'الكمية الفعلية (كجم)';
   static const stocktakeCountedLabelUnits = 'الكمية الفعلية (وحدات)';
@@ -37,6 +37,21 @@ class AppStrings {
   static const tabExpenses = 'المصروفات';
   static const tabGrind = 'الطحن';
   static const tabForecast = 'توقعات البن';
+  static const tabRecycleBin = 'سلة المحذوفات';
+  static const recycleBinTitle = 'سلة المحذوفات';
+  static const recycleBinSales = 'المبيعات';
+  static const recycleBinExpenses = 'المصروفات';
+  static const recycleBinProducts = 'المنتجات';
+  static const recycleBinEmpty = 'لا توجد عناصر محذوفة.';
+  static const archiveFilterAll = 'الكل';
+  static const archiveFilterSales = 'المبيعات';
+  static const archiveFilterProducts = 'المنتجات';
+  static const archiveFilterExpenses = 'المصروفات';
+  static const archiveFilterInventory = 'المخزون';
+  static const archiveFilterRecipes = 'الوصفات';
+  static const archiveFilterExtras = 'الإضافات';
+  static const archiveFilterDrinks = 'المشروبات';
+  static const archiveReasonLabel = 'السبب';
   static const inventoryAll = 'الكل';
   static const inventorySingles = 'الأصناف المنفردة';
   static const inventoryBlends = 'التوليفات';
@@ -76,6 +91,8 @@ class AppStrings {
   static const actionApply = 'تطبيق';
   static const actionOpen = 'فتح';
   static const actionConfirm = 'تأكيد';
+  static const actionRestore = 'استعادة';
+  static const actionDeletePermanently = 'حذف نهائي';
 
   static const confirmDeleteTitle = 'تأكيد الحذف';
 
@@ -157,8 +174,14 @@ class AppStrings {
   static const unitPiece = 'piece';
 
   static const editSaved = 'تم حفظ التعديل';
+  static const restoreSuccess = 'تمت الاستعادة';
+  static const restoreFailed = 'تعذر الاستعادة';
   static const saleOperationLabel = 'عملية بيع';
   static const totalPriceLabel = 'السعر الإجمالي (total_price)';
+  static const invoiceNumberLabel = 'رقم الفاتورة';
+  static const paymentMethodLabel = 'طريقة الدفع';
+  static const invoiceItemsLabel = 'بنود الفاتورة';
+  static const lineTotalPriceLabel = 'إجمالي السطر';
   static const cupsCountLabel = 'عدد الأكواب (quantity)';
   static const gramsQuantityLabel = 'الكمية بالجرامات (grams)';
   static const ginsengGramsLabel = 'جرامات الجنسنج (ginseng_grams)';
@@ -286,6 +309,9 @@ class AppStrings {
   static const componentsLabel = 'المكونات:';
   static const prepareAnotherBatch = 'تحضير دفعة أخرى';
   static const prepareBlendLabel = 'تحضير التوليفة';
+  static const recipePrepLogTitle = 'سجل تحضير التوليفات';
+  static const recipePrepDetailsTitle = 'تفاصيل التحضير';
+  static const recipeIdLabel = 'معرف التوليفة';
   static const deleteRecipeTitle = 'حذف التوليفة';
   static const recipesTitle = ' تحضير التوليفات';
   static const noRecipesYet = 'لا توجد توليفات بعد.';

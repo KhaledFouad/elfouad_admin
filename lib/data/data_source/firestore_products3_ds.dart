@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:elfouad_admin/services/archive/archive_service.dart';
 import '../../domain/entities/product.dart';
 import '../mappers/product_mapper.dart';
 
@@ -65,7 +66,13 @@ class FirestoreProducts3Ds {
       if (colOld != colNew) {
         final oldRef = _db.collection(colOld).doc(p.id);
         final oldSnap = await oldRef.get();
-        if (oldSnap.exists) await oldRef.delete();
+        if (oldSnap.exists) {
+          await archiveThenDelete(
+            srcRef: oldRef,
+            kind: _kindForCollection(colOld),
+            reason: 'move',
+          );
+        }
         await _db
             .collection(colNew)
             .doc(p.id)
@@ -81,6 +88,22 @@ class FirestoreProducts3Ds {
 
   Future<void> delete(String id, String type) async {
     final col = _colForType(type);
-    await _db.collection(col).doc(id).delete();
+    await archiveThenDelete(
+      srcRef: _db.collection(col).doc(id),
+      kind: _kindForCollection(col),
+      reason: 'manual_delete',
+    );
+  }
+
+  String _kindForCollection(String col) {
+    switch (col) {
+      case 'singles':
+        return 'product_single';
+      case 'blends':
+        return 'blend';
+      case 'drinks':
+      default:
+        return 'drink';
+    }
   }
 }

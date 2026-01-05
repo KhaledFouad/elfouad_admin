@@ -15,6 +15,49 @@ double _d(dynamic v) {
   return 0.0;
 }
 
+bool _readBool(dynamic v) {
+  if (v is bool) return v;
+  if (v is num) return v != 0;
+  if (v is String) {
+    final raw = v.toLowerCase();
+    return raw == 'true' || raw == '1';
+  }
+  return false;
+}
+
+Map<String, dynamic> _metaOf(Map<String, dynamic> m) {
+  final v = m['meta'];
+  if (v is Map) return v.cast<String, dynamic>();
+  return const {};
+}
+
+bool _isSpicedFrom(Map<String, dynamic> m) {
+  final meta = _metaOf(m);
+
+  bool? spicedEnabled;
+  if (meta.containsKey('spicedEnabled')) {
+    spicedEnabled = _readBool(meta['spicedEnabled']);
+  } else if (m.containsKey('spicedEnabled')) {
+    spicedEnabled = _readBool(m['spicedEnabled']);
+  }
+
+  bool? spicedVal;
+  if (meta.containsKey('spiced')) {
+    spicedVal = _readBool(meta['spiced']);
+  } else if (m.containsKey('spiced')) {
+    spicedVal = _readBool(m['spiced']);
+  } else if (m.containsKey('is_spiced')) {
+    spicedVal = _readBool(m['is_spiced']);
+  }
+
+  if (spicedEnabled == null && spicedVal == true) {
+    spicedEnabled = true;
+  }
+
+  if (spicedEnabled == true) return spicedVal ?? false;
+  return false;
+}
+
 Future<QuerySnapshot<Map<String, dynamic>>> _getQuerySnapshot(
   Query<Map<String, dynamic>> query, {
   bool cacheFirst = false,
@@ -244,6 +287,7 @@ List<Map<String, dynamic>> _expandCartSales(List<Map<String, dynamic>> data) {
   final out = <Map<String, dynamic>>[];
   for (final m in data) {
     final fixed = _applyTotalsFallback(m);
+    fixed['is_spiced'] = _isSpicedFrom(fixed);
     final type = (fixed['type'] ?? '').toString();
     final rawLines = _extractLineItems(fixed);
     final isComplimentary = (fixed['is_complimentary'] ?? false) == true;
@@ -281,6 +325,7 @@ List<Map<String, dynamic>> _expandCartSales(List<Map<String, dynamic>> data) {
       );
       final merged = Map<String, dynamic>.from(fixed);
       merged.addAll(line);
+      merged['is_spiced'] = _isSpicedFrom(merged);
       merged['type'] = lineType;
       if (saleId.isNotEmpty) merged['sale_id'] = saleId;
 
@@ -880,7 +925,32 @@ List<GroupRow> _buildBeansRows(
       'line_cost',
       'cost_amount',
     ]);
-    final isSpiced = (c['is_spiced'] ?? fallbackSpiced) == true;
+    final meta = _metaOf(c);
+    final hasMetaSpiced =
+        meta.containsKey('spiced') || meta.containsKey('spicedEnabled');
+    final hasTopSpiced = c.containsKey('spiced') ||
+        c.containsKey('spicedEnabled') ||
+        c.containsKey('is_spiced');
+    bool? spicedEnabled;
+    if (hasMetaSpiced && meta.containsKey('spicedEnabled')) {
+      spicedEnabled = _readBool(meta['spicedEnabled']);
+    } else if (c.containsKey('spicedEnabled')) {
+      spicedEnabled = _readBool(c['spicedEnabled']);
+    }
+    bool? spicedVal;
+    if (hasMetaSpiced && meta.containsKey('spiced')) {
+      spicedVal = _readBool(meta['spiced']);
+    } else if (c.containsKey('spiced')) {
+      spicedVal = _readBool(c['spiced']);
+    } else if (c.containsKey('is_spiced')) {
+      spicedVal = _readBool(c['is_spiced']);
+    }
+    if (spicedEnabled == null && spicedVal == true) {
+      spicedEnabled = true;
+    }
+    final isSpiced = (hasMetaSpiced || hasTopSpiced)
+        ? (spicedEnabled == true ? (spicedVal ?? false) : false)
+        : fallbackSpiced;
     return {
       'name': name.trim(),
       'variant': variant.trim(),

@@ -122,7 +122,7 @@ class SalesHistoryCubit extends Cubit<SalesHistoryState> {
   }
 
   Future<void> deleteCreditCustomer(String customerName) async {
-    await _repository.hideCreditCustomer(customerName);
+    await _repository.deleteCreditCustomer(customerName);
     unawaited(_loadCreditUnpaidCount());
     unawaited(_loadCreditAccounts());
   }

@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:elfouad_admin/core/utils/app_strings.dart';
 
+import '../models/sale_component.dart';
 import '../utils/sale_utils.dart';
 import '../utils/sales_history_utils.dart';
 
@@ -23,18 +24,30 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
   final TextEditingController _gramsCtrl = TextEditingController();
   final TextEditingController _ginsengCtrl = TextEditingController();
   final TextEditingController _noteCtrl = TextEditingController();
+  final TextEditingController _paymentMethodCtrl = TextEditingController();
+  final TextEditingController _invoiceNumberCtrl = TextEditingController();
+  final TextEditingController _dueAmountCtrl = TextEditingController();
 
   bool _isComplimentary = false;
   bool _isSpiced = false;
   bool _busy = false;
+  bool _isDeferred = false;
+  bool _isPaid = true;
+
+  double _invoiceTotalPrice = 0.0;
+  double _invoiceTotalCost = 0.0;
+  final List<_InvoiceItemDraft> _invoiceItems = [];
 
   double _unitPriceCache = 0.0;
   double _unitCostCache = 0.0;
   bool _userEditedTotal = false;
   double? _lastNonComplPrice;
 
-  double _numOf(dynamic v, [double def = 0.0]) =>
-      (v is num) ? v.toDouble() : (double.tryParse('${v ?? ''}') ?? def);
+  double _numOf(dynamic v, [double def = 0.0]) {
+    if (v is num) return v.toDouble();
+    final raw = '${v ?? ''}'.replaceAll(',', '.');
+    return double.tryParse(raw) ?? def;
+  }
   int _intOf(dynamic v, [int def = 0]) =>
       (v is num) ? v.toInt() : (int.tryParse('${v ?? ''}') ?? def);
 
@@ -63,6 +76,270 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
     if (value == 'beans') return 'singles';
     if (value == 'blend' || value == 'blends') return 'blends';
     return null;
+  }
+
+  List<Map<String, dynamic>> _asListMap(dynamic value) {
+    if (value is List) {
+      return value
+          .map(
+            (e) =>
+                (e is Map) ? e.cast<String, dynamic>() : <String, dynamic>{},
+          )
+          .toList();
+    }
+    return const [];
+  }
+
+  double _resolveDueAmount(
+    Map<String, dynamic> data, {
+    double? fallbackTotal,
+  }) {
+    final raw = data['due_amount'];
+    final dueAmount = _numOf(raw);
+    final totalPrice = fallbackTotal ?? _numOf(data['total_price']);
+    if (dueAmount > 0) {
+      if (totalPrice > 0 && dueAmount > totalPrice) {
+        return totalPrice;
+      }
+      return dueAmount;
+    }
+    if ((data['is_deferred'] ?? false) == true && data['paid'] != true) {
+      return totalPrice;
+    }
+    return 0.0;
+  }
+
+  double _normalizeDueAmount({
+    required double input,
+    required double totalPrice,
+    required bool isDeferred,
+    required bool isPaid,
+  }) {
+    if (!isDeferred || isPaid) return 0.0;
+    if (input > 0) {
+      if (totalPrice > 0 && input > totalPrice) return totalPrice;
+      return input;
+    }
+    return totalPrice;
+  }
+
+  void _onInvoiceItemChanged() {
+    if (!mounted) return;
+    setState(_syncInvoiceTotals);
+  }
+
+  void _syncInvoiceTotals() {
+    final oldTotal = _invoiceTotalPrice;
+    final totals = _computeInvoiceTotals(applyComplimentary: _isComplimentary);
+    _invoiceTotalPrice = totals.price;
+    _invoiceTotalCost = totals.cost;
+    _setTotalPriceText(_invoiceTotalPrice);
+
+    if (_isDeferred && !_isPaid) {
+      final dueText = _dueAmountCtrl.text.trim();
+      final dueValue = _numOf(dueText);
+      if (dueText.isEmpty || (dueValue - oldTotal).abs() < 0.01) {
+        _dueAmountCtrl.text = _invoiceTotalPrice.toStringAsFixed(2);
+      }
+    }
+  }
+
+  ({double price, double cost}) _computeInvoiceTotals({
+    required bool applyComplimentary,
+  }) {
+    double price = 0.0;
+    double cost = 0.0;
+    for (final item in _invoiceItems) {
+      price += _invoiceLinePrice(item, applyComplimentary: applyComplimentary);
+      cost += _invoiceLineCost(item);
+    }
+    if (applyComplimentary) {
+      price = 0.0;
+    }
+    return (price: price, cost: cost);
+  }
+
+  double _invoiceLinePrice(
+    _InvoiceItemDraft item, {
+    required bool applyComplimentary,
+  }) {
+    if (applyComplimentary) return 0.0;
+    final unitPrice = _numOf(item.priceCtrl.text);
+    if (!item.usesMeasure) return unitPrice;
+    final measure = item.useGrams
+        ? _numOf(item.gramsCtrl.text)
+        : _numOf(item.qtyCtrl.text);
+    return unitPrice * measure;
+  }
+
+  double _invoiceLineCost(_InvoiceItemDraft item) {
+    if (!item.usesMeasure) return item.baseLineCost;
+    final measure = item.useGrams
+        ? _numOf(item.gramsCtrl.text)
+        : _numOf(item.qtyCtrl.text);
+    return item.unitCost * measure;
+  }
+
+  String _formatQty(double v) {
+    if (v == v.roundToDouble()) {
+      return v.toStringAsFixed(0);
+    }
+    return v.toStringAsFixed(2);
+  }
+
+  _InvoiceItemDraft _buildInvoiceItemDraft(Map<String, dynamic> raw) {
+    final item = Map<String, dynamic>.from(raw);
+    final component = SaleComponent.fromMap(item);
+    final label =
+        component.label.isNotEmpty ? component.label : AppStrings.noNameLabel;
+
+    double pickNum(List<String> keys) {
+      for (final key in keys) {
+        if (item.containsKey(key)) {
+          final v = _numOf(item[key]);
+          if (v != 0) return v;
+        }
+      }
+      return 0.0;
+    }
+
+    final grams = _numOf(item['grams'] ?? item['weight']);
+    final qty = _numOf(
+      item['qty'] ?? item['quantity'] ?? item['count'] ?? item['pieces'],
+    );
+    final unit = (item['unit'] ?? '').toString();
+    final unitKey = unit.trim().toLowerCase();
+    final showGrams = grams > 0 || unitKey == 'g';
+    final showQty =
+        qty > 0 ||
+        item.containsKey('qty') ||
+        item.containsKey('quantity') ||
+        item.containsKey('count') ||
+        item.containsKey('pieces');
+    final useGrams = showGrams && (unitKey == 'g' || grams > 0 || !showQty);
+    final measure = useGrams ? grams : qty;
+
+    final linePrice = pickNum(const [
+      'line_total_price',
+      'total_price',
+      'price',
+      'line_price',
+      'amount',
+      'total',
+      'subtotal',
+    ]);
+    final lineCost = pickNum(const [
+      'line_total_cost',
+      'total_cost',
+      'cost',
+      'line_cost',
+      'cost_amount',
+    ]);
+
+    double unitPrice = _numOf(item['unit_price'] ?? item['price_per_unit']);
+    if (unitPrice <= 0 && useGrams) {
+      final perG = _numOf(item['price_per_g']);
+      final perKg = _numOf(item['price_per_kg']);
+      if (perG > 0) {
+        unitPrice = perG;
+      } else if (perKg > 0) {
+        unitPrice = perKg / 1000.0;
+      }
+    }
+    if (unitPrice <= 0 && measure > 0) {
+      unitPrice = linePrice > 0 ? (linePrice / measure) : 0.0;
+    }
+    if (!showGrams && !showQty) {
+      unitPrice = linePrice;
+    }
+
+    double unitCost = _numOf(item['unit_cost'] ?? item['cost_per_unit']);
+    if (unitCost <= 0 && useGrams) {
+      final perG = _numOf(item['cost_per_g']);
+      final perKg = _numOf(item['cost_per_kg']);
+      if (perG > 0) {
+        unitCost = perG;
+      } else if (perKg > 0) {
+        unitCost = perKg / 1000.0;
+      }
+    }
+    if (unitCost <= 0 && measure > 0) {
+      unitCost = lineCost > 0 ? (lineCost / measure) : 0.0;
+    }
+
+    final meta = item['meta'];
+    final metaMap = meta is Map ? meta.cast<String, dynamic>() : {};
+    final ginsengGrams = _intOf(
+      item['ginseng_grams'] ??
+          item['ginsengGrams'] ??
+          metaMap['ginseng_grams'] ??
+          metaMap['ginsengGrams'],
+      0,
+    );
+    final showGinseng =
+        ginsengGrams > 0 ||
+        item.containsKey('ginseng_grams') ||
+        item.containsKey('ginsengGrams') ||
+        metaMap.containsKey('ginseng_grams') ||
+        metaMap.containsKey('ginsengGrams');
+
+    final gramsCtrl = TextEditingController(
+      text: grams > 0 ? grams.toStringAsFixed(0) : '',
+    );
+    final qtyCtrl = TextEditingController(
+      text: qty > 0 ? _formatQty(qty) : '',
+    );
+    final priceCtrl = TextEditingController(
+      text: unitPrice > 0 ? unitPrice.toStringAsFixed(2) : '',
+    );
+    final ginsengCtrl = TextEditingController(
+      text: ginsengGrams > 0 ? ginsengGrams.toString() : '',
+    );
+
+    return _InvoiceItemDraft(
+      raw: item,
+      label: label,
+      unit: unit,
+      showGrams: showGrams,
+      showQty: showQty,
+      useGrams: useGrams,
+      spicedEnabled: component.spicedEnabled == true,
+      spiced: component.spiced ?? false,
+      showGinseng: showGinseng,
+      unitCost: unitCost,
+      baseLineCost: lineCost,
+      priceCtrl: priceCtrl,
+      qtyCtrl: qtyCtrl,
+      gramsCtrl: gramsCtrl,
+      ginsengCtrl: ginsengCtrl,
+    );
+  }
+
+  void _initInvoiceFields() {
+    final invoiceNumber = _intOf(_m['invoice_number'], 0);
+    if (invoiceNumber > 0) {
+      _invoiceNumberCtrl.text = invoiceNumber.toString();
+    }
+    _paymentMethodCtrl.text = (_m['payment_method'] ?? '').toString();
+    _isDeferred = (_m['is_deferred'] ?? false) == true;
+    _isPaid = (_m['paid'] ?? (!_isDeferred)) == true;
+    final dueAmount = _resolveDueAmount(
+      _m,
+      fallbackTotal: _numOf(_m['total_price']),
+    );
+    if (dueAmount > 0 || _m.containsKey('due_amount')) {
+      _dueAmountCtrl.text = dueAmount.toStringAsFixed(2);
+    }
+
+    final items = _asListMap(_m['items']);
+    for (final raw in items) {
+      final draft = _buildInvoiceItemDraft(raw);
+      _invoiceItems.add(draft);
+      draft.priceCtrl.addListener(_onInvoiceItemChanged);
+      draft.qtyCtrl.addListener(_onInvoiceItemChanged);
+      draft.gramsCtrl.addListener(_onInvoiceItemChanged);
+    }
+    _syncInvoiceTotals();
   }
 
   @override
@@ -125,15 +402,25 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
         _setTotalPriceText(newTotal);
       });
     }
+
+    if (_type == 'invoice') {
+      _initInvoiceFields();
+    }
   }
 
   @override
   void dispose() {
+    for (final item in _invoiceItems) {
+      item.dispose();
+    }
     _totalPriceCtrl.dispose();
     _qtyCtrl.dispose();
     _gramsCtrl.dispose();
     _ginsengCtrl.dispose();
     _noteCtrl.dispose();
+    _paymentMethodCtrl.dispose();
+    _invoiceNumberCtrl.dispose();
+    _dueAmountCtrl.dispose();
     super.dispose();
   }
 
@@ -212,13 +499,15 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
     }
 
     dynamic idFromRow(Map<String, dynamic> row) {
-      return row['id'] ??
-          row['item_id'] ??
-          row['itemId'] ??
+      return row['product_id'] ??
+          row['productId'] ??
           row['single_id'] ??
           row['singleId'] ??
           row['blend_id'] ??
-          row['blendId'];
+          row['blendId'] ??
+          row['item_id'] ??
+          row['itemId'] ??
+          row['id'];
     }
 
     double gramsFromRow(Map<String, dynamic> row) {
@@ -238,7 +527,13 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
         : (linesType.isNotEmpty ? linesType : detectSaleType(m)).toString();
     if (type == 'single' || type == 'ready_blend') {
       final coll = (type == 'single') ? 'singles' : 'blends';
-      final id = m['single_id'] ?? m['blend_id'] ?? m['item_id'] ?? m['id'];
+      final id =
+          m['product_id'] ??
+          m['productId'] ??
+          m['single_id'] ??
+          m['blend_id'] ??
+          m['item_id'] ??
+          m['id'];
       final grams = d(m['grams']);
       acc(coll, id, grams);
     }
@@ -451,6 +746,113 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
     });
   }
 
+  void _removeInvoiceItem(int index) {
+    if (_busy || index < 0 || index >= _invoiceItems.length) return;
+    setState(() {
+      final removed = _invoiceItems.removeAt(index);
+      removed.dispose();
+      _syncInvoiceTotals();
+    });
+  }
+
+  Map<String, dynamic> _buildUpdatedInvoiceItem(
+    _InvoiceItemDraft item, {
+    required bool applyComplimentary,
+  }) {
+    final updated = Map<String, dynamic>.from(item.raw);
+    final grams = _numOf(item.gramsCtrl.text);
+    final qty = _numOf(item.qtyCtrl.text);
+    final unitPrice = _numOf(item.priceCtrl.text);
+    final linePrice =
+        _invoiceLinePrice(item, applyComplimentary: applyComplimentary);
+    final lineCost = _invoiceLineCost(item);
+
+    final hasGramsKey =
+        item.showGrams ||
+        updated.containsKey('grams') ||
+        updated.containsKey('weight');
+    if (hasGramsKey) {
+      updated['grams'] = grams;
+      if (updated.containsKey('weight')) updated['weight'] = grams;
+    }
+
+    final hasQtyKey =
+        item.showQty ||
+        updated.containsKey('qty') ||
+        updated.containsKey('quantity') ||
+        updated.containsKey('count') ||
+        updated.containsKey('pieces');
+    if (hasQtyKey) {
+      if (updated.containsKey('qty') || !updated.containsKey('quantity')) {
+        updated['qty'] = qty;
+      }
+      if (updated.containsKey('quantity')) updated['quantity'] = qty;
+      if (updated.containsKey('count')) updated['count'] = qty;
+      if (updated.containsKey('pieces')) updated['pieces'] = qty;
+    }
+
+    if (item.unit.isNotEmpty) {
+      updated['unit'] = item.unit;
+    }
+
+    updated['line_total_price'] = linePrice;
+    updated['line_total_cost'] = lineCost;
+    if (updated.containsKey('total_price')) updated['total_price'] = linePrice;
+    if (updated.containsKey('total_cost')) updated['total_cost'] = lineCost;
+
+    if (item.usesMeasure) {
+      updated['unit_price'] = unitPrice;
+      if (item.unitCost > 0) {
+        updated['unit_cost'] = item.unitCost;
+      }
+    }
+
+    final metaRaw = updated['meta'];
+    Map<String, dynamic>? metaMap =
+        metaRaw is Map ? Map<String, dynamic>.from(metaRaw) : null;
+
+    if (item.spicedEnabled) {
+      metaMap ??= <String, dynamic>{};
+      metaMap['spicedEnabled'] = true;
+      metaMap['spiced'] = item.spiced;
+      updated['spiced'] = item.spiced;
+      if (updated.containsKey('is_spiced')) {
+        updated['is_spiced'] = item.spiced;
+      }
+    }
+
+    final ginsengValue = _intOf(item.ginsengCtrl.text, 0).clamp(0, 100000);
+    final hasGinsengKey =
+        item.showGinseng ||
+        updated.containsKey('ginseng_grams') ||
+        updated.containsKey('ginsengGrams') ||
+        (metaMap?.containsKey('ginseng_grams') ?? false) ||
+        (metaMap?.containsKey('ginsengGrams') ?? false);
+    if (hasGinsengKey) {
+      metaMap ??= <String, dynamic>{};
+      if (ginsengValue > 0) {
+        metaMap['ginseng_grams'] = ginsengValue;
+      } else {
+        metaMap.remove('ginseng_grams');
+        metaMap.remove('ginsengGrams');
+      }
+      if (updated.containsKey('ginseng_grams')) {
+        updated['ginseng_grams'] = ginsengValue;
+      } else if (ginsengValue > 0) {
+        updated['ginseng_grams'] = ginsengValue;
+      }
+      if (updated.containsKey('ginsengGrams')) {
+        updated['ginsengGrams'] = ginsengValue;
+      }
+    }
+
+    if (metaMap != null) {
+      updated['meta'] = metaMap;
+    }
+
+    return updated;
+  }
+
   Future<void> _save() async {
     setState(() => _busy = true);
     try {
@@ -469,6 +871,66 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
       updates['is_spiced'] = _isSpiced;
 
       if (_isComplimentary) freezeProfit = false;
+
+      if (type == 'invoice') {
+        final bool isDeferred = _isDeferred;
+        final bool paid = _isPaid;
+        bool freezeProfitInvoice = isDeferred && !paid;
+        if (_isComplimentary) freezeProfitInvoice = false;
+
+        final updatedItems = <Map<String, dynamic>>[];
+        double totalPrice = 0.0;
+        double totalCost = 0.0;
+
+        for (final item in _invoiceItems) {
+          final linePrice =
+              _invoiceLinePrice(item, applyComplimentary: _isComplimentary);
+          final lineCost = _invoiceLineCost(item);
+          totalPrice += linePrice;
+          totalCost += lineCost;
+          updatedItems.add(
+            _buildUpdatedInvoiceItem(
+              item,
+              applyComplimentary: _isComplimentary,
+            ),
+          );
+        }
+
+        if (_isComplimentary) {
+          totalPrice = 0.0;
+        }
+
+        updates['items'] = updatedItems;
+        updates['total_price'] = totalPrice;
+        updates['total_cost'] = totalCost;
+        if (_isComplimentary) {
+          updates['profit_total'] = 0.0;
+        } else if (!freezeProfitInvoice) {
+          updates['profit_total'] = totalPrice - totalCost;
+        }
+
+        updates['payment_method'] = _paymentMethodCtrl.text.trim();
+        updates['is_deferred'] = isDeferred;
+        updates['paid'] = paid;
+        final dueInput = _numOf(_dueAmountCtrl.text);
+        updates['due_amount'] = _normalizeDueAmount(
+          input: dueInput,
+          totalPrice: totalPrice,
+          isDeferred: isDeferred,
+          isPaid: paid,
+        );
+
+        updates['manual_override'] = true;
+        updates['updated_at'] = FieldValue.serverTimestamp();
+
+        await _applyStockDeltaAndUpdate(updates);
+        if (!mounted) return;
+        Navigator.pop(context, true);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text(AppStrings.editSaved)));
+        return;
+      }
 
       if (type == 'extra') {
         final int newQty = _intOf(
@@ -879,6 +1341,252 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
     }
   }
 
+  Widget _buildInvoiceHeaderSection() {
+    final showDue =
+        _isDeferred || _dueAmountCtrl.text.trim().isNotEmpty;
+    return Column(
+      children: [
+        TextFormField(
+          controller: _invoiceNumberCtrl,
+          readOnly: true,
+          textAlign: TextAlign.center,
+          decoration: const InputDecoration(
+            labelText: AppStrings.invoiceNumberLabel,
+            border: OutlineInputBorder(),
+            isDense: true,
+          ),
+        ),
+        const SizedBox(height: 10),
+        TextFormField(
+          controller: _paymentMethodCtrl,
+          textAlign: TextAlign.center,
+          decoration: const InputDecoration(
+            labelText: AppStrings.paymentMethodLabel,
+            border: OutlineInputBorder(),
+            isDense: true,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Row(
+          children: [
+            Expanded(
+              child: CheckboxListTile(
+                value: _isDeferred,
+                onChanged: (v) {
+                  setState(() {
+                    _isDeferred = v ?? false;
+                    if (!_isDeferred) {
+                      _isPaid = true;
+                      _dueAmountCtrl.text = '0.00';
+                    }
+                    _syncInvoiceTotals();
+                  });
+                },
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                title: const Text(AppStrings.deferredLabel),
+              ),
+            ),
+            Expanded(
+              child: CheckboxListTile(
+                value: _isPaid,
+                onChanged: (v) {
+                  setState(() {
+                    _isPaid = v ?? false;
+                    if (!_isPaid) {
+                      _isDeferred = true;
+                      if (_numOf(_dueAmountCtrl.text) <= 0) {
+                        _dueAmountCtrl.text =
+                            _invoiceTotalPrice.toStringAsFixed(2);
+                      }
+                    } else {
+                      _dueAmountCtrl.text = '0.00';
+                    }
+                    _syncInvoiceTotals();
+                  });
+                },
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                title: const Text(AppStrings.paidLabel),
+              ),
+            ),
+          ],
+        ),
+        if (showDue) ...[
+          const SizedBox(height: 6),
+          TextFormField(
+            controller: _dueAmountCtrl,
+            enabled: _isDeferred && !_isPaid,
+            textAlign: TextAlign.center,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(
+              labelText: AppStrings.labelAmountDue,
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildInvoiceItemCard(_InvoiceItemDraft item, int index) {
+    final linePrice =
+        _invoiceLinePrice(item, applyComplimentary: _isComplimentary);
+    final lineCost = _invoiceLineCost(item);
+    final priceLabel = item.usesMeasure
+        ? AppStrings.pricePerUnitLabel
+        : AppStrings.lineTotalPriceLabel;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.black12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  item.label,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+              IconButton(
+                tooltip: AppStrings.actionDelete,
+                onPressed: _busy ? null : () => _removeInvoiceItem(index),
+                icon: const Icon(Icons.delete_outline),
+              ),
+            ],
+          ),
+          if (item.showGrams || item.showQty) ...[
+            Row(
+              children: [
+                if (item.showGrams)
+                  Expanded(
+                    child: TextFormField(
+                      controller: item.gramsCtrl,
+                      textAlign: TextAlign.center,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: AppStrings.gramsQuantityLabel,
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                    ),
+                  ),
+                if (item.showGrams && item.showQty) const SizedBox(width: 8),
+                if (item.showQty)
+                  Expanded(
+                    child: TextFormField(
+                      controller: item.qtyCtrl,
+                      textAlign: TextAlign.center,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: const InputDecoration(
+                        labelText: AppStrings.quantityLabel,
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+          ],
+          TextFormField(
+            controller: item.priceCtrl,
+            enabled: !_isComplimentary,
+            textAlign: TextAlign.center,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(
+              labelText: priceLabel,
+              border: const OutlineInputBorder(),
+              isDense: true,
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (item.spicedEnabled)
+            CheckboxListTile(
+              value: item.spiced,
+              onChanged: _busy
+                  ? null
+                  : (v) => setState(() => item.spiced = v ?? false),
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              title: const Text(AppStrings.spicedLabel),
+            ),
+          if (item.showGinseng) ...[
+            TextFormField(
+              controller: item.ginsengCtrl,
+              textAlign: TextAlign.center,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: AppStrings.ginsengGramsLabel,
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '${AppStrings.totalLabel}: ${linePrice.toStringAsFixed(2)}',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              Text(
+                '${AppStrings.costLabelDefinite}: ${lineCost.toStringAsFixed(2)}',
+                style: const TextStyle(color: Colors.black54),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInvoiceItemsSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          AppStrings.invoiceItemsLabel,
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 8),
+        if (_invoiceItems.isEmpty)
+          const Text(AppStrings.noItems)
+        else
+          ..._invoiceItems
+              .asMap()
+              .entries
+              .map((entry) => _buildInvoiceItemCard(entry.value, entry.key)),
+        const SizedBox(height: 6),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              '${AppStrings.totalLabel}: ${_invoiceTotalPrice.toStringAsFixed(2)}',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            Text(
+              '${AppStrings.costLabelDefinite}: ${_invoiceTotalCost.toStringAsFixed(2)}',
+              style: const TextStyle(color: Colors.black54),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final name =
@@ -893,6 +1601,7 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
     final isDrink = _type == 'drink';
     final isWeighted = _type == 'single' || _type == 'ready_blend';
     final isExtras = _type == 'extra';
+    final isInvoice = _type == 'invoice';
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
     return LayoutBuilder(
@@ -933,6 +1642,7 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
                 TextFormField(
                   controller: _totalPriceCtrl,
                   enabled: !_isComplimentary,
+                  readOnly: isInvoice,
                   textAlign: TextAlign.center,
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
@@ -944,6 +1654,12 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
                   ),
                 ),
                 const SizedBox(height: 10),
+                if (isInvoice) ...[
+                  _buildInvoiceHeaderSection(),
+                  const SizedBox(height: 10),
+                  _buildInvoiceItemsSection(),
+                  const SizedBox(height: 10),
+                ],
                 if (isDrink) ...[
                   TextFormField(
                     controller: _qtyCtrl,
@@ -1047,6 +1763,9 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
                     setState(() {
                       final nv = v ?? false;
                       _isComplimentary = nv;
+                      if (isInvoice) {
+                        _syncInvoiceTotals();
+                      }
                       if (isExtras) {
                         if (nv) {
                           _lastNonComplPrice = double.tryParse(
@@ -1068,8 +1787,9 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
                   controlAffinity: ListTileControlAffinity.leading,
                   title: const Text(AppStrings.complimentaryLabel),
                 ),
-                if ((_type == 'single' || _type == 'ready_blend') ||
-                    (_m.containsKey('is_spiced') && !isExtras))
+                if (!isInvoice &&
+                    ((_type == 'single' || _type == 'ready_blend') ||
+                        (_m.containsKey('is_spiced') && !isExtras)))
                   CheckboxListTile(
                     value: _isSpiced,
                     onChanged: (v) => setState(() => _isSpiced = v ?? false),
@@ -1116,5 +1836,50 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
         );
       },
     );
+  }
+}
+
+class _InvoiceItemDraft {
+  _InvoiceItemDraft({
+    required this.raw,
+    required this.label,
+    required this.unit,
+    required this.showGrams,
+    required this.showQty,
+    required this.useGrams,
+    required this.spicedEnabled,
+    required this.spiced,
+    required this.showGinseng,
+    required this.unitCost,
+    required this.baseLineCost,
+    required this.priceCtrl,
+    required this.qtyCtrl,
+    required this.gramsCtrl,
+    required this.ginsengCtrl,
+  });
+
+  final Map<String, dynamic> raw;
+  final String label;
+  final String unit;
+  final bool showGrams;
+  final bool showQty;
+  final bool useGrams;
+  final bool spicedEnabled;
+  bool spiced;
+  final bool showGinseng;
+  final double unitCost;
+  final double baseLineCost;
+  final TextEditingController priceCtrl;
+  final TextEditingController qtyCtrl;
+  final TextEditingController gramsCtrl;
+  final TextEditingController ginsengCtrl;
+
+  bool get usesMeasure => showGrams || showQty;
+
+  void dispose() {
+    priceCtrl.dispose();
+    qtyCtrl.dispose();
+    gramsCtrl.dispose();
+    ginsengCtrl.dispose();
   }
 }
