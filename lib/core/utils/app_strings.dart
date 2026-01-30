@@ -10,8 +10,7 @@ class AppStrings {
 
   static const tabHome = 'الرئيسية';
   static const homeTitle = 'لوحة التحكم';
-  static const homeSubtitle = 'كل أقسام الإدارة';
-  static const homeQuickAccess = 'اختصارات سريعة';
+  static const homeQuickAccess = 'كل أقسام الإدارة';
   static const homeCardHint = 'دخول سريع';
   static const tabHistory = 'السجل';
   static const tabStats = 'الإحصائيات';
@@ -310,8 +309,7 @@ class AppStrings {
   static const editRecipeTitle = 'تعديل توليفة';
   static const recipeNameLabel = 'اسم التوليفة';
   static const recipesPasswordTitle = 'رمز الدخول';
-  static const recipesPasswordSubtitle =
-      'ادخل رمز فتح صفحة تحضير التوليفات';
+  static const recipesPasswordSubtitle = 'ادخل رمز فتح صفحة تحضير التوليفات';
   static const recipesPasswordHint = 'رمز المرور';
   static const recipesPasswordWrong = 'الرمز غير صحيح';
   static const actionUnlock = 'دخول';

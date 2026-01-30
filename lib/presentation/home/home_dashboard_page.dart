@@ -195,41 +195,25 @@ class _HeroCard extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        const Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                AppStrings.homeTitle,
-                                textAlign: TextAlign.right,
-                                style: TextStyle(
-                                  fontSize: 26,
-                                  fontWeight: FontWeight.w800,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              SizedBox(height: 6),
-                              Text(
-                                AppStrings.homeSubtitle,
-                                textAlign: TextAlign.right,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: Color(0xFFF5E7D8),
-                                ),
-                              ),
-                            ],
+                        Expanded(
+                          child: SizedBox(
+                            height: 100,
+                            child: FittedBox(
+                              fit: BoxFit.contain,
+                              alignment: Alignment.centerRight,
+                              child: Image.asset('assets/name.png'),
+                            ),
                           ),
                         ),
                         const SizedBox(width: 12),
                         SizedBox(
                           width: 125,
-                          height: 90,
+                          height: 100,
                           child: Center(
                             child: Image.asset(
                               'assets/Group8.png',
-                              width: 70,
-                              height: 70,
+                              width: 75,
+                              height: 75,
                               fit: BoxFit.contain,
                             ),
                           ),
@@ -456,25 +440,11 @@ const _features = <_HomeFeature>[
     gradient: [Color(0xFFF7EFE9), Color(0xFFE6D8D0)],
   ),
   _HomeFeature(
-    tab: AppTab.forecast,
-    title: AppStrings.tabForecast,
-    icon: Icons.auto_graph_outlined,
-    accent: Color(0xFF2F7A6D),
-    gradient: [Color(0xFFE8F6F2), Color(0xFFCFEADF)],
-  ),
-  _HomeFeature(
     tab: AppTab.inventory,
     title: AppStrings.tabInventory,
     icon: Icons.inventory_2_outlined,
     accent: Color(0xFF6C5B3E),
     gradient: [Color(0xFFF2EEE8), Color(0xFFE1D7C8)],
-  ),
-  _HomeFeature(
-    tab: AppTab.stocktake,
-    title: AppStrings.tabStocktake,
-    icon: Icons.fact_check_outlined,
-    accent: Color(0xFF3C6E71),
-    gradient: [Color(0xFFE9F4F4), Color(0xFFD2E6E7)],
   ),
   _HomeFeature(
     tab: AppTab.edits,
@@ -498,11 +468,25 @@ const _features = <_HomeFeature>[
     gradient: [Color(0xFFF5F0E0), Color(0xFFE6D9B7)],
   ),
   _HomeFeature(
+    tab: AppTab.stocktake,
+    title: AppStrings.tabStocktake,
+    icon: Icons.fact_check_outlined,
+    accent: Color(0xFF3C6E71),
+    gradient: [Color(0xFFE9F4F4), Color(0xFFD2E6E7)],
+  ),
+  _HomeFeature(
     tab: AppTab.recycleBin,
     title: AppStrings.tabRecycleBin,
     icon: Icons.delete_sweep_outlined,
     accent: Color(0xFF6D4C41),
     gradient: [Color(0xFFF4EDE9), Color(0xFFE8D9D2)],
+  ),
+  _HomeFeature(
+    tab: AppTab.forecast,
+    title: AppStrings.tabForecast,
+    icon: Icons.auto_graph_outlined,
+    accent: Color(0xFF2F7A6D),
+    gradient: [Color(0xFFE8F6F2), Color(0xFFCFEADF)],
   ),
   // Hidden per request: remove Grind tile from home.
   // _HomeFeature(
