@@ -108,6 +108,19 @@
   </picture>
   
   
+  <script>
+    // Disable service worker registration to avoid reload loops on some hosts.
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then((regs) => {
+        for (const reg of regs) {
+          reg.unregister();
+        }
+      });
+      navigator.serviceWorker.register = function() {
+        return Promise.resolve();
+      };
+    }
+  </script>
   <script src="flutter_bootstrap.js" async=""></script>
 
 

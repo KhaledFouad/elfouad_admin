@@ -298,6 +298,68 @@ class SalesHistoryRepository {
     return count;
   }
 
+  Stream<int> watchUnpaidCreditCount() {
+    final deferredStream = _firestore
+        .collection('sales')
+        .where('is_deferred', isEqualTo: true)
+        .where('paid', isEqualTo: false)
+        .snapshots();
+
+    final creditStream = _firestore
+        .collection('sales')
+        .where('is_credit', isEqualTo: true)
+        .where('paid', isEqualTo: false)
+        .snapshots();
+
+    QuerySnapshot<Map<String, dynamic>>? lastDeferred;
+    QuerySnapshot<Map<String, dynamic>>? lastCredit;
+
+    return Stream<int>.multi((controller) {
+      void emitCount() {
+        if (lastDeferred == null && lastCredit == null) return;
+        final combined =
+            <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
+        if (lastDeferred != null) {
+          for (final doc in lastDeferred!.docs) {
+            combined[doc.id] = doc;
+          }
+        }
+        if (lastCredit != null) {
+          for (final doc in lastCredit!.docs) {
+            combined[doc.id] = doc;
+          }
+        }
+        var count = 0;
+        for (final doc in combined.values) {
+          if (!_isCreditHidden(doc.data())) {
+            count++;
+          }
+        }
+        controller.add(count);
+      }
+
+      final sub1 = deferredStream.listen(
+        (snap) {
+          lastDeferred = snap;
+          emitCount();
+        },
+        onError: controller.addError,
+      );
+      final sub2 = creditStream.listen(
+        (snap) {
+          lastCredit = snap;
+          emitCount();
+        },
+        onError: controller.addError,
+      );
+
+      controller.onCancel = () async {
+        await sub1.cancel();
+        await sub2.cancel();
+      };
+    });
+  }
+
   Future<void> hideCreditCustomer(String customerName) async {
     final name = customerName.trim();
     if (name.isEmpty) {
@@ -321,6 +383,49 @@ class SalesHistoryRepository {
         'credit_hidden': true,
         'credit_hidden_at': FieldValue.serverTimestamp(),
       });
+      opCount++;
+      if (opCount >= batchLimit) {
+        await batch.commit();
+        batch = _firestore.batch();
+        opCount = 0;
+      }
+    }
+    if (opCount > 0) {
+      await batch.commit();
+    }
+  }
+
+  Future<void> renameCreditCustomer({
+    required String oldName,
+    required String newName,
+  }) async {
+    final from = oldName.trim();
+    final to = newName.trim();
+    if (from.isEmpty || to.isEmpty) {
+      throw Exception('Customer name is required.');
+    }
+    if (from == to) return;
+
+    final snap = await _firestore
+        .collection('sales')
+        .where('note', isEqualTo: from)
+        .get();
+
+    if (snap.docs.isEmpty) {
+      return;
+    }
+
+    const batchLimit = 400;
+    var batch = _firestore.batch();
+    var opCount = 0;
+    for (final doc in snap.docs) {
+      final data = doc.data();
+      final isCredit =
+          data['is_deferred'] == true ||
+          data['is_credit'] == true ||
+          data['settled_at'] != null;
+      if (!isCredit) continue;
+      batch.update(doc.reference, {'note': to});
       opCount++;
       if (opCount >= batchLimit) {
         await batch.commit();
@@ -395,6 +500,13 @@ class SalesHistoryRepository {
             ops = _stockOpsFromSale(data, usageSource: drinkData);
           }
         }
+      }
+      final drinkItemOps = await _drinkOpsFromLineItems(
+        transaction,
+        _lineItemsFromSale(data),
+      );
+      if (drinkItemOps.isNotEmpty) {
+        _mergeOps(ops, drinkItemOps);
       }
       final missingStockRefs = <String>[];
       for (final entry in ops.entries) {
@@ -475,6 +587,13 @@ class SalesHistoryRepository {
             ops = _stockOpsFromSale(saleData, usageSource: drinkData);
           }
         }
+      }
+      final drinkItemOps = await _drinkOpsFromLineItems(
+        transaction,
+        _lineItemsFromSale(saleData),
+      );
+      if (drinkItemOps.isNotEmpty) {
+        _mergeOps(ops, drinkItemOps);
       }
       for (final entry in ops.entries) {
         final grams = entry.value;
@@ -639,7 +758,18 @@ class SalesHistoryRepository {
   String? _drinkIdFromSale(Map<String, dynamic> data) {
     final raw = data['drink_id'] ?? data['drinkId'] ?? data['drinkID'];
     final id = raw?.toString().trim() ?? '';
-    return id.isEmpty ? null : id;
+    if (id.isNotEmpty) return id;
+    final type = (data['type'] ?? '').toString();
+    if (type == 'drink') {
+      final fallback =
+          data['product_id'] ??
+          data['productId'] ??
+          data['item_id'] ??
+          data['itemId'];
+      final fallbackId = fallback?.toString().trim() ?? '';
+      return fallbackId.isEmpty ? null : fallbackId;
+    }
+    return null;
   }
 
   String? _normalizeColl(String? raw) {
@@ -908,6 +1038,83 @@ class SalesHistoryRepository {
         if (meta != null && meta != usageSource) {
           applyUsage(meta);
         }
+      }
+    }
+
+    return out;
+  }
+
+  List<Map<String, dynamic>> _lineItemsFromSale(Map<String, dynamic> data) {
+    List<Map<String, dynamic>> asList(dynamic value) {
+      if (value is List) {
+        return value
+            .map(
+              (e) => e is Map<String, dynamic>
+                  ? e
+                  : (e is Map
+                        ? e.cast<String, dynamic>()
+                        : <String, dynamic>{}),
+            )
+            .toList();
+      }
+      return const [];
+    }
+
+    return [
+      ...asList(data['components']),
+      ...asList(data['items']),
+      ...asList(data['lines']),
+      ...asList(data['cart_items']),
+      ...asList(data['order_items']),
+      ...asList(data['products']),
+    ];
+  }
+
+  void _mergeOps(
+    Map<DocumentReference<Map<String, dynamic>>, double> base,
+    Map<DocumentReference<Map<String, dynamic>>, double> extra,
+  ) {
+    for (final entry in extra.entries) {
+      base[entry.key] = (base[entry.key] ?? 0.0) + entry.value;
+    }
+  }
+
+  Future<Map<DocumentReference<Map<String, dynamic>>, double>>
+  _drinkOpsFromLineItems(
+    Transaction transaction,
+    List<Map<String, dynamic>> lineItems,
+  ) async {
+    if (lineItems.isEmpty) {
+      return <DocumentReference<Map<String, dynamic>>, double>{};
+    }
+
+    final out = <DocumentReference<Map<String, dynamic>>, double>{};
+    final drinkCache = <String, Map<String, dynamic>>{};
+
+    for (final item in lineItems) {
+      if (!_isDrinkSale(item)) continue;
+
+      var itemOps = _stockOpsFromSale(item);
+      if (itemOps.isEmpty) {
+        final drinkId = _drinkIdFromSale(item);
+        if (drinkId != null && drinkId.isNotEmpty) {
+          Map<String, dynamic>? drinkData = drinkCache[drinkId];
+          if (drinkData == null) {
+            final drinkRef = _firestore.collection('drinks').doc(drinkId);
+            final drinkSnap = await transaction.get(drinkRef);
+            drinkData = drinkSnap.data();
+            if (drinkData != null) {
+              drinkCache[drinkId] = drinkData;
+            }
+          }
+          if (drinkData != null) {
+            itemOps = _stockOpsFromSale(item, usageSource: drinkData);
+          }
+        }
+      }
+
+      if (itemOps.isNotEmpty) {
+        _mergeOps(out, itemOps);
       }
     }
 

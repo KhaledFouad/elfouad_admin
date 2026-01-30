@@ -14,6 +14,7 @@ class _ExtraEditSheetState extends State<ExtraEditSheet> {
   late Map<String, dynamic> _data;
   final _formKey = GlobalKey<FormState>();
   final _name = TextEditingController();
+  final _posOrder = TextEditingController();
   final _category = TextEditingController();
   final _unit = TextEditingController();
   final _priceSell = TextEditingController();
@@ -27,6 +28,10 @@ class _ExtraEditSheetState extends State<ExtraEditSheet> {
     super.initState();
     _data = widget.snap.data() ?? <String, dynamic>{};
     _name.text = (_data['name'] ?? '').toString();
+    final posRaw = _data['posOrder'] ?? _data['pos_order'];
+    if (posRaw != null) {
+      _posOrder.text = _format(_num(posRaw));
+    }
     _category.text = (_data['category'] ?? '').toString();
     _unit.text = (_data['unit'] ?? '').toString();
     final stock = _num(_data['stock_units'] ?? _data['stockUnits']);
@@ -39,6 +44,7 @@ class _ExtraEditSheetState extends State<ExtraEditSheet> {
   @override
   void dispose() {
     _name.dispose();
+    _posOrder.dispose();
     _category.dispose();
     _unit.dispose();
     _priceSell.dispose();
@@ -50,6 +56,13 @@ class _ExtraEditSheetState extends State<ExtraEditSheet> {
   double _num(dynamic v) {
     if (v is num) return v.toDouble();
     return double.tryParse(v?.toString().replaceAll(',', '.') ?? '') ?? 0.0;
+  }
+
+  int? _intOrNull(String? value) {
+    if (value == null) return null;
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return null;
+    return int.tryParse(trimmed);
   }
 
   String _format(double v) {
@@ -78,8 +91,11 @@ class _ExtraEditSheetState extends State<ExtraEditSheet> {
         'cost_unit': cost,
         'stock_units': _num(_stockUnits.text),
         'active': _active,
+        'type': 'extra',
+        'is_extra': true,
         'updated_at': now,
       };
+      _applyPosOrder(upd);
 
       await widget.snap.reference.update(upd);
 
@@ -132,6 +148,14 @@ class _ExtraEditSheetState extends State<ExtraEditSheet> {
               AppStrings.nameLabel,
               _name,
               validator: (v) => _requiredText(v, AppStrings.nameRequiredPrompt),
+            ),
+            const SizedBox(height: 8),
+            _field(
+              AppStrings.posOrderLabel,
+              _posOrder,
+              numKeyboard: true,
+              validator: (v) =>
+                  _optionalInt(v, AppStrings.posOrderInvalidPrompt),
             ),
             const SizedBox(height: 8),
             _field(
@@ -230,5 +254,24 @@ class _ExtraEditSheetState extends State<ExtraEditSheet> {
   String? _requiredPositive(String? value, String message) {
     if (_num(value) <= 0) return message;
     return null;
+  }
+
+  String? _optionalInt(String? value, String message) {
+    if (value == null || value.trim().isEmpty) return null;
+    return _intOrNull(value) == null ? message : null;
+  }
+
+  void _applyPosOrder(Map<String, dynamic> upd) {
+    final text = _posOrder.text.trim();
+    if (text.isEmpty) {
+      upd['posOrder'] = FieldValue.delete();
+      upd['pos_order'] = FieldValue.delete();
+      return;
+    }
+    final posOrder = _intOrNull(text);
+    if (posOrder != null) {
+      upd['posOrder'] = posOrder;
+      upd['pos_order'] = posOrder;
+    }
   }
 }

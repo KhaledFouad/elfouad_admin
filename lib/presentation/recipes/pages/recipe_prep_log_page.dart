@@ -253,7 +253,6 @@ class RecipePrepLogPage extends StatelessWidget {
         ? amountGrams
         : (amountKg > 0 ? (amountKg * 1000).round() : 0);
     final components = _asListMap(data['components']);
-    final recipeId = (data['recipe_id'] ?? '').toString();
 
     showModalBottomSheet<void>(
       context: context,
@@ -317,11 +316,6 @@ class RecipePrepLogPage extends StatelessWidget {
                           AppStrings.gramsLabel,
                           totalGrams.toString(),
                         ),
-                        if (recipeId.isNotEmpty)
-                          _detailRow(
-                            AppStrings.recipeIdLabel,
-                            recipeId,
-                          ),
                         const SizedBox(height: 12),
                         const Text(
                           AppStrings.componentsLabel,
@@ -340,12 +334,6 @@ class RecipePrepLogPage extends StatelessWidget {
                             final grams = totalGrams > 0
                                 ? (totalGrams * (cPercent / 100)).round()
                                 : 0;
-                            final meta = <String>[];
-                            final coll = (c['coll'] ?? '').toString();
-                            final itemId = (c['item_id'] ?? c['itemId'] ?? '')
-                                .toString();
-                            if (coll.isNotEmpty) meta.add(coll);
-                            if (itemId.isNotEmpty) meta.add(itemId);
 
                             return Container(
                               margin: const EdgeInsets.only(bottom: 8),
@@ -367,16 +355,6 @@ class RecipePrepLogPage extends StatelessWidget {
                                       grams,
                                     ),
                                   ),
-                                  if (meta.isNotEmpty) ...[
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      meta.join(' - '),
-                                      style: const TextStyle(
-                                        fontSize: 11,
-                                        color: Colors.black54,
-                                      ),
-                                    ),
-                                  ],
                                 ],
                               ),
                             );

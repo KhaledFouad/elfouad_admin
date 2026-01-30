@@ -58,6 +58,51 @@ bool _isSpicedFrom(Map<String, dynamic> m) {
   return false;
 }
 
+bool _isTurkishCoffeeName(String name) {
+  final n = name.toLowerCase();
+  return n.contains('تركي') || n.contains('تركى') || n.contains('turk');
+}
+
+double _drinkGramsFromSale(Map<String, dynamic> m) {
+  double grams = _pickNum(m, [
+    'grams',
+    'total_grams',
+    'used_grams',
+    'grams_used',
+    'usedGrams',
+  ]);
+  if (grams > 0) return grams;
+
+  final meta = _metaOf(m);
+  grams = _pickNum(meta, [
+    'grams',
+    'total_grams',
+    'used_grams',
+    'grams_used',
+    'usedGrams',
+  ]);
+  if (grams > 0) return grams;
+
+  final perCup = _pickNum(m, [
+    'used_amount',
+    'usedAmount',
+    'grams_per_cup',
+    'gramsPerCup',
+  ]);
+  final metaPerCup = _pickNum(meta, [
+    'used_amount',
+    'usedAmount',
+    'grams_per_cup',
+    'gramsPerCup',
+  ]);
+  final amountPerCup = perCup > 0 ? perCup : metaPerCup;
+  if (amountPerCup <= 0) return 0.0;
+
+  final qty = _d(m['quantity'] ?? m['qty'] ?? m['count'] ?? m['pieces']);
+  final cups = qty > 0 ? qty : 1;
+  return amountPerCup * cups;
+}
+
 Future<QuerySnapshot<Map<String, dynamic>>> _getQuerySnapshot(
   Query<Map<String, dynamic>> query, {
   bool cacheFirst = false,
@@ -688,11 +733,13 @@ StatsHighlights _buildHighlights(
   final Map<DateTime, double> salesByDay = {};
   final Map<DateTime, double> profitByDay = {};
   final Map<DateTime, int> servingsByDay = {};
+  final Map<DateTime, double> gramsByDay = {};
   final Map<DateTime, Set<String>> ordersByDay = {};
 
   double totalSales = 0;
   int totalDrinkServings = 0;
   int totalSnackServings = 0;
+  double totalBeansGrams = 0;
   final uniqueOrders = <String>{};
 
   for (final m in data) {
@@ -726,10 +773,15 @@ StatsHighlights _buildHighlights(
     if (prodInRange) {
       final type = '${m['type'] ?? ''}';
       int servings = 0;
+      double grams = 0;
       if (type == 'drink') {
         final q = (m['quantity'] as num?)?.toDouble() ?? _d(m['quantity']);
         servings = (q > 0 ? q.round() : 1);
         totalDrinkServings += servings;
+      } else if (type == 'single' || type == 'ready_blend') {
+        grams = (m['grams'] as num?)?.toDouble() ?? _d(m['grams']);
+      } else if (type == 'custom_blend') {
+        grams = (m['total_grams'] as num?)?.toDouble() ?? _d(m['total_grams']);
       } else {
         final isExtra = type == 'extra' || m.containsKey('extra_id');
         if (isExtra) {
@@ -741,6 +793,10 @@ StatsHighlights _buildHighlights(
 
       if (servings > 0) {
         servingsByDay[prodDay] = (servingsByDay[prodDay] ?? 0) + servings;
+      }
+      if (grams > 0) {
+        gramsByDay[prodDay] = (gramsByDay[prodDay] ?? 0) + grams;
+        totalBeansGrams += grams;
       }
     }
   }
@@ -791,6 +847,7 @@ StatsHighlights _buildHighlights(
 
   final activeSalesDays = salesByDay.keys.length;
   final activeProdDays = servingsByDay.keys.length;
+  final activeBeansDays = gramsByDay.keys.length;
   final totalOrders = uniqueOrders.length;
 
   final avgDailySales = activeSalesDays > 0
@@ -801,6 +858,9 @@ StatsHighlights _buildHighlights(
       : 0.0;
   final avgSnacksPerDay = activeProdDays > 0
       ? (totalSnackServings / activeProdDays)
+      : 0.0;
+  final avgBeansGramsPerDay = activeBeansDays > 0
+      ? (totalBeansGrams / activeBeansDays)
       : 0.0;
   final avgOrdersPerDay = activeSalesDays > 0
       ? (totalOrders / activeSalesDays)
@@ -831,6 +891,7 @@ StatsHighlights _buildHighlights(
     averageDailySales: avgDailySales,
     averageDrinksPerDay: avgDrinksPerDay,
     averageSnacksPerDay: avgSnacksPerDay,
+    averageBeansGramsPerDay: avgBeansGramsPerDay,
     averageOrdersPerDay: avgOrdersPerDay,
     totalOrders: totalOrders,
     activeDays: activeSalesDays,
@@ -1087,6 +1148,61 @@ List<GroupRow> _buildBeansRows(
   return list;
 }
 
+List<GroupRow> _buildTurkishRows(
+  List<Map<String, dynamic>> data, {
+  required DateTime startUtc,
+  required DateTime endUtc,
+}) {
+  final map = <String, GroupRow>{};
+
+  for (final m in data) {
+    final isDeferred = (m['is_deferred'] ?? false) == true;
+    final paid = (m['paid'] ?? (!isDeferred)) == true;
+    final prodInRange = _inProductionRange(m, startUtc, endUtc);
+    final finInRange = _inFinancialRange(m, startUtc, endUtc);
+    if (!prodInRange && !finInRange) continue;
+
+    final type = '${m['type'] ?? ''}';
+    if (type != 'drink') continue;
+
+    final name = ('${m['drink_name'] ?? m['name'] ?? ''}').trim();
+    if (name.isEmpty || !_isTurkishCoffeeName(name)) continue;
+
+    final variant = ('${m['variant'] ?? m['roast'] ?? ''}').trim();
+    final key = variant.isEmpty ? name : '$name - $variant';
+
+    final includeGrams = prodInRange;
+    final includeMoney = finInRange && (!isDeferred || paid);
+
+    final qRaw = (m['quantity'] as num?)?.toDouble() ?? _d(m['quantity']);
+    final cups = qRaw > 0 ? qRaw.round() : 1;
+    final price =
+        (m['total_price'] as num?)?.toDouble() ?? _d(m['total_price']);
+    final cost =
+        (m['total_cost'] as num?)?.toDouble() ?? _d(m['total_cost']);
+    final isSpiced = _isSpicedFrom(m);
+
+    final cupsValue = includeGrams ? cups : 0;
+    final salesValue = includeMoney ? price : 0.0;
+    final costValue = includeMoney ? cost : 0.0;
+
+    final prev = map[key] ?? const GroupRow(key: '');
+    final base = prev.key.isEmpty ? GroupRow(key: key) : prev;
+    map[key] = base.add(
+      g: 0,
+      gPlain: isSpiced ? 0 : cupsValue.toDouble(),
+      gSpiced: isSpiced ? cupsValue.toDouble() : 0,
+      s: salesValue,
+      c: costValue,
+      p: salesValue - costValue,
+      cu: cupsValue,
+    );
+  }
+
+  final list = map.values.toList()..sort((a, b) => b.sales.compareTo(a.sales));
+  return list;
+}
+
 /// ============ Trends (مدفوع فقط + الربح من الداتا) ============
 
 TrendsBundle _buildTrends(
@@ -1228,6 +1344,12 @@ List<GroupRow> buildBeansRows(
   required DateTime startUtc,
   required DateTime endUtc,
 }) => _buildBeansRows(data, startUtc: startUtc, endUtc: endUtc);
+
+List<GroupRow> buildTurkishRows(
+  List<Map<String, dynamic>> data, {
+  required DateTime startUtc,
+  required DateTime endUtc,
+}) => _buildTurkishRows(data, startUtc: startUtc, endUtc: endUtc);
 
 StatsHighlights buildHighlights(
   List<Map<String, dynamic>> data, {

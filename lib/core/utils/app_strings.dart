@@ -15,6 +15,7 @@ class AppStrings {
   static const homeCardHint = 'دخول سريع';
   static const tabHistory = 'السجل';
   static const tabStats = 'الإحصائيات';
+  static const tabArchive = 'الأرشيف';
   static const tabInventory = 'المخزون';
   static const tabStocktake = 'الجرد';
   static const stocktakeTitle = 'الجرد';
@@ -52,6 +53,15 @@ class AppStrings {
   static const archiveFilterExtras = 'الإضافات';
   static const archiveFilterDrinks = 'المشروبات';
   static const archiveReasonLabel = 'السبب';
+  static const archiveTitle = 'الأرشيف';
+  static const archiveSummaryTitle = 'ملخص الأرشيف';
+  static const archiveTrendsTitle = 'اتجاهات الأرشيف';
+  static const archiveSalesProfitTrendTitle = 'تطور المبيعات والربح';
+  static const archiveCupsTrendTitle = 'تطور الأكواب';
+  static const archiveGramsTrendTitle = 'تطور جرامات البن';
+  static const archiveOpenDetails = 'عرض التفاصيل';
+  static const archiveMonthDataTitle = 'بيانات الشهر';
+  static const archiveCachedNotice = 'بيانات محفوظة على الجهاز';
   static const inventoryAll = 'الكل';
   static const inventorySingles = 'الأصناف المنفردة';
   static const inventoryBlends = 'التوليفات';
@@ -196,6 +206,7 @@ class AppStrings {
   static const extraSaleWrongType = 'Sale is not an extra.';
   static const extraSaleMissingId = 'Extra id is missing.';
   static const nameLabel = 'الاسم';
+  static const posOrderLabel = 'ترتيب الكاشير';
   static const noNameLabel = 'No name';
   static const roastOptionalLabel = 'درجة التحميص (اختياري)';
   static const drinkVariantsLabel = 'متغيرات المشروب';
@@ -223,6 +234,7 @@ class AppStrings {
   static const fillRoastNamesPrompt = 'من فضلك أدخل اسم كل درجة تحميص.';
   static const addRoastLevelsPrompt = 'أضف درجات التحميص.';
   static const nameRequiredPrompt = 'اكتب الاسم.';
+  static const posOrderInvalidPrompt = 'ادخل رقم صحيح للترتيب.';
   static const categoryRequiredPrompt = 'ادخل التصنيف.';
   static const categoryExistsWarning =
       'التصنيف موجود بالفعل، سجّل المنتج بداخله.';
@@ -297,6 +309,12 @@ class AppStrings {
   static const newRecipeTitle = 'توليفة جديدة';
   static const editRecipeTitle = 'تعديل توليفة';
   static const recipeNameLabel = 'اسم التوليفة';
+  static const recipesPasswordTitle = 'رمز الدخول';
+  static const recipesPasswordSubtitle =
+      'ادخل رمز فتح صفحة تحضير التوليفات';
+  static const recipesPasswordHint = 'رمز المرور';
+  static const recipesPasswordWrong = 'الرمز غير صحيح';
+  static const actionUnlock = 'دخول';
   static const roastLabel = 'التحميص';
   static const roastExampleHint = 'مثال: وسط';
   static const addSingleItem = 'إضافة صنف منفرد';
@@ -319,6 +337,8 @@ class AppStrings {
   static const summaryLabel = 'الملخص';
   static const drinksDataLabel = 'بيانات المشروبات';
   static const dailyHighlightsLabel = 'المؤشرات اليومية';
+  static const previousMonthsTitle = 'ملخص الشهور السابقة';
+  static const monthLabel = 'الشهر';
   static const beansDataLabel = 'بيانات البن';
   static const trendLabel = 'الترند';
   static const totalSalesLabel = 'إجمالي المبيعات';
@@ -328,6 +348,9 @@ class AppStrings {
   static const drinksAndSnacksTitle = 'مشروبات و سناكس';
   static const dailyHighlightsTitle = 'أبرز المؤشرات اليومية';
   static const beansByNameTitle = 'البن حسب الاسم';
+  static const turkishCoffeeTitle = 'القهوة التركي';
+  static String turkishCoffeeTotalCups(num cups) =>
+      'إجمالي أكواب التركي: ${cups.toStringAsFixed(0)}';
   static const dailyTrendsTitle = 'الاتجاهات الزمنية (يومي)';
   static const previousMonthTooltip = 'الشهر السابق';
   static const nextMonthTooltip = 'الشهر التالي';
@@ -356,6 +379,7 @@ class AppStrings {
   static const averageDailySalesTitle = 'متوسط المبيعات اليومية';
   static const averageDrinksPerDayTitle = 'متوسط المشروبات/اليوم';
   static const averageSnacksPerDayTitle = 'متوسط السناكس/اليوم';
+  static const averageBeansGramsPerDayTitle = 'متوسط جرامات البن/اليوم';
   static const averageOrdersPerDayTitle = 'متوسط العمليات/اليوم';
   static const noBeansData = 'لا توجد بيانات بن في هذا المدى';
   static const itemLabel = 'الصنف';
@@ -460,10 +484,12 @@ class AppStrings {
   static String paidOrdersSubtitle(int count) => '$count عملية مدفوعة';
   static const titleSalesHistory = salesHistoryTitle;
   static const titleCreditAccounts = 'حسابات مؤجلة';
+  static const editCreditAccountNameTitle = 'تعديل اسم الحساب';
   static const confirmDeleteCreditAccount = 'هل تريد حذف حساب هذا العميل؟';
   static const confirmDeleteCreditAccountUnpaid =
       'هناك عمليات مؤجلة غير مدفوعة لهذا العميل. هل تريد حذف الحساب؟';
   static const creditAccountDeleted = 'تم حذف الحساب';
+  static const creditAccountRenamed = 'تم تعديل الاسم';
   static const btnLoadMore = 'عرض المزيد';
   static const btnPayAmount = 'دفع جزء من المستحق';
   static const btnPaySale = 'دفع المبلغ';

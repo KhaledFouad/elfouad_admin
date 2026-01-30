@@ -8,6 +8,9 @@ import '../bloc/sales_history_state.dart';
 import 'credit_customer_page.dart';
 import '../widgets/credit_accounts_section.dart';
 import '../models/credit_account.dart';
+import '../models/history_summary.dart';
+import '../models/sale_record.dart';
+import '../widgets/summary_pill.dart';
 
 class CreditAccountsPage extends StatefulWidget {
   const CreditAccountsPage({super.key});
@@ -51,6 +54,13 @@ class _CreditAccountsPageState extends State<CreditAccountsPage> {
                     20,
                   ),
                   children: [
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _CreditAccountsSummary(
+                        summary: _summaryForAccounts(state.creditAccounts),
+                        isLoading: state.isCreditLoading,
+                      ),
+                    ),
                     CreditAccountsSection(
                       accounts: state.creditAccounts,
                       isLoading: state.isCreditLoading,
@@ -67,6 +77,7 @@ class _CreditAccountsPageState extends State<CreditAccountsPage> {
                           ),
                         );
                       },
+                      onRename: (account) => _promptRenameAccount(account),
                       onDelete: (account) => _confirmDeleteAccount(account),
                     ),
                   ],
@@ -116,6 +127,81 @@ class _CreditAccountsPageState extends State<CreditAccountsPage> {
         context,
       ).showSnackBar(SnackBar(content: Text(AppStrings.saveFailed(error))));
     }
+  }
+
+  Future<void> _promptRenameAccount(CreditCustomerAccount account) async {
+    final controller = TextEditingController(text: account.name);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text(AppStrings.editCreditAccountNameTitle),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textInputAction: TextInputAction.done,
+          decoration: const InputDecoration(labelText: AppStrings.nameLabel),
+          onSubmitted: (value) => Navigator.pop(context, value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text(AppStrings.actionCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: const Text(AppStrings.actionSave),
+          ),
+        ],
+      ),
+    );
+
+    if (result == null) return;
+    final newName = result.trim();
+    if (newName.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(AppStrings.nameRequiredPrompt)),
+      );
+      return;
+    }
+    if (newName == account.name) return;
+
+    final cubit = context.read<SalesHistoryCubit>();
+    try {
+      await cubit.renameCreditCustomer(
+        oldName: account.name,
+        newName: newName,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(AppStrings.creditAccountRenamed)),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(AppStrings.saveFailed(error))));
+    }
+  }
+
+  HistorySummary _summaryForAccounts(
+    List<CreditCustomerAccount> accounts,
+  ) {
+    if (accounts.isEmpty) {
+      return HistorySummary.empty();
+    }
+    final seen = <String>{};
+    final records = <SaleRecord>[];
+    for (final account in accounts) {
+      for (final record in account.sales) {
+        if (record.outstandingAmount <= 0) {
+          continue;
+        }
+        if (seen.add(record.id)) {
+          records.add(record);
+        }
+      }
+    }
+    return HistorySummary.fromRecords(records);
   }
 }
 
@@ -170,6 +256,63 @@ class _CreditAccountsAppBar extends StatelessWidget
           ),
         ),
       ),
+    );
+  }
+}
+
+class _CreditAccountsSummary extends StatelessWidget {
+  const _CreditAccountsSummary({
+    required this.summary,
+    required this.isLoading,
+  });
+
+  final HistorySummary summary;
+  final bool isLoading;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 10,
+      runSpacing: 10,
+      children: [
+        SummaryPill(
+          icon: Icons.attach_money,
+          label: AppStrings.salesLabel,
+          value: summary.sales.toStringAsFixed(2),
+          isLoading: isLoading,
+        ),
+        SummaryPill(
+          icon: Icons.factory,
+          label: AppStrings.costLabel,
+          value: summary.cost.toStringAsFixed(2),
+          isLoading: isLoading,
+        ),
+        SummaryPill(
+          icon: Icons.trending_up,
+          label: AppStrings.profitLabel,
+          value: summary.profit.toStringAsFixed(2),
+          isLoading: isLoading,
+        ),
+        SummaryPill(
+          icon: Icons.local_cafe,
+          label: AppStrings.drinksLabel,
+          value: summary.drinks.toString(),
+          isLoading: isLoading,
+        ),
+        SummaryPill(
+          icon: Icons.cookie_rounded,
+          label: AppStrings.snacksLabel,
+          value: summary.snacks.toString(),
+          isLoading: isLoading,
+        ),
+        SummaryPill(
+          icon: Icons.scale,
+          label: AppStrings.gramsCoffeeLabel,
+          value: summary.grams.toStringAsFixed(0),
+          isLoading: isLoading,
+        ),
+      ],
     );
   }
 }

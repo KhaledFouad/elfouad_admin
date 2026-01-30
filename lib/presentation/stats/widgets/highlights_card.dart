@@ -119,6 +119,18 @@ class StatsHighlightsCard extends StatelessWidget {
 
     tiles.add(
       _buildTile(
+        icon: Icons.scale,
+        title: AppStrings.averageBeansGramsPerDayTitle,
+        value: _formatNumber(
+          highlights.averageBeansGramsPerDay,
+          decimals: 0,
+        ),
+        subtitle: AppStrings.gramsKeyword,
+      ),
+    );
+
+    tiles.add(
+      _buildTile(
         icon: Icons.point_of_sale,
         title: AppStrings.averageOrdersPerDayTitle,
         value: _formatNumber(highlights.averageOrdersPerDay, decimals: 1),

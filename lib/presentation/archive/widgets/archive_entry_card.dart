@@ -21,15 +21,12 @@ class ArchiveEntryCard extends StatelessWidget {
     final title = entryTitle(entry);
     final kind = kindLabel(entry.kind);
     final when = formatDateTime(entry.archivedAt);
-    final reason = entry.reason;
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 6),
       child: ListTile(
         title: Text(title),
-        subtitle: Text(
-          '$kind - $when${reason == null || reason.isEmpty ? '' : ' - ${AppStrings.archiveReasonLabel}: $reason'}',
-        ),
+        subtitle: Text('$kind - $when'),
         trailing: TextButton.icon(
           onPressed: isRestoring ? null : onRestore,
           icon: const Icon(Icons.restore),

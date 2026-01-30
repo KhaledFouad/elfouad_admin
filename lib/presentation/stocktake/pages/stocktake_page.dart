@@ -736,7 +736,12 @@ class _StocktakeViewState extends State<_StocktakeView> {
             (batch) => batch.update(item.ref, {'stock_units': change.counted}),
           );
         } else {
-          ops.add((batch) => batch.update(item.ref, {'stock': change.counted}));
+          ops.add(
+            (batch) => batch.update(item.ref, {
+              'stock': change.counted,
+              'stock_grams': change.counted,
+            }),
+          );
         }
       }
     }

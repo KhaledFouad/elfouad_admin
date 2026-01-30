@@ -28,7 +28,9 @@ class SaleTile extends StatelessWidget {
     final profit = record.isComplimentary
         ? 0.0
         : parseDouble(record.data['profit_total']);
-    final resolvedProfit = profit != 0 ? profit : (totalPrice - totalCost);
+    final resolvedProfit = record.isComplimentary
+        ? 0.0
+        : (profit != 0 ? profit : (totalPrice - totalCost));
 
     final tile = ExpansionTile(
       tilePadding: const EdgeInsets.symmetric(horizontal: 8),

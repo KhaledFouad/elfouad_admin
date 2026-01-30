@@ -580,27 +580,25 @@ class _ManagePageState extends State<ManagePage> {
           ),
           floatingActionButton: FloatingActionButton.extended(
             heroTag: 'manage_fab',
-            onPressed: tab == ManageTab.extras
-                ? null
-                : () => showModalBottomSheet(
-                    context: context,
-                    useSafeArea: true,
-                    isScrollControlled: true,
-                    shape: const RoundedRectangleBorder(
-                      borderRadius: BorderRadius.vertical(
-                        top: Radius.circular(18),
-                      ),
-                    ),
-                    builder: (_) => MultiBlocProvider(
-                      providers: [
-                        BlocProvider.value(
-                          value: context.read<InventoryCubit>(),
-                        ),
-                        BlocProvider.value(value: context.read<ExtrasCubit>()),
-                      ],
-                      child: AddItemSheet(initialType: _newTypeForTab(tab)),
-                    ),
+            onPressed: () => showModalBottomSheet(
+              context: context,
+              useSafeArea: true,
+              isScrollControlled: true,
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.vertical(
+                  top: Radius.circular(18),
+                ),
+              ),
+              builder: (_) => MultiBlocProvider(
+                providers: [
+                  BlocProvider.value(
+                    value: context.read<InventoryCubit>(),
                   ),
+                  BlocProvider.value(value: context.read<ExtrasCubit>()),
+                ],
+                child: AddItemSheet(initialType: _newTypeForTab(tab)),
+              ),
+            ),
             icon: const Icon(Icons.add),
             label: const Text(AppStrings.actionAdd),
             tooltip: AppStrings.addNewItemTooltip,

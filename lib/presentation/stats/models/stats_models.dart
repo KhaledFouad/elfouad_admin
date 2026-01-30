@@ -13,6 +13,12 @@ class Kpis {
   });
 }
 
+class MonthlyKpi {
+  final DateTime month;
+  final Kpis kpis;
+  const MonthlyKpi({required this.month, required this.kpis});
+}
+
 class GroupRow {
   final String key;
   final double sales, cost, profit, grams;
@@ -80,6 +86,7 @@ class StatsHighlights {
   final double averageDailySales;
   final double averageDrinksPerDay;
   final double averageSnacksPerDay;
+  final double averageBeansGramsPerDay;
   final double averageOrdersPerDay;
   final int totalOrders;
   final int activeDays;
@@ -90,6 +97,7 @@ class StatsHighlights {
     required this.averageDailySales,
     required this.averageDrinksPerDay,
     required this.averageSnacksPerDay,
+    required this.averageBeansGramsPerDay,
     required this.averageOrdersPerDay,
     required this.totalOrders,
     required this.activeDays,
@@ -100,6 +108,7 @@ class StatsOverview {
   final Kpis kpis;
   final List<GroupRow> drinks;
   final List<GroupRow> beans;
+  final List<GroupRow> turkish;
   final List<GroupRow> extras;
   final TrendsBundle trends;
   final StatsHighlights highlights;
@@ -107,6 +116,7 @@ class StatsOverview {
     required this.kpis,
     required this.drinks,
     required this.beans,
+    required this.turkish,
     required this.extras,
     required this.trends,
     required this.highlights,

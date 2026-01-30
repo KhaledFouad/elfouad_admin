@@ -25,10 +25,12 @@ class SalesHistoryCubit extends Cubit<SalesHistoryState> {
   QueryDocumentSnapshot<Map<String, dynamic>>? _lastDoc;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _createdSub;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _settledSub;
+  StreamSubscription<int>? _creditCountSub;
   Timer? _realtimeDebounce;
   int _summaryRequestId = 0;
 
   Future<void> initialize() async {
+    _startCreditCountRealtime();
     unawaited(_loadCreditUnpaidCount());
     _startRealtime(state.range);
     unawaited(_loadSummary(state.range));
@@ -127,6 +129,14 @@ class SalesHistoryCubit extends Cubit<SalesHistoryState> {
     unawaited(_loadCreditAccounts());
   }
 
+  Future<void> renameCreditCustomer({
+    required String oldName,
+    required String newName,
+  }) async {
+    await _repository.renameCreditCustomer(oldName: oldName, newName: newName);
+    await _loadCreditAccounts();
+  }
+
   Future<void> deleteSale(String saleId) async {
     await _repository.deleteSaleWithRollback(saleId);
     await refreshCurrent();
@@ -201,6 +211,24 @@ class SalesHistoryCubit extends Cubit<SalesHistoryState> {
         _repository.watchSettledInRange(range).skip(1).listen((_) {
       _scheduleRealtimeRefresh();
     });
+  }
+
+  void _startCreditCountRealtime() {
+    _creditCountSub?.cancel();
+    emit(state.copyWith(isCreditCountLoading: true));
+    _creditCountSub = _repository.watchUnpaidCreditCount().listen(
+      (unpaidCount) {
+        emit(
+          state.copyWith(
+            creditUnpaidCount: unpaidCount,
+            isCreditCountLoading: false,
+          ),
+        );
+      },
+      onError: (_) {
+        emit(state.copyWith(isCreditCountLoading: false));
+      },
+    );
   }
 
   void _scheduleRealtimeRefresh() {
@@ -535,6 +563,7 @@ class SalesHistoryCubit extends Cubit<SalesHistoryState> {
     _realtimeDebounce?.cancel();
     _createdSub?.cancel();
     _settledSub?.cancel();
+    _creditCountSub?.cancel();
     return super.close();
   }
 }

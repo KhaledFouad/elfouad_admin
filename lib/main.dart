@@ -1,27 +1,23 @@
 import 'dart:async' show unawaited;
 import 'package:elfouad_admin/core/utils/firestore_tuning.dart';
-import 'package:elfouad_admin/presentation/Expenses/bloc/expenses_cubit.dart';
-import 'package:elfouad_admin/presentation/grind/state/grind_providers.dart';
-import 'package:elfouad_admin/presentation/home/app_shell.dart';
-import 'package:elfouad_admin/presentation/home/nav_state.dart';
-import 'package:elfouad_admin/presentation/inventory/bloc/inventory_cubit.dart';
-import 'package:elfouad_admin/presentation/manage/bloc/drinks_cubit.dart';
-import 'package:elfouad_admin/presentation/manage/bloc/extras_cubit.dart';
-import 'package:elfouad_admin/presentation/manage/bloc/manage_tab_cubit.dart';
-import 'package:elfouad_admin/presentation/recipes/bloc/recipes_cubit.dart';
-import 'package:elfouad_admin/presentation/stats/bloc/stats_cubit.dart';
+import 'package:elfouad_admin/presentation/auth/lock_gate_page.dart';
+import 'package:elfouad_admin/services/auth/auth_service.dart';
 import 'package:elfouad_admin/services/archive/auto_archiver.dart.dart'
     show runAutoArchiveIfNeeded;
+import 'package:elfouad_admin/services/archive/daily_archive_stats.dart'
+    show syncDailyArchiveStats;
+import 'package:elfouad_admin/services/archive/monthly_archive_stats.dart'
+    show syncMonthlyArchiveStats;
 import 'package:elfouad_admin/core/widgets/app_background.dart';
-import 'package:flutter/foundation.dart' show kReleaseMode;
+import 'package:flutter/foundation.dart' show kReleaseMode, kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 import 'services/firebase_options.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:elfouad_admin/core/utils/app_strings.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 const _primaryHex = 0xFF543824;
 const _accentHex = 0xFFC49A6C;
@@ -35,18 +31,24 @@ Future<void> _scheduleAutoArchive() async {
   if (!kReleaseMode) return;
   await Future<void>.delayed(const Duration(seconds: 8));
   unawaited(
-    runAutoArchiveIfNeeded(
-      adminUid: AppStrings.systemUserId,
-      everyNDays: 5,
-      daysThreshold: 40,
-      batchSize: 200,
-    ),
+    runAutoArchiveIfNeeded(adminUid: AppStrings.systemUserId, batchSize: 200),
   );
 }
 
+Future<void> _scheduleDailyArchiveSync() async {
+  await Future<void>.delayed(const Duration(seconds: 6));
+  unawaited(() async {
+    await syncDailyArchiveStats();
+    await syncMonthlyArchiveStats();
+  }());
+}
+
+late final Future<void> _firebaseInit;
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const MyApp());
+  _firebaseInit = _initFirebase();
+  runApp(MyApp(initFuture: _firebaseInit));
 }
 
 ThemeData _lightTheme() {
@@ -103,8 +105,77 @@ ThemeData _lightTheme() {
   );
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class MyApp extends StatefulWidget {
+  const MyApp({super.key, required this.initFuture});
+
+  final Future<void> initFuture;
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  final GlobalKey<NavigatorState> _navKey = GlobalKey<NavigatorState>();
+  final _RouteTracker _routeTracker = _RouteTracker();
+  static const Duration _minBackgroundLockDuration = Duration(seconds: 20);
+  DateTime? _lastPausedAt;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _routeTracker.onRouteChanged = _handleRouteChanged;
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  String? _currentRouteName;
+
+  void _handleRouteChanged(String? name) {
+    _currentRouteName = name;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      _lastPausedAt = DateTime.now();
+      return;
+    }
+    if (state == AppLifecycleState.resumed) {
+      final pausedAt = _lastPausedAt;
+      _lastPausedAt = null;
+      if (pausedAt == null) return;
+      if (DateTime.now().difference(pausedAt) < _minBackgroundLockDuration) {
+        return;
+      }
+      _showLockGateIfEnabled();
+    }
+  }
+
+  Future<void> _showLockGateIfEnabled() async {
+    if (kIsWeb) return;
+    final prefs = await SharedPreferences.getInstance();
+    final enabled = prefs.getBool('auth_enabled') ?? true;
+    if (!enabled) return;
+    if (AuthService.authInProgress ||
+        AuthService.isRecentlyAuthed ||
+        AuthService.isSessionValid) {
+      return;
+    }
+    if (_currentRouteName == LockGatePage.routeName) return;
+    final navigator = _navKey.currentState;
+    if (navigator == null) return;
+    navigator.push(
+      MaterialPageRoute(
+        settings: const RouteSettings(name: LockGatePage.routeName),
+        builder: (_) => const LockGatePage(replaceOnSuccess: false),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -133,13 +204,17 @@ class MyApp extends StatelessWidget {
       },
       theme: _lightTheme(),
       debugShowCheckedModeBanner: false,
-      home: const _BootstrapGate(),
+      navigatorKey: _navKey,
+      navigatorObservers: [_routeTracker],
+      home: _BootstrapGate(initFuture: widget.initFuture),
     );
   }
 }
 
 class _BootstrapGate extends StatefulWidget {
-  const _BootstrapGate();
+  const _BootstrapGate({required this.initFuture});
+
+  final Future<void> initFuture;
 
   @override
   State<_BootstrapGate> createState() => _BootstrapGateState();
@@ -152,26 +227,12 @@ class _BootstrapGateState extends State<_BootstrapGate> {
   @override
   void initState() {
     super.initState();
-    _initFuture = _initFirebase();
+    _initFuture = widget.initFuture;
     _initFuture.then((_) => unawaited(_scheduleAutoArchive()));
+    _initFuture.then((_) => unawaited(_scheduleDailyArchiveSync()));
   }
 
-  Widget _buildApp() {
-    return MultiBlocProvider(
-      providers: [
-        BlocProvider(create: (_) => NavCubit()),
-        BlocProvider(create: (_) => ExpensesCubit()),
-        BlocProvider(create: (_) => RecipesCubit()),
-        BlocProvider(create: (_) => InventoryCubit()),
-        BlocProvider(create: (_) => DrinksCubit()),
-        BlocProvider(create: (_) => ExtrasCubit()),
-        BlocProvider(create: (_) => ManageTabCubit()..loadLastTab()),
-        BlocProvider(create: (_) => GrindCubit()),
-        BlocProvider(create: (_) => StatsCubit()),
-      ],
-      child: const AppShell(),
-    );
-  }
+  Widget _buildApp() => const LockGatePage();
 
   @override
   Widget build(BuildContext context) {
@@ -197,6 +258,32 @@ class _BootstrapGateState extends State<_BootstrapGate> {
         return _app ??= _buildApp();
       },
     );
+  }
+}
+
+class _RouteTracker extends NavigatorObserver {
+  void Function(String? name)? onRouteChanged;
+
+  void _notify(Route<dynamic>? route) {
+    onRouteChanged?.call(route?.settings.name);
+  }
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    _notify(route);
+    super.didPush(route, previousRoute);
+  }
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    _notify(previousRoute);
+    super.didPop(route, previousRoute);
+  }
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    _notify(newRoute);
+    super.didReplace(newRoute: newRoute, oldRoute: oldRoute);
   }
 }
 

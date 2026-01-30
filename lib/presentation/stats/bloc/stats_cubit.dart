@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../models/stats_models.dart';
@@ -13,19 +15,25 @@ class StatsCubit extends Cubit<StatsState> {
             period: defaultStatsPeriod(),
             overview: null,
             preview: null,
+            previousMonths: const [],
             loading: true,
             previewLoading: true,
+            previousLoading: true,
             error: null,
             previewError: null,
+            previousError: null,
           ),
         ) {
     _loadMonth(state.month, state.period);
   }
 
+  static const int _previousMonthsCount = 6;
+
   List<Map<String, dynamic>> _rawMonth = const [];
   List<Map<String, dynamic>> _rawExpenses = const [];
   final Map<String, List<Map<String, dynamic>>> _rawMonthCache = {};
   final Map<String, List<Map<String, dynamic>>> _rawExpensesCache = {};
+  int _previousRequestId = 0;
 
   Future<void> refresh() => _loadMonth(
         state.month,
@@ -84,6 +92,7 @@ class StatsCubit extends Cubit<StatsState> {
           previewError: null,
         ),
       );
+      unawaited(_loadPreviousMonths(month, force: force));
       await _computeOverview(period, month);
     } catch (e) {
       emit(
@@ -92,6 +101,62 @@ class StatsCubit extends Cubit<StatsState> {
           previewLoading: false,
           error: e,
           previewError: e,
+          previousLoading: false,
+          previousError: e,
+        ),
+      );
+    }
+  }
+
+  Future<void> _loadPreviousMonths(
+    DateTime month, {
+    bool force = false,
+  }) async {
+    final requestId = ++_previousRequestId;
+    emit(
+      state.copyWith(
+        previousLoading: true,
+        previousError: null,
+      ),
+    );
+    try {
+      final previous = <MonthlyKpi>[];
+      for (var i = 1; i <= _previousMonthsCount; i++) {
+        final target = DateTime(month.year, month.month - i, 1);
+        final key = _cacheKey(target);
+        List<Map<String, dynamic>> raw;
+        if (!force && _rawMonthCache.containsKey(key)) {
+          raw = _rawMonthCache[key] ?? const [];
+        } else {
+          raw = prepareStatsData(
+            await fetchSalesRawForMonth(target, cacheFirst: !force),
+          );
+          _rawMonthCache[key] = raw;
+        }
+        final range = statsComputeRange(target, StatsPeriod.fullMonth);
+        final kpis = buildKpis(
+          raw,
+          const [],
+          startUtc: range.startUtc,
+          endUtc: range.endUtc,
+        );
+        previous.add(MonthlyKpi(month: target, kpis: kpis));
+      }
+
+      if (requestId != _previousRequestId) return;
+      emit(
+        state.copyWith(
+          previousMonths: previous,
+          previousLoading: false,
+          previousError: null,
+        ),
+      );
+    } catch (e) {
+      if (requestId != _previousRequestId) return;
+      emit(
+        state.copyWith(
+          previousLoading: false,
+          previousError: e,
         ),
       );
     }
@@ -123,6 +188,11 @@ class StatsCubit extends Cubit<StatsState> {
           endUtc: range.endUtc,
         ),
         beans: buildBeansRows(
+          data,
+          startUtc: range.startUtc,
+          endUtc: range.endUtc,
+        ),
+        turkish: buildTurkishRows(
           data,
           startUtc: range.startUtc,
           endUtc: range.endUtc,

@@ -18,7 +18,18 @@ class RecipesListPage extends StatefulWidget {
   State<RecipesListPage> createState() => _RecipesListPageState();
 }
 
-class _RecipesListPageState extends State<RecipesListPage> {
+class _RecipesListPageState extends State<RecipesListPage>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
+  }
+
   Future<void> _deleteRecipe(String id, String displayName) async {
     final cubit = context.read<RecipesCubit>();
     final messenger = ScaffoldMessenger.of(context);

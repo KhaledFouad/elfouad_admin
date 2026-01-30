@@ -118,6 +118,7 @@ class _AddItemSheetState extends State<AddItemSheet> {
   late NewItemType _t;
   final _formKey = GlobalKey<FormState>();
   final _name = TextEditingController();
+  final _posOrder = TextEditingController();
   final _stock = TextEditingController(text: '0');
   final _category = TextEditingController();
   final _extraUnit = TextEditingController(text: 'piece');
@@ -162,6 +163,7 @@ class _AddItemSheetState extends State<AddItemSheet> {
   @override
   void dispose() {
     _name.dispose();
+    _posOrder.dispose();
     _stock.dispose();
     _baseSellPerKg.dispose();
     _baseCostPerKg.dispose();
@@ -274,6 +276,14 @@ class _AddItemSheetState extends State<AddItemSheet> {
                 TextInputType.text,
                 validator: (v) =>
                     _requiredText(v, AppStrings.nameRequiredPrompt),
+              ),
+              const SizedBox(height: 8),
+              _tf(
+                _posOrder,
+                AppStrings.posOrderLabel,
+                const TextInputType.numberWithOptions(decimal: false),
+                validator: (v) =>
+                    _optionalInt(v, AppStrings.posOrderInvalidPrompt),
               ),
               const SizedBox(height: 8),
               if (_t == NewItemType.extra) ...[
@@ -1381,6 +1391,7 @@ class _AddItemSheetState extends State<AddItemSheet> {
       final db = FirebaseFirestore.instance;
       final now = DateTime.now().toUtc();
       final name = _name.text.trim();
+      final posOrder = _intOrNull(_posOrder.text);
 
       if (!(_formKey.currentState?.validate() ?? false)) {
         return;
@@ -1498,6 +1509,10 @@ class _AddItemSheetState extends State<AddItemSheet> {
           'spicedEnabled': _drinkSpicedEnabled,
           'createdAt': now,
         };
+        if (posOrder != null) {
+          payload['posOrder'] = posOrder;
+          payload['pos_order'] = posOrder;
+        }
 
         if (!hasMatrix && _drinkSpicedEnabled) {
           payload['spicedPriceDelta'] = _num(_drinkSpicedPrice.text);
@@ -1542,8 +1557,12 @@ class _AddItemSheetState extends State<AddItemSheet> {
           'price_sell': _num(_extraPrice.text),
           'cost_unit': _num(_extraCost.text),
           'active': _extraActive,
+          'type': 'extra',
+          'is_extra': true,
           'created_at': now,
           'updated_at': now,
+          if (posOrder != null) 'posOrder': posOrder,
+          if (posOrder != null) 'pos_order': posOrder,
         });
       } else {
         final col = _t == NewItemType.single ? 'singles' : 'blends';
@@ -1582,6 +1601,8 @@ class _AddItemSheetState extends State<AddItemSheet> {
                 ? 'assets/singles.jpg'
                 : 'assets/blends.jpg',
             'createdAt': now,
+            if (posOrder != null) 'posOrder': posOrder,
+            if (posOrder != null) 'pos_order': posOrder,
           });
         } else {
           final batch = db.batch();
@@ -1607,6 +1628,8 @@ class _AddItemSheetState extends State<AddItemSheet> {
                   ? 'assets/singles.jpg'
                   : 'assets/blends.jpg',
               'createdAt': now,
+              if (posOrder != null) 'posOrder': posOrder,
+              if (posOrder != null) 'pos_order': posOrder,
             };
             batch.set(docRef, payload);
           }
@@ -1630,6 +1653,13 @@ class _AddItemSheetState extends State<AddItemSheet> {
     return double.tryParse(v?.toString().replaceAll(',', '.') ?? '') ?? 0.0;
   }
 
+  int? _intOrNull(String? value) {
+    if (value == null) return null;
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return null;
+    return int.tryParse(trimmed);
+  }
+
   String? _requiredText(String? value, String message) {
     if (value == null || value.trim().isEmpty) return message;
     return null;
@@ -1638,5 +1668,10 @@ class _AddItemSheetState extends State<AddItemSheet> {
   String? _requiredPositive(String? value, String message) {
     if (_num(value) <= 0) return message;
     return null;
+  }
+
+  String? _optionalInt(String? value, String message) {
+    if (value == null || value.trim().isEmpty) return null;
+    return _intOrNull(value) == null ? message : null;
   }
 }

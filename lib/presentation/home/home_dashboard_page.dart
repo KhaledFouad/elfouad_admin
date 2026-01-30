@@ -1,7 +1,6 @@
 // ignore_for_file: unused_element
 
 import 'dart:ui';
-
 import 'package:elfouad_admin/core/utils/app_strings.dart';
 import 'package:elfouad_admin/presentation/home/nav_state.dart';
 import 'package:flutter/material.dart';
@@ -448,6 +447,13 @@ const _features = <_HomeFeature>[
     icon: Icons.stacked_line_chart,
     accent: Color(0xFF3E5C76),
     gradient: [Color(0xFFEAF1F8), Color(0xFFD7E3F2)],
+  ),
+  _HomeFeature(
+    tab: AppTab.archive,
+    title: AppStrings.tabArchive,
+    icon: Icons.archive_rounded,
+    accent: Color(0xFF6D4C41),
+    gradient: [Color(0xFFF7EFE9), Color(0xFFE6D8D0)],
   ),
   _HomeFeature(
     tab: AppTab.forecast,

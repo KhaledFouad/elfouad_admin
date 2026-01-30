@@ -97,6 +97,7 @@ class _ProductEditSheetState extends State<ProductEditSheet> {
   late Map<String, dynamic> _data;
   final _formKey = GlobalKey<FormState>();
   final _name = TextEditingController();
+  final _posOrder = TextEditingController();
   final _variant = TextEditingController();
   final _unit = TextEditingController();
   final _stock = TextEditingController();
@@ -142,6 +143,10 @@ class _ProductEditSheetState extends State<ProductEditSheet> {
     super.initState();
     _data = widget.snap.data() ?? <String, dynamic>{};
     _name.text = (_data['name'] ?? '').toString();
+    final posRaw = _data['posOrder'] ?? _data['pos_order'];
+    if (posRaw != null) {
+      _posOrder.text = _format(_num(posRaw));
+    }
     _variant.text = (_data['variant'] ?? '').toString();
     _unit.text = (_data['unit'] ?? '').toString();
     final stock = _num(_data['stock']);
@@ -235,6 +240,7 @@ class _ProductEditSheetState extends State<ProductEditSheet> {
   @override
   void dispose() {
     _name.dispose();
+    _posOrder.dispose();
     _variant.dispose();
     _unit.dispose();
     _stock.dispose();
@@ -298,6 +304,7 @@ class _ProductEditSheetState extends State<ProductEditSheet> {
       'name': _name.text.trim(),
       'variant': _variant.text.trim(),
     };
+    _applyPosOrder(upd);
     if (_unit.text.trim().isNotEmpty) {
       upd['unit'] = _unit.text.trim();
     }
@@ -380,6 +387,7 @@ class _ProductEditSheetState extends State<ProductEditSheet> {
       'roastLevels': roasts,
       'spicedEnabled': _drinkSpicedEnabled,
     };
+    _applyPosOrder(upd);
     final stockTxt = _stock.text.trim();
     if (stockTxt.isNotEmpty) {
       upd['stock'] = _num(_stock.text);
@@ -525,6 +533,14 @@ class _ProductEditSheetState extends State<ProductEditSheet> {
               AppStrings.nameLabel,
               TextInputType.text,
               validator: (v) => _requiredText(v, AppStrings.nameRequiredPrompt),
+            ),
+            const SizedBox(height: 8),
+            _tf(
+              _posOrder,
+              AppStrings.posOrderLabel,
+              const TextInputType.numberWithOptions(decimal: false),
+              validator: (v) =>
+                  _optionalInt(v, AppStrings.posOrderInvalidPrompt),
             ),
             if (!_isDrinks) ...[
               const SizedBox(height: 8),
@@ -1620,6 +1636,13 @@ class _ProductEditSheetState extends State<ProductEditSheet> {
     return double.tryParse(v?.toString().replaceAll(',', '.') ?? '') ?? 0.0;
   }
 
+  int? _intOrNull(String? value) {
+    if (value == null) return null;
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return null;
+    return int.tryParse(trimmed);
+  }
+
   String _format(double v) {
     if (v == v.roundToDouble()) return v.toStringAsFixed(0);
     return v.toStringAsFixed(2);
@@ -1657,5 +1680,24 @@ class _ProductEditSheetState extends State<ProductEditSheet> {
   String? _requiredPositive(String? value, String message) {
     if (_num(value) <= 0) return message;
     return null;
+  }
+
+  String? _optionalInt(String? value, String message) {
+    if (value == null || value.trim().isEmpty) return null;
+    return _intOrNull(value) == null ? message : null;
+  }
+
+  void _applyPosOrder(Map<String, dynamic> upd) {
+    final text = _posOrder.text.trim();
+    if (text.isEmpty) {
+      upd['posOrder'] = FieldValue.delete();
+      upd['pos_order'] = FieldValue.delete();
+      return;
+    }
+    final posOrder = _intOrNull(text);
+    if (posOrder != null) {
+      upd['posOrder'] = posOrder;
+      upd['pos_order'] = posOrder;
+    }
   }
 }

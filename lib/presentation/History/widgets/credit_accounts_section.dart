@@ -9,12 +9,14 @@ class CreditAccountsSection extends StatelessWidget {
     required this.accounts,
     required this.isLoading,
     required this.onSelect,
+    required this.onRename,
     required this.onDelete,
   });
 
   final List<CreditCustomerAccount> accounts;
   final bool isLoading;
   final ValueChanged<CreditCustomerAccount> onSelect;
+  final ValueChanged<CreditCustomerAccount> onRename;
   final ValueChanged<CreditCustomerAccount> onDelete;
 
   @override
@@ -65,6 +67,7 @@ class CreditAccountsSection extends StatelessWidget {
                         child: _CreditAccountTile(
                           account: account,
                           onTap: () => onSelect(account),
+                          onRename: () => onRename(account),
                           onDelete: () => onDelete(account),
                         ),
                       ),
@@ -82,11 +85,13 @@ class _CreditAccountTile extends StatelessWidget {
   const _CreditAccountTile({
     required this.account,
     required this.onTap,
+    required this.onRename,
     required this.onDelete,
   });
 
   final CreditCustomerAccount account;
   final VoidCallback onTap;
+  final VoidCallback onRename;
   final VoidCallback onDelete;
 
   @override
@@ -156,6 +161,12 @@ class _CreditAccountTile extends StatelessWidget {
                 ],
               ),
               const SizedBox(width: 8),
+              IconButton(
+                tooltip: AppStrings.actionEdit,
+                onPressed: onRename,
+                icon: const Icon(Icons.edit),
+                color: Colors.brown,
+              ),
               IconButton(
                 tooltip: AppStrings.actionDelete,
                 onPressed: onDelete,
