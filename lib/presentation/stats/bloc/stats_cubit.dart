@@ -65,21 +65,24 @@ class StatsCubit extends Cubit<StatsState> {
       ),
     );
     try {
+      final now = DateTime.now();
+      final isCurrentMonth = month.year == now.year && month.month == now.month;
+      final useCache = !force && !isCurrentMonth;
       final key = _cacheKey(month);
-      if (!force &&
+      if (useCache &&
           _rawMonthCache.containsKey(key) &&
           _rawExpensesCache.containsKey(key)) {
         _rawMonth = _rawMonthCache[key] ?? const [];
         _rawExpenses = _rawExpensesCache[key] ?? const [];
       } else {
         _rawMonth = prepareStatsData(
-          await fetchSalesRawForMonth(month, cacheFirst: !force),
+          await fetchSalesRawForMonth(month, cacheFirst: useCache),
         );
         final fullRange = statsComputeRange(month, StatsPeriod.fullMonth);
         _rawExpenses = await fetchStatsExpenses(
           startUtc: fullRange.startUtc,
           endUtc: fullRange.endUtc,
-          cacheFirst: !force,
+          cacheFirst: useCache,
         );
         _rawMonthCache[key] = _rawMonth;
         _rawExpensesCache[key] = _rawExpenses;
