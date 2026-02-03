@@ -1,9 +1,7 @@
-import 'package:elfouad_admin/presentation/forecast/pages/beans_forecast_page.dart';
 import 'package:elfouad_admin/presentation/home/home_dashboard_page.dart';
+import 'package:elfouad_admin/presentation/inventory/pages/inventory_page.dart';
 import 'package:elfouad_admin/presentation/recipes/pages/recipes_list_page.dart';
-import 'package:elfouad_admin/presentation/stocktake/pages/stocktake_page.dart';
 import 'package:elfouad_admin/presentation/archive/pages/trash_page.dart';
-import 'package:elfouad_admin/presentation/archive_months/pages/archive_months_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'nav_state.dart';
@@ -29,12 +27,8 @@ class _NavShellState extends State<NavShell> {
               return const HistoryScreen(); // ????
             case AppTab.stats:
               return const StatsScreen(); // ????????
-            case AppTab.archive:
-              return const ArchiveMonthsPage();
             case AppTab.inventory:
-              return const InventoryScreen(); // ?????
-            case AppTab.stocktake:
-              return const StocktakePage(); // ?????
+              return const InventoryPage(); // ?????
             case AppTab.edits:
               return const EditsScreen(); // ???????
             case AppTab.expenses:
@@ -44,8 +38,6 @@ class _NavShellState extends State<NavShell> {
 
             case AppTab.recipes:
               return const RecipesListPage(); // ???????
-            case AppTab.forecast:
-              return const BeansForecastPage(); // ???????
           }
         }
 

@@ -85,81 +85,98 @@ class _SalesHistoryView extends StatelessWidget {
             );
           },
         ),
-        body: Column(
-          children: [
-            Expanded(
-              child: Align(
-                alignment: Alignment.topCenter,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: contentMaxWidth),
-                  child: RefreshIndicator.adaptive(
-                    onRefresh: cubit.refreshCurrent,
-                    child: ListView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      padding: listPadding,
-                      children: [
-                        if (showOverallSummary)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: _HistorySummary(
-                              summary: summaryForDisplay,
-                            ),
+        body: showInitialLoading
+            ? const Center(child: CircularProgressIndicator())
+            : Column(
+                children: [
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(maxWidth: contentMaxWidth),
+                        child: RefreshIndicator.adaptive(
+                          onRefresh: cubit.refreshCurrent,
+                          child: ListView(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            padding: listPadding,
+                            children: [
+                              if (showOverallSummary)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 12),
+                                  child: _HistorySummary(
+                                    summary: summaryForDisplay,
+                                  ),
+                                ),
+                              if (showSummaryLoading)
+                                const Padding(
+                                  padding: EdgeInsets.only(bottom: 12),
+                                  child: Center(
+                                    child: SizedBox(
+                                      width: 24,
+                                      height: 24,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              if (state.groups.isEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 20,
+                                  ),
+                                  child: Center(child: Text(noHistoryLabel)),
+                                )
+                              else
+                                ...state.groups.map((group) {
+                                  final overrideTotal =
+                                      state.fullTotalsByDay[group.label];
+                                  final showLoading =
+                                      state.isRangeTotalLoading &&
+                                      overrideTotal == null;
+                                  return Padding(
+                                    padding: const EdgeInsets.only(bottom: 12),
+                                    child: HistoryDaySection(
+                                      group: group,
+                                      overrideTotal: overrideTotal,
+                                      summary: state.summaryByDay[group.label],
+                                      showTotalLoading: showLoading,
+                                    ),
+                                  );
+                                }),
+                            ],
                           ),
-                        if (showSummaryLoading) const SizedBox(height: 12),
-                        if (state.groups.isEmpty)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 20),
-                            child: Center(child: Text(noHistoryLabel)),
-                          )
-                        else
-                          ...state.groups.map((group) {
-                            final overrideTotal =
-                                state.fullTotalsByDay[group.label];
-                            final showLoading = state.isRangeTotalLoading &&
-                                overrideTotal == null;
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: HistoryDaySection(
-                                group: group,
-                                overrideTotal: overrideTotal,
-                                summary: state.summaryByDay[group.label],
-                                showTotalLoading: showLoading,
-                              ),
-                            );
-                          }),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            if (state.isLoadingMore)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 8),
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            else if (state.hasMore && !state.isLoadingFirst)
-              Align(
-                alignment: Alignment.topCenter,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: contentMaxWidth),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 8,
-                      horizontal: 16,
-                    ),
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: cubit.loadMore,
-                        child: const Text(AppStrings.btnLoadMore),
+                        ),
                       ),
                     ),
                   ),
-                ),
+                  if (state.isLoadingMore)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  else if (state.hasMore && !state.isLoadingFirst)
+                    Align(
+                      alignment: Alignment.topCenter,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(maxWidth: contentMaxWidth),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 8,
+                            horizontal: 16,
+                          ),
+                          child: SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              onPressed: cubit.loadMore,
+                              child: const Text(AppStrings.btnLoadMore),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
-          ],
-        ),
       ),
     );
   }

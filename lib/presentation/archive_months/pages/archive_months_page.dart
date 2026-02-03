@@ -31,30 +31,12 @@ class _ArchiveMonthsView extends StatelessWidget {
     return intl.DateFormat('yyyy-MM-dd HH:mm', 'ar').format(value.toLocal());
   }
 
-  Future<void> _rebuildArchive(BuildContext context) async {
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(
-      const SnackBar(content: Text('جاري إعادة بناء الأرشيف...')),
-    );
-    try {
-      await context.read<ArchiveMonthsCubit>().refresh();
-      messenger.showSnackBar(
-        const SnackBar(content: Text('تم تحديث الأرشيف بنجاح')),
-      );
-    } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text('فشل تحديث الأرشيف: $e')),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        appBar: _ArchiveAppBar(onRebuild: () => _rebuildArchive(context)),
+        appBar: const _ArchiveAppBar(),
         body: BlocBuilder<ArchiveMonthsCubit, ArchiveMonthsState>(
           builder: (context, state) {
             if (state.loading && state.months.isEmpty) {
@@ -120,7 +102,9 @@ class _ArchiveMonthsView extends StatelessWidget {
                     const Card(
                       child: Padding(
                         padding: EdgeInsets.all(16),
-                        child: Center(child: Text(AppStrings.noDataForRange)),
+                        child: Center(
+                          child: Text('لا توجد بيانات للشهر بعد'),
+                        ),
                       ),
                     )
                   else
@@ -155,9 +139,7 @@ class _ArchiveMonthsView extends StatelessWidget {
 }
 
 class _ArchiveAppBar extends StatelessWidget implements PreferredSizeWidget {
-  const _ArchiveAppBar({required this.onRebuild});
-
-  final VoidCallback onRebuild;
+  const _ArchiveAppBar();
 
   @override
   Size get preferredSize => const Size.fromHeight(64);
@@ -184,13 +166,6 @@ class _ArchiveAppBar extends StatelessWidget implements PreferredSizeWidget {
             color: Colors.white,
           ),
         ),
-        actions: [
-          IconButton(
-            tooltip: 'إعادة بناء الأرشيف',
-            icon: const Icon(Icons.refresh_rounded, color: Colors.white),
-            onPressed: onRebuild,
-          ),
-        ],
         centerTitle: true,
         elevation: 8,
         backgroundColor: Colors.transparent,

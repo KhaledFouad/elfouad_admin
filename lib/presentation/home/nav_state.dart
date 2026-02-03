@@ -4,14 +4,11 @@ enum AppTab {
   home,
   history,
   stats,
-  archive,
   inventory,
-  stocktake,
   edits,
   expenses,
   recycleBin,
   recipes,
-  forecast,
 }
 
 class NavCubit extends Cubit<AppTab> {

@@ -47,19 +47,6 @@ class SideMenu extends StatelessWidget {
                 onTap: () => _go(context, AppTab.stats),
               ),
               _MenuItem(
-                icon: Icons.archive_rounded,
-                label: AppStrings.tabArchive,
-                selected: selected == AppTab.archive,
-                onTap: () => _go(context, AppTab.archive),
-              ),
-
-              _MenuItem(
-                icon: Icons.inventory_2_outlined,
-                label: AppStrings.tabInventory,
-                selected: selected == AppTab.inventory,
-                onTap: () => _go(context, AppTab.inventory),
-              ),
-              _MenuItem(
                 icon: Icons.edit_note_outlined,
                 label: AppStrings.tabEdits,
                 selected: selected == AppTab.edits,
@@ -83,12 +70,6 @@ class SideMenu extends StatelessWidget {
                 label: AppStrings.tabRecycleBin,
                 selected: selected == AppTab.recycleBin,
                 onTap: () => _go(context, AppTab.recycleBin),
-              ),
-              _MenuItem(
-                icon: Icons.auto_graph_outlined,
-                label: AppStrings.tabForecast,
-                selected: selected == AppTab.forecast,
-                onTap: () => _go(context, AppTab.forecast),
               ),
 
               const Divider(height: 24),

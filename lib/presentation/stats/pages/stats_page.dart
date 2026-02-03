@@ -10,7 +10,6 @@ import 'package:elfouad_admin/presentation/stats/widgets/turkish_coffee_table.da
 import 'package:elfouad_admin/presentation/stats/widgets/triple_trend_chart.dart';
 import 'package:elfouad_admin/services/archive/auto_archiver.dart.dart'
     show runAutoArchiveNow;
-import 'package:elfouad_admin/presentation/stats/models/stats_models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
@@ -26,10 +25,12 @@ class StatsPage extends StatefulWidget {
 
 class _StatsPageState extends State<StatsPage> {
   bool _profitMode = false;
-  static const int _pageSize = 12;
-  int _drinksLimit = _pageSize;
-  int _beansLimit = _pageSize;
-  int _turkishLimit = _pageSize;
+
+  @override
+  void initState() {
+    super.initState();
+    debugPrint('[STATS] using raw sales fallback for detailed stats');
+  }
 
   bool _isTurkishName(String name) {
     final n = name.toLowerCase();
@@ -60,15 +61,16 @@ class _StatsPageState extends State<StatsPage> {
       );
     } catch (e) {
       if (!mounted) return;
-      messenger.showSnackBar(SnackBar(content: Text('فشل ترحيل الأرشيف: $e')));
+      messenger.showSnackBar(
+        SnackBar(content: Text('فشل ترحيل الأرشيف: $e')),
+      );
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
     final state = context.watch<StatsCubit>().state;
-    final loading = state.loading;
-    final overview = state.overview ?? _placeholderOverview();
     final month = state.month;
     final period = state.period;
     final breakpoints = ResponsiveBreakpoints.of(context);
@@ -95,66 +97,74 @@ class _StatsPageState extends State<StatsPage> {
                 18,
               ),
               children: [
-                  PeriodChips(
-                    forMonth: month,
-                    selected: period,
-                    preview: state.preview,
-                    onSelected: (p) => context.read<StatsCubit>().setPeriod(p),
+                PeriodChips(
+                  forMonth: month,
+                  selected: period,
+                  preview: state.preview,
+                  onSelected: (p) => context.read<StatsCubit>().setPeriod(p),
+                ),
+
+                const SizedBox(height: 8),
+
+                // KPIs ????
+                if (state.loading)
+                  const Center(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(vertical: 16),
+                      child: CircularProgressIndicator(),
+                    ),
+                  )
+                else if (state.error != null)
+                  Text(
+                    AppStrings.loadFailed(
+                      AppStrings.summaryLabel,
+                      state.error ?? 'unknown',
+                    ),
+                  )
+                else if (state.overview != null)
+                  KpiWrap(
+                    items: [
+                      Kpi(
+                        AppStrings.totalSalesLabel,
+                        state.overview!.kpis.sales.toStringAsFixed(2),
+                        Icons.attach_money,
+                      ),
+                      Kpi(
+                        AppStrings.costLabelDefinite,
+                        state.overview!.kpis.cost.toStringAsFixed(2),
+                        Icons.factory,
+                      ),
+                      Kpi(
+                        AppStrings.profitLabelDefinite,
+                        state.overview!.kpis.profit.toStringAsFixed(2),
+                        Icons.trending_up,
+                      ),
+                      Kpi(
+                        AppStrings.cupsLabel,
+                        state.overview!.kpis.cups.toStringAsFixed(0),
+                        Icons.local_cafe,
+                      ),
+                      Kpi(
+                        AppStrings.snacksLabel,
+                        state.overview!.kpis.units.toStringAsFixed(0),
+                        Icons.cookie_rounded,
+                      ),
+                      Kpi(
+                        AppStrings.coffeeGramsLabel,
+                        state.overview!.kpis.grams.toStringAsFixed(0),
+                        Icons.scale,
+                      ),
+                      Kpi(
+                        AppStrings.expensesTitle,
+                        state.overview!.kpis.expenses.toStringAsFixed(2),
+                        Icons.account_balance_wallet,
+                      ),
+                    ],
                   ),
 
-                  const SizedBox(height: 8),
+                const SizedBox(height: 16),
 
-                  if (state.error != null && !loading)
-                    Text(
-                      AppStrings.loadFailed(
-                        AppStrings.summaryLabel,
-                        state.error ?? 'unknown',
-                      ),
-                    )
-                  else
-                    KpiWrap(
-                      items: [
-                        Kpi(
-                          AppStrings.totalSalesLabel,
-                          overview.kpis.sales.toStringAsFixed(2),
-                          Icons.attach_money,
-                        ),
-                        Kpi(
-                          AppStrings.costLabelDefinite,
-                          overview.kpis.cost.toStringAsFixed(2),
-                          Icons.factory,
-                        ),
-                        Kpi(
-                          AppStrings.profitLabelDefinite,
-                          overview.kpis.profit.toStringAsFixed(2),
-                          Icons.trending_up,
-                        ),
-                        Kpi(
-                          AppStrings.cupsLabel,
-                          overview.kpis.cups.toStringAsFixed(0),
-                          Icons.local_cafe,
-                        ),
-                        Kpi(
-                          AppStrings.snacksLabel,
-                          overview.kpis.units.toStringAsFixed(0),
-                          Icons.cookie_rounded,
-                        ),
-                        Kpi(
-                          AppStrings.coffeeGramsLabel,
-                          overview.kpis.grams.toStringAsFixed(0),
-                          Icons.scale,
-                        ),
-                        Kpi(
-                          AppStrings.expensesTitle,
-                          overview.kpis.expenses.toStringAsFixed(2),
-                          Icons.account_balance_wallet,
-                        ),
-                      ],
-                    ),
-
-                  const SizedBox(height: 16),
-
-                  /*
+                /*
                 Card(
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
@@ -206,421 +216,373 @@ class _StatsPageState extends State<StatsPage> {
 
                 const SizedBox(height: 16),
                 */
-                  Card(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Padding(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 4,
-                            ),
-                            child: Text(
-                              AppStrings.drinksAndSnacksTitle,
-                              style: TextStyle(fontWeight: FontWeight.w800),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          if (state.loading)
-                            const SizedBox(
-                              height: 120,
-                              child: Center(child: CircularProgressIndicator()),
-                            )
-                          else if (state.error != null)
-                            Padding(
-                              padding: const EdgeInsets.all(8.0),
-                              child: Text(
-                                AppStrings.loadFailed(
-                                  AppStrings.drinksDataLabel,
-                                  state.error ?? 'unknown',
-                                ),
-                              ),
-                            )
-                          else
-                            Builder(
-                              builder: (context) {
-                                final bundle = overview;
-                                final drinkRows = bundle.drinks
-                                    .where(
-                                      (x) => !_isTurkishName(_baseName(x.name)),
-                                    )
-                                    .map(
-                                      (x) => DrinkRow(
-                                        name: x.name,
-                                        cups: x.cups,
-                                        sales: x.sales,
-                                        cost: x.cost,
-                                        profit: x.profit,
-                                        avgPrice: x.cups > 0
-                                            ? (x.sales / x.cups)
-                                            : 0,
-                                      ),
-                                    )
-                                    .toList();
-                                final snackRows = bundle.extras
-                                    .map(
-                                      (x) => DrinkRow(
-                                        name: x.name,
-                                        cups: x.cups,
-                                        sales: x.sales,
-                                        cost: x.cost,
-                                        profit: x.profit,
-                                        avgPrice: x.cups > 0
-                                            ? (x.sales / x.cups)
-                                            : 0,
-                                      ),
-                                    )
-                                    .toList();
-                                final combined = [...drinkRows, ...snackRows]
-                                  ..sort((a, b) => b.sales.compareTo(a.sales));
-                                if (combined.isEmpty) {
-                                  return const Padding(
-                                    padding: EdgeInsets.all(8.0),
-                                    child: Text(AppStrings.noDataForRange),
-                                  );
-                                }
-                                final visible = combined
-                                    .take(_drinksLimit)
-                                    .toList();
-                                return Column(
-                                  children: [
-                                    DrinksByNameTable(rows: visible),
-                                    if (combined.length > visible.length)
-                                      Align(
-                                        alignment: Alignment.centerLeft,
-                                        child: TextButton(
-                                          onPressed: () => setState(() {
-                                            _drinksLimit += _pageSize;
-                                          }),
-                                          child: const Text(
-                                            AppStrings.btnLoadMore,
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                );
-                              },
-                            ),
-                        ],
-                      ),
-                    ),
+
+                Card(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
                   ),
-
-                  const SizedBox(height: 16),
-
-                  Card(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Padding(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 4,
-                            ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 4,
+                          ),
+                          child: Text(
+                            AppStrings.drinksAndSnacksTitle,
+                            style: TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        if (state.loading)
+                          const SizedBox(
+                            height: 120,
+                            child: Center(child: CircularProgressIndicator()),
+                          )
+                        else if (state.error != null)
+                          Padding(
+                            padding: const EdgeInsets.all(8.0),
                             child: Text(
-                              AppStrings.turkishCoffeeTitle,
-                              style: TextStyle(fontWeight: FontWeight.w800),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          if (state.loading)
-                            const SizedBox(
-                              height: 120,
-                              child: Center(child: CircularProgressIndicator()),
-                            )
-                          else if (state.error != null)
-                            Padding(
-                              padding: const EdgeInsets.all(8.0),
-                              child: Text(
-                                AppStrings.loadFailed(
-                                  AppStrings.turkishCoffeeTitle,
-                                  state.error ?? 'unknown',
-                                ),
-                              ),
-                            )
-                          else
-                            Builder(
-                              builder: (context) {
-                                final rows = overview.turkish.map((x) {
-                                  final plain = x.plainGrams.round();
-                                  final spiced = x.spicedGrams.round();
-                                  final cups = x.cups > 0
-                                      ? x.cups
-                                      : (plain + spiced);
-                                  return TurkishRow(
-                                    name: x.name,
-                                    cups: cups,
-                                    plainCups: plain,
-                                    spicedCups: spiced,
-                                    sales: x.sales,
-                                    cost: x.cost,
-                                  );
-                                }).toList();
-                                final totalCups = rows.fold<int>(
-                                  0,
-                                  (s, r) => s + r.cups,
-                                );
-                                if (rows.isEmpty) {
-                                  return TurkishCoffeeTable(rows: rows);
-                                }
-                                final visible = rows
-                                    .take(_turkishLimit)
-                                    .toList();
-                                return Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 6,
-                                        vertical: 4,
-                                      ),
-                                      child: Text(
-                                        AppStrings.turkishCoffeeTotalCups(
-                                          totalCups,
-                                        ),
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                    ),
-                                    TurkishCoffeeTable(rows: visible),
-                                    if (rows.length > visible.length)
-                                      Align(
-                                        alignment: Alignment.centerLeft,
-                                        child: TextButton(
-                                          onPressed: () => setState(() {
-                                            _turkishLimit += _pageSize;
-                                          }),
-                                          child: const Text(
-                                            AppStrings.btnLoadMore,
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                );
-                              },
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // ???? ?????? ?????????
-                  Card(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Padding(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 4,
-                            ),
-                            child: Text(
-                              AppStrings.dailyHighlightsTitle,
-                              style: TextStyle(fontWeight: FontWeight.w800),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          if (state.loading)
-                            const SizedBox(
-                              height: 120,
-                              child: Center(child: CircularProgressIndicator()),
-                            )
-                          else if (state.error != null)
-                            Padding(
-                              padding: const EdgeInsets.all(8.0),
-                              child: Text(
-                                AppStrings.loadFailed(
-                                  AppStrings.dailyHighlightsLabel,
-                                  state.error ?? 'unknown',
-                                ),
-                              ),
-                            )
-                          else
-                            StatsHighlightsCard(
-                              highlights: overview.highlights,
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // ???? ??? ?????
-                  Card(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Padding(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 4,
-                            ),
-                            child: Text(
-                              AppStrings.beansByNameTitle,
-                              style: TextStyle(fontWeight: FontWeight.w800),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          if (state.loading)
-                            const SizedBox(
-                              height: 120,
-                              child: Center(child: CircularProgressIndicator()),
-                            )
-                          else if (state.error != null)
-                            Padding(
-                              padding: const EdgeInsets.all(8.0),
-                              child: Text(
-                                AppStrings.loadFailed(
-                                  AppStrings.beansDataLabel,
-                                  state.error ?? 'unknown',
-                                ),
-                              ),
-                            )
-                          else
-                            Builder(
-                              builder: (context) {
-                                final rows = overview.beans
-                                    .map(
-                                      (x) => BeanRow(
-                                        name: x.name,
-                                        grams: x.grams,
-                                        plainGrams: x.plainGrams,
-                                        spicedGrams: x.spicedGrams,
-                                        sales: x.sales,
-                                        cost: x.cost,
-                                      ),
-                                    )
-                                    .toList();
-                                if (rows.isEmpty) {
-                                  return const Padding(
-                                    padding: EdgeInsets.all(8.0),
-                                    child: Text(AppStrings.noDataForRange),
-                                  );
-                                }
-                                final visible = rows.take(_beansLimit).toList();
-                                return Column(
-                                  children: [
-                                    BeansByNameTable(rows: visible),
-                                    if (rows.length > visible.length)
-                                      Align(
-                                        alignment: Alignment.centerLeft,
-                                        child: TextButton(
-                                          onPressed: () => setState(() {
-                                            _beansLimit += _pageSize;
-                                          }),
-                                          child: const Text(
-                                            AppStrings.btnLoadMore,
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                );
-                              },
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  // ???? ?????: ??????/??? (?????? + ??????? + ??)
-                  Card(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              const Text(
-                                AppStrings.dailyTrendsTitle,
-                                style: TextStyle(fontWeight: FontWeight.w800),
-                              ),
-                              const Spacer(),
-                              SegmentedButton<bool>(
-                                segments: const [
-                                  ButtonSegment<bool>(
-                                    value: false,
-                                    label: Text(AppStrings.salesLabel),
-                                  ),
-                                  ButtonSegment<bool>(
-                                    value: true,
-                                    label: Text(AppStrings.profitLabel),
-                                  ),
-                                ],
-                                selected: <bool>{_profitMode},
-                                onSelectionChanged: (s) =>
-                                    setState(() => _profitMode = s.first),
-                                style: const ButtonStyle(
-                                  visualDensity: VisualDensity(
-                                    horizontal: -2,
-                                    vertical: -2,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          if (state.loading)
-                            const SizedBox(
-                              height: 220,
-                              child: Center(child: CircularProgressIndicator()),
-                            )
-                          else if (state.error != null)
-                            Text(
                               AppStrings.loadFailed(
-                                AppStrings.trendLabel,
+                                AppStrings.drinksDataLabel,
                                 state.error ?? 'unknown',
                               ),
-                            )
-                          else
-                            Builder(
-                              builder: (context) {
-                                final t = overview.trends;
-                                return TripleTrendChart(
-                                  line1: _profitMode
-                                      ? t.totalProfit
-                                      : t.totalSales,
-                                  lineDrinks: _profitMode
-                                      ? t.drinksProfit
-                                      : t.drinksSales,
-                                  lineBeansGrams: _profitMode
-                                      ? t.beansProfit
-                                      : t.beansSales,
-                                  asProfit: _profitMode,
-                                );
-                              },
                             ),
-                        ],
-                      ),
+                          )
+                        else if (state.overview != null)
+                          Builder(
+                            builder: (context) {
+                              final bundle = state.overview!;
+                              final drinkRows = bundle.drinks
+                                  .where(
+                                    (x) =>
+                                        !_isTurkishName(_baseName(x.name)),
+                                  )
+                                  .map(
+                                    (x) => DrinkRow(
+                                      name: x.name,
+                                      cups: x.cups,
+                                      sales: x.sales,
+                                      cost: x.cost,
+                                      profit: x.profit,
+                                      avgPrice: x.cups > 0
+                                          ? (x.sales / x.cups)
+                                          : 0,
+                                    ),
+                                  )
+                                  .toList();
+                              final snackRows = bundle.extras
+                                  .map(
+                                    (x) => DrinkRow(
+                                      name: x.name,
+                                      cups: x.cups,
+                                      sales: x.sales,
+                                      cost: x.cost,
+                                      profit: x.profit,
+                                      avgPrice: x.cups > 0
+                                          ? (x.sales / x.cups)
+                                          : 0,
+                                    ),
+                                  )
+                                  .toList();
+                              final combined = [...drinkRows, ...snackRows]
+                                ..sort((a, b) => b.sales.compareTo(a.sales));
+                              if (combined.isEmpty) {
+                                return const Padding(
+                                  padding: EdgeInsets.all(8.0),
+                                  child: Text(AppStrings.noDataForRange),
+                                );
+                              }
+                              return DrinksByNameTable(rows: combined);
+                            },
+                          ),
+                      ],
                     ),
                   ),
+                ),
+
+                const SizedBox(height: 16),
+
+                Card(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 4,
+                          ),
+                          child: Text(
+                            AppStrings.turkishCoffeeTitle,
+                            style: TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        if (state.loading)
+                          const SizedBox(
+                            height: 120,
+                            child: Center(child: CircularProgressIndicator()),
+                          )
+                        else if (state.error != null)
+                          Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: Text(
+                              AppStrings.loadFailed(
+                                AppStrings.turkishCoffeeTitle,
+                                state.error ?? 'unknown',
+                              ),
+                            ),
+                          )
+                        else if (state.overview != null)
+                          Builder(
+                            builder: (context) {
+                              final rows = state.overview!.turkish
+                                  .map((x) {
+                                    final plain = x.plainGrams.round();
+                                    final spiced = x.spicedGrams.round();
+                                    final cups =
+                                        x.cups > 0 ? x.cups : (plain + spiced);
+                                    return TurkishRow(
+                                      name: x.name,
+                                      cups: cups,
+                                      plainCups: plain,
+                                      spicedCups: spiced,
+                                      sales: x.sales,
+                                      cost: x.cost,
+                                    );
+                                  })
+                                  .toList();
+                              final totalCups = rows.fold<int>(
+                                0,
+                                (s, r) => s + r.cups,
+                              );
+                              if (rows.isEmpty) {
+                                return TurkishCoffeeTable(rows: rows);
+                              }
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 4,
+                                    ),
+                                    child: Text(
+                                      AppStrings.turkishCoffeeTotalCups(
+                                        totalCups,
+                                      ),
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                  TurkishCoffeeTable(rows: rows),
+                                ],
+                              );
+                            },
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+
+                // ???? ?????? ?????????
+                Card(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 4,
+                          ),
+                          child: Text(
+                            AppStrings.dailyHighlightsTitle,
+                            style: TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        if (state.loading)
+                          const SizedBox(
+                            height: 120,
+                            child: Center(child: CircularProgressIndicator()),
+                          )
+                        else if (state.error != null)
+                          Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: Text(
+                              AppStrings.loadFailed(
+                                AppStrings.dailyHighlightsLabel,
+                                state.error ?? 'unknown',
+                              ),
+                            ),
+                          )
+                        else if (state.overview != null)
+                          StatsHighlightsCard(
+                            highlights: state.overview!.highlights,
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+
+                // ???? ??? ?????
+                Card(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 4,
+                          ),
+                          child: Text(
+                            AppStrings.beansByNameTitle,
+                            style: TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        if (state.loading)
+                          const SizedBox(
+                            height: 120,
+                            child: Center(child: CircularProgressIndicator()),
+                          )
+                        else if (state.error != null)
+                          Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: Text(
+                              AppStrings.loadFailed(
+                                AppStrings.beansDataLabel,
+                                state.error ?? 'unknown',
+                              ),
+                            ),
+                          )
+                        else if (state.overview != null)
+                          Builder(
+                            builder: (context) {
+                              final rows = state.overview!.beans
+                                  .map(
+                                    (x) => BeanRow(
+                                      name: x.name,
+                                      grams: x.grams,
+                                      plainGrams: x.plainGrams,
+                                      spicedGrams: x.spicedGrams,
+                                      sales: x.sales,
+                                      cost: x.cost,
+                                    ),
+                                  )
+                                  .toList();
+                              if (rows.isEmpty) {
+                                return const Padding(
+                                  padding: EdgeInsets.all(8.0),
+                                  child: Text(AppStrings.noDataForRange),
+                                );
+                              }
+                              return BeansByNameTable(rows: rows);
+                            },
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // ???? ?????: ??????/??? (?????? + ??????? + ??)
+                Card(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Text(
+                              AppStrings.dailyTrendsTitle,
+                              style: TextStyle(fontWeight: FontWeight.w800),
+                            ),
+                            const Spacer(),
+                            SegmentedButton<bool>(
+                              segments: const [
+                                ButtonSegment<bool>(
+                                  value: false,
+                                  label: Text(AppStrings.salesLabel),
+                                ),
+                                ButtonSegment<bool>(
+                                  value: true,
+                                  label: Text(AppStrings.profitLabel),
+                                ),
+                              ],
+                              selected: <bool>{_profitMode},
+                              onSelectionChanged: (s) =>
+                                  setState(() => _profitMode = s.first),
+                              style: const ButtonStyle(
+                                visualDensity: VisualDensity(
+                                  horizontal: -2,
+                                  vertical: -2,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        if (state.loading)
+                          const SizedBox(
+                            height: 220,
+                            child: Center(child: CircularProgressIndicator()),
+                          )
+                        else if (state.error != null)
+                          Text(
+                            AppStrings.loadFailed(
+                              AppStrings.trendLabel,
+                              state.error ?? 'unknown',
+                            ),
+                          )
+                        else if (state.overview != null)
+                          Builder(
+                            builder: (context) {
+                              final t = state.overview!.trends;
+                              return TripleTrendChart(
+                                line1: _profitMode
+                                    ? t.totalProfit
+                                    : t.totalSales,
+                                lineDrinks: _profitMode
+                                    ? t.drinksProfit
+                                    : t.drinksSales,
+                                lineBeansGrams: _profitMode
+                                    ? t.beansProfit
+                                    : t.beansSales,
+                                asProfit: _profitMode,
+                              );
+                            },
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -710,52 +672,6 @@ class _StatsPageState extends State<StatsPage> {
           ),
         ),
       ),
-    );
-  }
-
-  StatsOverview _placeholderOverview() {
-    final kpis = const Kpis(
-      sales: 0,
-      cost: 0,
-      profit: 0,
-      cups: 0,
-      grams: 0,
-      expenses: 0,
-      units: 0,
-    );
-    final rows = List<GroupRow>.generate(6, (i) => GroupRow(key: '—'));
-    final days = List<DayVal>.generate(
-      6,
-      (i) => DayVal(DateTime.now().subtract(Duration(days: i)), 0),
-    );
-    final trends = TrendsBundle(
-      totalSales: days,
-      totalProfit: days,
-      drinksSales: days,
-      drinksProfit: days,
-      beansSales: days,
-      beansProfit: days,
-    );
-    final highlights = StatsHighlights(
-      topSalesDay: null,
-      topProfitDay: null,
-      busiestDay: null,
-      averageDailySales: 0,
-      averageDrinksPerDay: 0,
-      averageSnacksPerDay: 0,
-      averageBeansGramsPerDay: 0,
-      averageOrdersPerDay: 0,
-      totalOrders: 0,
-      activeDays: 0,
-    );
-    return StatsOverview(
-      kpis: kpis,
-      drinks: rows,
-      beans: rows,
-      turkish: rows,
-      extras: rows,
-      trends: trends,
-      highlights: highlights,
     );
   }
 }

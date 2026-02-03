@@ -1293,7 +1293,13 @@ Future<List<Map<String, dynamic>>> fetchSalesRawForRange({
 Future<List<Map<String, dynamic>>> fetchSalesRawForMonth(
   DateTime month, {
   bool cacheFirst = false,
-}) => _fetchSalesRawForMonth(month, cacheFirst: cacheFirst);
+}) {
+  assert(() {
+    debugPrint('[WARN] Stats should NOT query sales month');
+    return true;
+  }());
+  return _fetchSalesRawForMonth(month, cacheFirst: cacheFirst);
+}
 
 List<Map<String, dynamic>> prepareStatsData(List<Map<String, dynamic>> data) =>
     _prepareStatsData(data);

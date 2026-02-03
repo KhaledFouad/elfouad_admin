@@ -53,8 +53,14 @@ Future<void> _syncOneDay(FirebaseFirestore db, DateTime dayStartLocal) async {
 
   final rawSales = await _fetchSalesRawForDay(db, startUtc, endUtc);
   final prepared = prepareStatsData(rawSales);
+  final withoutDeferred = prepared
+      .where(
+        (m) => (m['is_deferred'] ?? false) != true &&
+            (m['is_credit'] ?? false) != true,
+      )
+      .toList();
   final filtered = filterStatsSales(
-    prepared,
+    withoutDeferred,
     startUtc: startUtc,
     endUtc: endUtc,
   );
@@ -109,6 +115,9 @@ Future<void> _syncOneDay(FirebaseFirestore db, DateTime dayStartLocal) async {
     'cost': kpis.cost,
     'profit': kpis.profit,
     'grams': kpis.grams,
+    'cups': kpis.cups,
+    'units': kpis.units,
+    // Backward compatibility with older readers.
     'drinks': kpis.cups,
     'snacks': kpis.units,
     'expenses': kpis.expenses,

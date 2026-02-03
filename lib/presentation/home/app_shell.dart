@@ -1,17 +1,14 @@
 import 'package:elfouad_admin/presentation/Expenses/pages/expenses_page.dart';
-import 'package:elfouad_admin/presentation/forecast/pages/beans_forecast_page.dart';
 import 'package:elfouad_admin/presentation/home/home_dashboard_page.dart';
+import 'package:elfouad_admin/presentation/inventory/pages/inventory_page.dart';
 import 'package:elfouad_admin/presentation/manage/pages/products_manage_page.dart';
 import 'package:elfouad_admin/presentation/recipes/pages/recipes_list_page.dart'
     show RecipesListPage;
 import 'package:elfouad_admin/presentation/archive/pages/trash_page.dart';
-import 'package:elfouad_admin/presentation/archive_months/pages/archive_months_page.dart';
-import 'package:elfouad_admin/presentation/stocktake/pages/stocktake_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'nav_state.dart';
 import 'package:elfouad_admin/presentation/History/pages/sales_history_page.dart';
-import '../../presentation/inventory/pages/inventory_page.dart';
 import '../../presentation/stats/pages/stats_page.dart';
 
 class AppShell extends StatefulWidget {
@@ -29,14 +26,12 @@ class _AppShellState extends State<AppShell> {
       HomeDashboardPage(),
       SalesHistoryPage(),
       StatsPage(),
-      ArchiveMonthsPage(),
       InventoryPage(),
       ManagePage(),
       ExpensesPage(),
       // GrindPage(),
       TrashPage(),
       RecipesListPage(),
-      BeansForecastPage(),
     ];
 
     return BlocBuilder<NavCubit, AppTab>(
@@ -84,12 +79,8 @@ class _MainStackState extends State<_MainStack> {
         return const SalesHistoryPage();
       case AppTab.stats:
         return const StatsPage();
-      case AppTab.archive:
-        return const ArchiveMonthsPage();
       case AppTab.inventory:
         return const InventoryPage();
-      case AppTab.stocktake:
-        return const StocktakePage();
       case AppTab.edits:
         return const ManagePage();
       case AppTab.expenses:
@@ -99,8 +90,6 @@ class _MainStackState extends State<_MainStack> {
 
       case AppTab.recipes:
         return const RecipesListPage();
-      case AppTab.forecast:
-        return const BeansForecastPage();
     }
   }
 

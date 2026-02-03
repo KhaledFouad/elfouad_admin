@@ -433,20 +433,6 @@ const _features = <_HomeFeature>[
     gradient: [Color(0xFFEAF1F8), Color(0xFFD7E3F2)],
   ),
   _HomeFeature(
-    tab: AppTab.archive,
-    title: AppStrings.tabArchive,
-    icon: Icons.archive_rounded,
-    accent: Color(0xFF6D4C41),
-    gradient: [Color(0xFFF7EFE9), Color(0xFFE6D8D0)],
-  ),
-  _HomeFeature(
-    tab: AppTab.inventory,
-    title: AppStrings.tabInventory,
-    icon: Icons.inventory_2_outlined,
-    accent: Color(0xFF6C5B3E),
-    gradient: [Color(0xFFF2EEE8), Color(0xFFE1D7C8)],
-  ),
-  _HomeFeature(
     tab: AppTab.edits,
     title: AppStrings.tabEdits,
     icon: Icons.edit_note_outlined,
@@ -468,11 +454,11 @@ const _features = <_HomeFeature>[
     gradient: [Color(0xFFF5F0E0), Color(0xFFE6D9B7)],
   ),
   _HomeFeature(
-    tab: AppTab.stocktake,
-    title: AppStrings.tabStocktake,
-    icon: Icons.fact_check_outlined,
-    accent: Color(0xFF3C6E71),
-    gradient: [Color(0xFFE9F4F4), Color(0xFFD2E6E7)],
+    tab: AppTab.inventory,
+    title: AppStrings.tabInventory,
+    icon: Icons.inventory_2_outlined,
+    accent: Color(0xFF6B4E3D),
+    gradient: [Color(0xFFF3EEE8), Color(0xFFE2D6C9)],
   ),
   _HomeFeature(
     tab: AppTab.recycleBin,
@@ -480,13 +466,6 @@ const _features = <_HomeFeature>[
     icon: Icons.delete_sweep_outlined,
     accent: Color(0xFF6D4C41),
     gradient: [Color(0xFFF4EDE9), Color(0xFFE8D9D2)],
-  ),
-  _HomeFeature(
-    tab: AppTab.forecast,
-    title: AppStrings.tabForecast,
-    icon: Icons.auto_graph_outlined,
-    accent: Color(0xFF2F7A6D),
-    gradient: [Color(0xFFE8F6F2), Color(0xFFCFEADF)],
   ),
   // Hidden per request: remove Grind tile from home.
   // _HomeFeature(

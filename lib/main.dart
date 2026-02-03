@@ -4,10 +4,6 @@ import 'package:elfouad_admin/presentation/auth/lock_gate_page.dart';
 import 'package:elfouad_admin/services/auth/auth_service.dart';
 import 'package:elfouad_admin/services/archive/auto_archiver.dart.dart'
     show runAutoArchiveIfNeeded;
-import 'package:elfouad_admin/services/archive/daily_archive_stats.dart'
-    show syncDailyArchiveStats;
-import 'package:elfouad_admin/services/archive/monthly_archive_stats.dart'
-    show syncMonthlyArchiveStats;
 import 'package:elfouad_admin/core/widgets/app_background.dart';
 import 'package:flutter/foundation.dart' show kReleaseMode, kIsWeb;
 import 'package:flutter/material.dart';
@@ -33,14 +29,6 @@ Future<void> _scheduleAutoArchive() async {
   unawaited(
     runAutoArchiveIfNeeded(adminUid: AppStrings.systemUserId, batchSize: 200),
   );
-}
-
-Future<void> _scheduleDailyArchiveSync() async {
-  await Future<void>.delayed(const Duration(seconds: 6));
-  unawaited(() async {
-    await syncDailyArchiveStats();
-    await syncMonthlyArchiveStats();
-  }());
 }
 
 late final Future<void> _firebaseInit;
@@ -229,7 +217,6 @@ class _BootstrapGateState extends State<_BootstrapGate> {
     super.initState();
     _initFuture = widget.initFuture;
     _initFuture.then((_) => unawaited(_scheduleAutoArchive()));
-    _initFuture.then((_) => unawaited(_scheduleDailyArchiveSync()));
   }
 
   Widget _buildApp() => const LockGatePage();

@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:elfouad_admin/presentation/stats/models/stats_period.dart';
+import 'package:elfouad_admin/presentation/stats/models/stats_models.dart';
 import 'package:elfouad_admin/presentation/stats/utils/stats_data_provider.dart';
 
 const String _monthlyArchivePrefKey = 'archive_monthly_last_sync';
@@ -399,7 +400,7 @@ String _pickSaleId(
   return fallback;
 }
 
-double _normalizeProfit(kpis) {
+double _normalizeProfit(Kpis kpis) {
   final sales = kpis.sales;
   final cost = kpis.cost;
   final profit = kpis.profit;
@@ -444,5 +445,4 @@ Future<DateTime?> _findArchiveStartMonth(FirebaseFirestore db) async {
     return null;
   }
 }
-
 

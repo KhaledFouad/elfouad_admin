@@ -28,6 +28,8 @@ class SalesHistoryCubit extends Cubit<SalesHistoryState> {
   StreamSubscription<int>? _creditCountSub;
   Timer? _realtimeDebounce;
   int _summaryRequestId = 0;
+  QuerySnapshot<Map<String, dynamic>>? _lastCreatedSnap;
+  QuerySnapshot<Map<String, dynamic>>? _lastSettledSnap;
 
   Future<void> initialize() async {
     _startCreditCountRealtime();
@@ -202,15 +204,23 @@ class SalesHistoryCubit extends Cubit<SalesHistoryState> {
   void _startRealtime(DateTimeRange range) {
     _createdSub?.cancel();
     _settledSub?.cancel();
+    _lastCreatedSnap = null;
+    _lastSettledSnap = null;
 
-    _createdSub =
-        _repository.watchCreatedInRange(range).skip(1).listen((_) {
-      _scheduleRealtimeRefresh();
-    });
-    _settledSub =
-        _repository.watchSettledInRange(range).skip(1).listen((_) {
-      _scheduleRealtimeRefresh();
-    });
+    _createdSub = _repository
+        .watchCreatedInRange(range, SalesHistoryRepository.pageSize)
+        .skip(1)
+        .listen((snap) {
+          _lastCreatedSnap = snap;
+          _scheduleRealtimeMerge(range);
+        }, onError: (_) {});
+    _settledSub = _repository
+        .watchSettledInRange(range, SalesHistoryRepository.pageSize)
+        .skip(1)
+        .listen((snap) {
+          _lastSettledSnap = snap;
+          _scheduleRealtimeMerge(range);
+        }, onError: (_) {});
   }
 
   void _startCreditCountRealtime() {
@@ -231,11 +241,46 @@ class SalesHistoryCubit extends Cubit<SalesHistoryState> {
     );
   }
 
-  void _scheduleRealtimeRefresh() {
+  void _scheduleRealtimeMerge(DateTimeRange range) {
     _realtimeDebounce?.cancel();
     _realtimeDebounce = Timer(
       const Duration(milliseconds: 350),
-      () => unawaited(refreshCurrent()),
+      () => _applyRealtimeMerge(range),
+    );
+  }
+
+  void _applyRealtimeMerge(DateTimeRange range) {
+    final combined = <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
+    if (_lastCreatedSnap != null) {
+      for (final doc in _lastCreatedSnap!.docs) {
+        combined[doc.id] = doc;
+      }
+    }
+    if (_lastSettledSnap != null) {
+      for (final doc in _lastSettledSnap!.docs) {
+        combined[doc.id] = doc;
+      }
+    }
+
+    if (combined.isEmpty) return;
+
+    final updated = combined.values.map(SaleRecord.new).toList()
+      ..sort((a, b) => b.effectiveTime.compareTo(a.effectiveTime));
+
+    final existing = List<SaleRecord>.from(state.allRecords);
+    final updatedIds = updated.map((r) => r.id).toSet();
+    final merged = <SaleRecord>[...updated];
+    for (final record in existing) {
+      if (!updatedIds.contains(record.id)) {
+        merged.add(record);
+      }
+    }
+
+    debugPrint(
+      '[HISTORY] realtime first page updated via snapshots, no full-range scans',
+    );
+    emit(
+      state.copyWith(allRecords: merged, groups: _buildGroups(merged, range)),
     );
   }
 
