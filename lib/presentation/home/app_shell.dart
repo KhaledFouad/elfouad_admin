@@ -1,6 +1,6 @@
 import 'package:elfouad_admin/presentation/Expenses/pages/expenses_page.dart';
+import 'package:elfouad_admin/presentation/archive_months/pages/archive_months_page.dart';
 import 'package:elfouad_admin/presentation/home/home_dashboard_page.dart';
-import 'package:elfouad_admin/presentation/inventory/pages/inventory_page.dart';
 import 'package:elfouad_admin/presentation/manage/pages/products_manage_page.dart';
 import 'package:elfouad_admin/presentation/recipes/pages/recipes_list_page.dart'
     show RecipesListPage;
@@ -26,7 +26,7 @@ class _AppShellState extends State<AppShell> {
       HomeDashboardPage(),
       SalesHistoryPage(),
       StatsPage(),
-      InventoryPage(),
+      ArchiveMonthsPage(),
       ManagePage(),
       ExpensesPage(),
       // GrindPage(),
@@ -79,9 +79,9 @@ class _MainStackState extends State<_MainStack> {
         return const SalesHistoryPage();
       case AppTab.stats:
         return const StatsPage();
+      case AppTab.archive:
+        return const ArchiveMonthsPage();
       case AppTab.inventory:
-        return const InventoryPage();
-      case AppTab.edits:
         return const ManagePage();
       case AppTab.expenses:
         return const ExpensesPage();

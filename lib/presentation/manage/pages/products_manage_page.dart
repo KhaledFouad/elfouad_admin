@@ -7,6 +7,7 @@ import 'package:elfouad_admin/presentation/inventory/bloc/inventory_cubit.dart';
 import 'package:elfouad_admin/presentation/inventory/models/inventory_row.dart';
 import 'package:elfouad_admin/presentation/inventory/utils/inventory_crud.dart';
 import 'package:elfouad_admin/presentation/inventory/utils/inventory_helpers.dart';
+import 'package:elfouad_admin/presentation/inventory/pages/inventory_log_page.dart';
 import 'package:elfouad_admin/presentation/manage/widgets/product_edit_sheet.dart'
     show ProductEditSheet;
 import 'package:elfouad_admin/presentation/manage/bloc/extras_cubit.dart';
@@ -194,6 +195,9 @@ class _ManagePageState extends State<ManagePage> {
     final isWide = breakpoints.largerThan(TABLET);
     final contentMaxWidth = isWide ? 1100.0 : double.infinity;
     final horizontalPadding = isPhone ? 10.0 : 16.0;
+    final maxStockForBar = context.watch<InventoryCubit>().state.maxStock;
+    final maxExtraUnits = _maxExtraUnits(_extras.items);
+    const pageTitle = AppStrings.tabInventory;
 
     Widget emptyState() => const Padding(
       padding: EdgeInsets.symmetric(vertical: 24),
@@ -310,51 +314,71 @@ class _ManagePageState extends State<ManagePage> {
             separatorBuilder: (_, _) => const SizedBox(height: 8),
             itemBuilder: (_, index) {
               final r = rows[index];
+              final showBar = r.stockG > 0;
+              final percent = _barPercent(r.stockG, maxStockForBar);
+              final barColor = _stockBarColorForGrams(r);
               return Card(
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
                 ),
-                child: ListTile(
-                  key: ValueKey('${collection}_${r.id}'),
-                  title: Text(
-                    r.variant.isEmpty ? r.name : '${r.name} - ${r.variant}',
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  subtitle: Wrap(
-                    spacing: 10,
-                    children: [
-                      _pill(
-                        Icons.scale,
-                        AppStrings.stockLabel,
-                        AppStrings.gramsAmount(r.stockG),
+                child: Column(
+                  children: [
+                    ListTile(
+                      key: ValueKey('${collection}_${r.id}'),
+                      title: Text(
+                        r.variant.isEmpty ? r.name : '${r.name} - ${r.variant}',
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
                       ),
-                      _pill(
-                        Icons.sell,
-                        AppStrings.pricePerKgLabel,
-                        r.sellPerKg.toStringAsFixed(2),
+                      subtitle: Wrap(
+                        spacing: 10,
+                        children: [
+                          _pill(
+                            Icons.scale,
+                            AppStrings.stockLabel,
+                            AppStrings.gramsAmount(r.stockG),
+                          ),
+                          _pill(
+                            Icons.sell,
+                            AppStrings.pricePerKgLabel,
+                            r.sellPerKg.toStringAsFixed(2),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.edit),
-                        tooltip: AppStrings.actionEdit,
-                        onPressed: () => _openProductEditor(
-                          context,
-                          collection: collection,
-                          id: r.id,
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.edit),
+                            tooltip: AppStrings.actionEdit,
+                            onPressed: () => _openProductEditor(
+                              context,
+                              collection: collection,
+                              id: r.id,
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline),
+                            tooltip: AppStrings.actionDelete,
+                            onPressed: () => _confirmDeleteInventory(context, r),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (showBar)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: LinearProgressIndicator(
+                            value: percent,
+                            minHeight: 8,
+                            backgroundColor: Colors.brown.shade50,
+                            valueColor: AlwaysStoppedAnimation(barColor),
+                          ),
                         ),
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline),
-                        tooltip: AppStrings.actionDelete,
-                        onPressed: () => _confirmDeleteInventory(context, r),
-                      ),
-                    ],
-                  ),
+                  ],
                 ),
               );
             },
@@ -385,64 +409,85 @@ class _ManagePageState extends State<ManagePage> {
             separatorBuilder: (_, _) => const SizedBox(height: 8),
             itemBuilder: (_, index) {
               final e = rows[index];
+              final showBar = e.stockUnits > 0;
+              final percent = _barPercent(e.stockUnits, maxExtraUnits);
               return Card(
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
                 ),
-                child: ListTile(
-                  key: ValueKey('extra_${e.id}'),
-                  title: Text(
-                    e.name,
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  subtitle: Wrap(
-                    spacing: 10,
-                    runSpacing: 6,
-                    children: [
-                      if (e.category.isNotEmpty)
-                        _pill(
-                          Icons.category,
-                          AppStrings.categoryLabel,
-                          e.category,
+                child: Column(
+                  children: [
+                    ListTile(
+                      key: ValueKey('extra_${e.id}'),
+                      title: Text(
+                        e.name,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      subtitle: Wrap(
+                        spacing: 10,
+                        runSpacing: 6,
+                        children: [
+                          if (e.category.isNotEmpty)
+                            _pill(
+                              Icons.category,
+                              AppStrings.categoryLabel,
+                              e.category,
+                            ),
+                          _pill(
+                            Icons.inventory_2,
+                            AppStrings.stockLabel,
+                            '${_fmtNum(e.stockUnits)}${e.unit.isEmpty ? '' : ' ${e.unit}'}',
+                          ),
+                          _pill(
+                            Icons.attach_money,
+                            AppStrings.sellPriceLabel,
+                            _fmtNum(e.priceSell),
+                          ),
+                          _pill(
+                            Icons.money_off,
+                            AppStrings.costLabelDefinite,
+                            _fmtNum(e.costUnit),
+                          ),
+                          if (!e.active)
+                            _pill(
+                              Icons.pause_circle_filled,
+                              AppStrings.statusLabel,
+                              AppStrings.inactiveLabel,
+                            ),
+                        ],
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.edit),
+                            tooltip: AppStrings.actionEdit,
+                            onPressed: () => _openExtraEditor(context, e.id),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline),
+                            tooltip: AppStrings.actionDelete,
+                            onPressed: () => _confirmDeleteExtra(context, e),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (showBar)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: LinearProgressIndicator(
+                            value: percent,
+                            minHeight: 8,
+                            backgroundColor: Colors.brown.shade50,
+                            valueColor: const AlwaysStoppedAnimation(
+                              Color(0xFF6F4E37),
+                            ),
+                          ),
                         ),
-                      _pill(
-                        Icons.inventory_2,
-                        AppStrings.stockLabel,
-                        '${_fmtNum(e.stockUnits)}${e.unit.isEmpty ? '' : ' ${e.unit}'}',
                       ),
-                      _pill(
-                        Icons.attach_money,
-                        AppStrings.sellPriceLabel,
-                        _fmtNum(e.priceSell),
-                      ),
-                      _pill(
-                        Icons.money_off,
-                        AppStrings.costLabelDefinite,
-                        _fmtNum(e.costUnit),
-                      ),
-                      if (!e.active)
-                        _pill(
-                          Icons.pause_circle_filled,
-                          AppStrings.statusLabel,
-                          AppStrings.inactiveLabel,
-                        ),
-                    ],
-                  ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.edit),
-                        tooltip: AppStrings.actionEdit,
-                        onPressed: () => _openExtraEditor(context, e.id),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline),
-                        tooltip: AppStrings.actionDelete,
-                        onPressed: () => _confirmDeleteExtra(context, e),
-                      ),
-                    ],
-                  ),
+                  ],
                 ),
               );
             },
@@ -499,8 +544,21 @@ class _ManagePageState extends State<ManagePage> {
                   onPressed: () => context.read<NavCubit>().setTab(AppTab.home),
                   tooltip: AppStrings.tabHome,
                 ),
-                title: const Text(
-                  AppStrings.tabEdits,
+                actions: [
+                  IconButton(
+                    icon: const Icon(Icons.history),
+                    tooltip: AppStrings.inventoryLogTitle,
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const InventoryLogPage(),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+                title: Text(
+                  pageTitle,
                   style: TextStyle(
                     fontWeight: FontWeight.w800,
                     fontSize: 35,
@@ -670,6 +728,30 @@ class _ManagePageState extends State<ManagePage> {
         ],
       ),
     );
+  }
+
+  static double _barPercent(double value, double max) {
+    if (value <= 0 || max <= 0) return 0;
+    final ratio = value / max;
+    return ratio.clamp(0.0, 1.0);
+  }
+
+  static double _maxExtraUnits(List<ExtraRow> items) {
+    double max = 0;
+    for (final e in items) {
+      if (e.stockUnits > max) max = e.stockUnits;
+    }
+    return max <= 0 ? 1 : max;
+  }
+
+  static Color _stockBarColorForGrams(InventoryRow row) {
+    if (row.stockG <= row.minLevelG && row.minLevelG > 0) {
+      return Colors.red.shade400;
+    }
+    if (row.stockG <= 2500) {
+      return Colors.orange.shade500;
+    }
+    return const Color(0xFF6F4E37);
   }
 
   Future<void> _confirmDeleteDrink(BuildContext context, String id) async {

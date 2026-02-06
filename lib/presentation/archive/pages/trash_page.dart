@@ -5,6 +5,7 @@ import 'package:elfouad_admin/presentation/archive/models/archive_entry.dart';
 import 'package:elfouad_admin/presentation/archive/utils/archive_utils.dart';
 import 'package:elfouad_admin/presentation/archive/widgets/archive_entry_card.dart';
 import 'package:elfouad_admin/presentation/home/nav_state.dart';
+import 'package:elfouad_admin/presentation/Expenses/utils/expenses_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:responsive_framework/responsive_framework.dart';
@@ -34,31 +35,60 @@ class TrashPage extends StatelessWidget {
               borderRadius: const BorderRadius.vertical(
                 bottom: Radius.circular(24),
               ),
-              child: AppBar(
-                automaticallyImplyLeading: false,
-                leading: IconButton(
-                  icon: const Icon(Icons.home_rounded, color: Colors.white),
-                  onPressed: () => context.read<NavCubit>().setTab(AppTab.home),
-                  tooltip: AppStrings.tabHome,
-                ),
-                centerTitle: true,
-                title: const Text(
-                  AppStrings.recycleBinTitle,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 30,
-                    color: Colors.white,
-                  ),
-                ),
-                flexibleSpace: Container(
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [Color(0xFF5D4037), Color(0xFF795548)],
+              child: BlocBuilder<ArchiveTrashCubit, ArchiveTrashState>(
+                buildWhen: (prev, curr) => prev.range != curr.range,
+                builder: (context, state) {
+                  return AppBar(
+                    automaticallyImplyLeading: false,
+                    leading: IconButton(
+                      icon: const Icon(Icons.home_rounded, color: Colors.white),
+                      onPressed: () =>
+                          context.read<NavCubit>().setTab(AppTab.home),
+                      tooltip: AppStrings.tabHome,
                     ),
-                  ),
-                ),
+                    centerTitle: true,
+                    title: const Text(
+                      AppStrings.recycleBinTitle,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 30,
+                        color: Colors.white,
+                      ),
+                    ),
+                    actions: [
+                      IconButton(
+                        tooltip: AppStrings.actionFilterByDate,
+                        onPressed: () =>
+                            _pickRange(context, state.range),
+                        icon: const Icon(Icons.filter_alt_rounded),
+                        color: Colors.white,
+                      ),
+                      if (!_sameRange(
+                        state.range,
+                        todayOperationalRangeLocal(),
+                      ))
+                        IconButton(
+                          tooltip: AppStrings.actionOperationalDay,
+                          onPressed: () {
+                            context.read<ArchiveTrashCubit>().setRange(
+                                  todayOperationalRangeLocal(),
+                                );
+                          },
+                          icon: const Icon(Icons.restart_alt),
+                          color: Colors.white,
+                        ),
+                    ],
+                    flexibleSpace: Container(
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [Color(0xFF5D4037), Color(0xFF795548)],
+                        ),
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
           ),
@@ -82,6 +112,46 @@ class TrashPage extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _pickRange(
+    BuildContext context,
+    DateTimeRange current,
+  ) async {
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(DateTime.now().year - 2),
+      lastDate: DateTime(DateTime.now().year + 1),
+      initialDateRange: current,
+      locale: const Locale('ar'),
+      builder: (context, child) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: child!,
+      ),
+    );
+    if (!context.mounted) return;
+    if (picked != null) {
+      final start = DateTime(
+        picked.start.year,
+        picked.start.month,
+        picked.start.day,
+        4,
+      );
+      final endBase = DateTime(
+        picked.end.year,
+        picked.end.month,
+        picked.end.day,
+        4,
+      );
+      final end = endBase.add(const Duration(days: 1));
+      context.read<ArchiveTrashCubit>().setRange(
+            DateTimeRange(start: start, end: end),
+          );
+    }
+  }
+
+  bool _sameRange(DateTimeRange a, DateTimeRange b) {
+    return a.start == b.start && a.end == b.end;
   }
 }
 

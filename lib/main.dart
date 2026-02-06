@@ -1,9 +1,17 @@
 import 'dart:async' show unawaited;
 import 'package:elfouad_admin/core/utils/firestore_tuning.dart';
 import 'package:elfouad_admin/presentation/auth/lock_gate_page.dart';
+import 'package:elfouad_admin/presentation/stats/utils/op_day.dart'
+    show opDayKeyFromLocal, kOpShiftHours;
 import 'package:elfouad_admin/services/auth/auth_service.dart';
 import 'package:elfouad_admin/services/archive/auto_archiver.dart.dart'
-    show runAutoArchiveIfNeeded;
+    show runAutoArchiveIfNeeded, isCurrentDeviceAutoArchiveOwner;
+import 'package:elfouad_admin/services/archive/daily_archive_stats.dart'
+    show syncDailyArchiveStats;
+import 'package:elfouad_admin/services/archive/monthly_archive_stats.dart'
+    show syncMonthlyArchiveForMonth;
+import 'package:elfouad_admin/services/sales/deferred_sales_migration.dart'
+    show migrateDeferredSalesIfNeeded;
 import 'package:elfouad_admin/core/widgets/app_background.dart';
 import 'package:flutter/foundation.dart' show kReleaseMode, kIsWeb;
 import 'package:flutter/material.dart';
@@ -17,18 +25,73 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 const _primaryHex = 0xFF543824;
 const _accentHex = 0xFFC49A6C;
+const _maintenanceLastDayKey = 'maintenance_last_day_key';
+const _maintenanceLastArchiveMonthKey = 'maintenance_last_archive_month_key';
 
 Future<void> _initFirebase() async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   await configureFirestore();
 }
 
-Future<void> _scheduleAutoArchive() async {
-  if (!kReleaseMode) return;
+Future<void> _scheduleMaintenance() async {
   await Future<void>.delayed(const Duration(seconds: 8));
-  unawaited(
-    runAutoArchiveIfNeeded(adminUid: AppStrings.systemUserId, batchSize: 200),
-  );
+  unawaited(migrateDeferredSalesIfNeeded());
+
+  final prefs = await SharedPreferences.getInstance();
+  final now = DateTime.now();
+  final todayKey = opDayKeyFromLocal(now);
+  final lastDayKey = prefs.getString(_maintenanceLastDayKey);
+  if (lastDayKey == todayKey) return;
+
+  bool isOwner = false;
+  if (kReleaseMode) {
+    try {
+      isOwner = await isCurrentDeviceAutoArchiveOwner(prefs: prefs);
+    } catch (_) {
+      isOwner = false;
+    }
+  }
+
+  try {
+    await syncDailyArchiveStats(
+      prefs: prefs,
+      defaultBackfillDays: 3,
+      maxBackfillDays: 31,
+      allowExtendedBackfill: isOwner,
+    );
+  } catch (_) {}
+
+  try {
+    await syncMonthlyArchiveForMonth(
+      month: DateTime(now.year, now.month, 1),
+      force: true,
+    );
+  } catch (_) {}
+
+  await prefs.setString(_maintenanceLastDayKey, todayKey);
+
+  if (!kReleaseMode) return;
+
+  final effectiveMonthKey = _effectiveMaintenanceMonthKey(DateTime.now());
+  final lastArchiveMonth = prefs.getString(_maintenanceLastArchiveMonthKey);
+  if (lastArchiveMonth == effectiveMonthKey) return;
+
+  try {
+    await runAutoArchiveIfNeeded(
+      adminUid: AppStrings.systemUserId,
+      batchSize: 200,
+    );
+    await prefs.setString(_maintenanceLastArchiveMonthKey, effectiveMonthKey);
+  } catch (_) {}
+}
+
+String _effectiveMaintenanceMonthKey(DateTime nowLocal) {
+  final monthStartLocal = DateTime(nowLocal.year, nowLocal.month, 1, kOpShiftHours);
+  final effectiveMonth = nowLocal.isBefore(monthStartLocal)
+      ? DateTime(nowLocal.year, nowLocal.month - 1, 1)
+      : DateTime(nowLocal.year, nowLocal.month, 1);
+  final m = effectiveMonth.month.toString().padLeft(2, '0');
+  return '${effectiveMonth.year}-$m';
 }
 
 late final Future<void> _firebaseInit;
@@ -216,7 +279,7 @@ class _BootstrapGateState extends State<_BootstrapGate> {
   void initState() {
     super.initState();
     _initFuture = widget.initFuture;
-    _initFuture.then((_) => unawaited(_scheduleAutoArchive()));
+    _initFuture.then((_) => unawaited(_scheduleMaintenance()));
   }
 
   Widget _buildApp() => const LockGatePage();

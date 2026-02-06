@@ -234,7 +234,7 @@ class _RecipePrepareSheetState extends State<RecipePrepareSheet> {
   Widget build(BuildContext context) {
     return Directionality(
       textDirection: TextDirection.rtl,
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
         // ✅ Future واحد ثابت – مش بيتغيّر مع كل كتابة
         child: FutureBuilder<void>(

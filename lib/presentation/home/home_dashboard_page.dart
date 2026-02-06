@@ -16,6 +16,7 @@ class HomeDashboardPage extends StatefulWidget {
 class _HomeDashboardPageState extends State<HomeDashboardPage>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
+  bool _didPrecache = false;
 
   @override
   void initState() {
@@ -24,6 +25,15 @@ class _HomeDashboardPageState extends State<HomeDashboardPage>
       vsync: this,
       duration: const Duration(milliseconds: 900),
     )..forward();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_didPrecache) return;
+    _didPrecache = true;
+    precacheImage(const AssetImage('assets/name.png'), context);
+    precacheImage(const AssetImage('assets/Group8.png'), context);
   }
 
   @override
@@ -433,11 +443,11 @@ const _features = <_HomeFeature>[
     gradient: [Color(0xFFEAF1F8), Color(0xFFD7E3F2)],
   ),
   _HomeFeature(
-    tab: AppTab.edits,
-    title: AppStrings.tabEdits,
-    icon: Icons.edit_note_outlined,
-    accent: Color(0xFF8A4B55),
-    gradient: [Color(0xFFF8EDEF), Color(0xFFE9D1D6)],
+    tab: AppTab.archive,
+    title: AppStrings.tabArchive,
+    icon: Icons.archive_rounded,
+    accent: Color(0xFF6A4E23),
+    gradient: [Color(0xFFF6EEE4), Color(0xFFE7D4BE)],
   ),
   _HomeFeature(
     tab: AppTab.recipes,

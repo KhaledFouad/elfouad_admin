@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:elfouad_admin/core/utils/app_strings.dart';
 import 'package:elfouad_admin/presentation/inventory/bloc/inventory_cubit.dart';
 import 'package:elfouad_admin/presentation/inventory/models/inventory_row.dart';
+import 'package:elfouad_admin/presentation/inventory/utils/inventory_log.dart';
 import 'package:elfouad_admin/presentation/manage/bloc/extras_cubit.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -307,6 +308,7 @@ class _AddItemSheetState extends State<AddItemSheet> {
                   AppStrings.unitExampleLabel,
                   TextInputType.text,
                 ),
+                const SizedBox(height: 8),
                 _tf(
                   _stock,
                   AppStrings.stockUnitsLabel,
@@ -1581,7 +1583,7 @@ class _AddItemSheetState extends State<AddItemSheet> {
           final baseSell = _num(_baseSellPerKg.text);
           final baseCost = _num(_baseCostPerKg.text);
 
-          await db.collection(col).add({
+          final payload = <String, dynamic>{
             'name': name,
             'variant': '',
             'unit': 'g',
@@ -1603,9 +1605,20 @@ class _AddItemSheetState extends State<AddItemSheet> {
             'createdAt': now,
             if (posOrder != null) 'posOrder': posOrder,
             if (posOrder != null) 'pos_order': posOrder,
-          });
+          };
+          final docRef = await db.collection(col).add(payload);
+          await _logInventoryCreate(
+            collection: col,
+            id: docRef.id,
+            name: name,
+            variant: '',
+            stock: _num(_stock.text),
+            sellPerKg: baseSell,
+            costPerKg: baseCost,
+          );
         } else {
           final batch = db.batch();
+          final logEntries = <Map<String, dynamic>>[];
           for (final entry in _itemRoasts) {
             final docRef = db.collection(col).doc();
             final payload = <String, dynamic>{
@@ -1632,8 +1645,26 @@ class _AddItemSheetState extends State<AddItemSheet> {
               if (posOrder != null) 'pos_order': posOrder,
             };
             batch.set(docRef, payload);
+            logEntries.add({
+              'id': docRef.id,
+              'variant': entry.name,
+              'stock': _num(entry.stockCtrl.text),
+              'sell': _num(entry.sellCtrl.text),
+              'cost': _num(entry.costCtrl.text),
+            });
           }
           await batch.commit();
+          for (final entry in logEntries) {
+            await _logInventoryCreate(
+              collection: col,
+              id: entry['id'] as String,
+              name: name,
+              variant: (entry['variant'] ?? '').toString(),
+              stock: _num(entry['stock']),
+              sellPerKg: _num(entry['sell']),
+              costPerKg: _num(entry['cost']),
+            );
+          }
         }
       }
 
@@ -1651,6 +1682,36 @@ class _AddItemSheetState extends State<AddItemSheet> {
   double _num(dynamic v) {
     if (v is num) return v.toDouble();
     return double.tryParse(v?.toString().replaceAll(',', '.') ?? '') ?? 0.0;
+  }
+
+  Future<void> _logInventoryCreate({
+    required String collection,
+    required String id,
+    required String name,
+    required String variant,
+    required double stock,
+    required double sellPerKg,
+    required double costPerKg,
+  }) async {
+    try {
+      await logInventoryChange(
+        action: 'create',
+        collection: collection,
+        itemId: id,
+        name: name,
+        variant: variant,
+        before: const <String, dynamic>{},
+        after: {
+          'stock': stock,
+          'sell_per_kg': sellPerKg,
+          'cost_per_kg': costPerKg,
+        },
+        unit: 'g',
+        source: 'manage_create',
+      );
+    } catch (_) {
+      // ignore log failures
+    }
   }
 
   int? _intOrNull(String? value) {

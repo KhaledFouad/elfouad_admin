@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:elfouad_admin/core/utils/app_strings.dart';
 import 'package:elfouad_admin/presentation/inventory/bloc/inventory_cubit.dart';
 import 'package:elfouad_admin/presentation/inventory/models/inventory_row.dart';
+import 'package:elfouad_admin/presentation/inventory/utils/inventory_log.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -300,6 +301,14 @@ class _ProductEditSheetState extends State<ProductEditSheet> {
   }
 
   Future<bool> _saveBean() async {
+    final beforeName = (_data['name'] ?? '').toString().trim();
+    final beforeVariant = (_data['variant'] ?? '').toString().trim();
+    final before = <String, dynamic>{
+      'stock': _num(_data['stock']),
+      'sell_per_kg': _num(_data['sellPricePerKg']),
+      'cost_per_kg': _num(_data['costPricePerKg']),
+    };
+
     final upd = <String, dynamic>{
       'name': _name.text.trim(),
       'variant': _variant.text.trim(),
@@ -331,6 +340,39 @@ class _ProductEditSheetState extends State<ProductEditSheet> {
     }
 
     await widget.snap.reference.update(upd);
+
+    final afterName = _name.text.trim();
+    final afterVariant = _variant.text.trim();
+    final after = <String, dynamic>{
+      'stock': _num(_stock.text),
+      'sell_per_kg': _num(_sellPerKg.text),
+      'cost_per_kg': _num(_costPerKg.text),
+    };
+    final changed =
+        beforeName != afterName ||
+        beforeVariant != afterVariant ||
+        (_num(before['stock']) - _num(after['stock'])).abs() > 0.0001 ||
+        (_num(before['sell_per_kg']) - _num(after['sell_per_kg'])).abs() >
+            0.0001 ||
+        (_num(before['cost_per_kg']) - _num(after['cost_per_kg'])).abs() >
+            0.0001;
+    if (changed) {
+      try {
+        await logInventoryChange(
+          action: 'update',
+          collection: widget.collection,
+          itemId: widget.snap.id,
+          name: afterName,
+          variant: afterVariant,
+          before: before,
+          after: after,
+          unit: 'g',
+          source: 'manage_edit',
+        );
+      } catch (_) {
+        // ignore log failures
+      }
+    }
     return true;
   }
 

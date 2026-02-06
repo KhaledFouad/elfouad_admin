@@ -1,10 +1,47 @@
 // lib/services/auto_archiver.dart
 import 'dart:async';
 import 'dart:developer' as developer;
+import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:elfouad_admin/presentation/stats/utils/op_day.dart'
     show monthRangeUtc;
 import 'package:elfouad_admin/services/archive/archive_service.dart';
+import 'package:elfouad_admin/services/archive/monthly_archive_stats.dart'
+    show syncMonthlyArchiveForMonth;
+import 'package:shared_preferences/shared_preferences.dart';
+
+const String _autoArchiveMetaCollection = 'meta';
+const String _autoArchiveMetaDocId = 'auto_archive';
+const String _autoArchiveDeviceIdPrefKey = 'auto_archive_device_id';
+const String _autoArchiveOwnerField = 'owner_device_id';
+
+Future<String> getOrCreateAutoArchiveDeviceId({
+  SharedPreferences? prefs,
+}) async {
+  final localPrefs = prefs ?? await SharedPreferences.getInstance();
+  final existing = localPrefs.getString(_autoArchiveDeviceIdPrefKey);
+  if (existing != null && existing.trim().isNotEmpty) {
+    return existing.trim();
+  }
+  final generated = _generateUuidV4();
+  await localPrefs.setString(_autoArchiveDeviceIdPrefKey, generated);
+  return generated;
+}
+
+Future<bool> isCurrentDeviceAutoArchiveOwner({
+  FirebaseFirestore? firestore,
+  SharedPreferences? prefs,
+}) async {
+  final db = firestore ?? FirebaseFirestore.instance;
+  final localPrefs = prefs ?? await SharedPreferences.getInstance();
+  final deviceId = await getOrCreateAutoArchiveDeviceId(prefs: localPrefs);
+  final snap =
+      await db.collection(_autoArchiveMetaCollection).doc(_autoArchiveMetaDocId).get();
+  final data = snap.data();
+  final ownerId = (data?[_autoArchiveOwnerField] ?? '').toString().trim();
+  if (ownerId.isEmpty) return false;
+  return ownerId == deviceId;
+}
 
 /// Auto-archive old sales into archive_bin on a schedule.
 /// - Uses month boundary at 4 AM local time to pick old documents.
@@ -15,73 +52,93 @@ Future<void> runAutoArchiveIfNeeded({
   Duration pause = const Duration(milliseconds: 120),
 }) async {
   final db = FirebaseFirestore.instance;
-  final metaRef = db.collection('meta').doc('auto_archive');
+  final metaRef =
+      db.collection(_autoArchiveMetaCollection).doc(_autoArchiveMetaDocId);
+  final localPrefs = await SharedPreferences.getInstance();
+  final deviceId = await getOrCreateAutoArchiveDeviceId(prefs: localPrefs);
+
+  final now = DateTime.now();
+  final effectiveMonth = _effectiveOperationalMonth(now);
+  final monthStartUtc = monthRangeUtc(effectiveMonth).startUtc;
+
+  // Fast pre-checks (no writes).
+  final metaSnap = await metaRef.get();
+  final metaData = metaSnap.data();
+  final ownerId = (metaData?[_autoArchiveOwnerField] ?? '').toString().trim();
+  if (ownerId.isNotEmpty && ownerId != deviceId) {
+    return;
+  }
+  final lastRun = _asDate(metaData?['last_run']);
+  if (lastRun != null && !lastRun.toUtc().isBefore(monthStartUtc)) {
+    return;
+  }
+
+  final hasOld = await _hasAnyOldSales(monthStartUtc);
+  if (!hasOld) {
+    return;
+  }
 
   // Lock to avoid multi-device auto-archive.
-  DateTime? lastRun;
-  final now = DateTime.now();
   final lockOk = await db.runTransaction((tx) async {
     final snap = await tx.get(metaRef);
     final data = snap.data();
+    final txOwner = (data?[_autoArchiveOwnerField] ?? '').toString().trim();
+    if (txOwner.isNotEmpty && txOwner != deviceId) {
+      return false;
+    }
+
+    final txLastRun = _asDate(data?['last_run']);
+    if (txLastRun != null && !txLastRun.toUtc().isBefore(monthStartUtc)) {
+      return false;
+    }
+
     final running = data?['running'] == true;
     final until = data?['running_until'];
-    if (running && until is Timestamp) {
-      if (until.toDate().isAfter(now)) {
-        return false;
-      }
+    if (running && until is Timestamp && until.toDate().isAfter(now)) {
+      return false;
     }
-    final v = data?['last_run'];
-    if (v is Timestamp) lastRun = v.toDate();
+
     tx.set(metaRef, {
       'running': true,
       'running_until': Timestamp.fromDate(
         now.add(const Duration(minutes: 20)),
       ),
+      if (txOwner.isEmpty) _autoArchiveOwnerField: deviceId,
+      if (txOwner.isEmpty) 'owner_claimed_at': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
     return true;
   });
   if (!lockOk) return;
 
-  final nowLocal = now;
-  final monthStartLocal = DateTime(nowLocal.year, nowLocal.month, 1, 4);
-  final effectiveMonth =
-      nowLocal.isBefore(monthStartLocal)
-          ? DateTime(nowLocal.year, nowLocal.month - 1, 1)
-          : DateTime(nowLocal.year, nowLocal.month, 1);
-  final monthStartUtc = monthRangeUtc(effectiveMonth).startUtc;
-  final lastRunUtc = lastRun?.toUtc();
-  final needRun = lastRunUtc == null || lastRunUtc.isBefore(monthStartUtc);
   bool didRun = false;
   int moved = 0;
   final archiverId = (adminUid?.isNotEmpty ?? false) ? adminUid! : 'system';
   try {
-    if (!needRun) {
-      final hasOld = await _hasAnyOldSales(monthStartUtc);
-      if (!hasOld) return;
-    }
-
-    // نفذ الأرشفة
-    final monthCutoff = monthStartUtc;
     moved = await _archiveOldSales(
-      cutoffUtc: monthCutoff,
+      cutoffUtc: monthStartUtc,
       batchSize: batchSize,
       pause: pause,
       archivedBy: archiverId,
     );
     didRun = true;
 
-    // Optional: update archive_months from archive_daily (no sales scan).
+    // Generate archive_months for previous month once.
     final prevMonth = DateTime(
       effectiveMonth.year,
       effectiveMonth.month - 1,
       1,
     );
-    await _updateArchiveMonthSummaryFromDaily(db, prevMonth);
+    await syncMonthlyArchiveForMonth(
+      firestore: db,
+      month: prevMonth,
+      force: true,
+    );
   } finally {
     try {
       await metaRef.set({
         'running': false,
         'running_until': FieldValue.serverTimestamp(),
+        _autoArchiveOwnerField: deviceId,
         if (didRun) 'last_run': FieldValue.serverTimestamp(),
         if (didRun) 'by': archiverId,
         if (didRun) 'moved': moved,
@@ -108,14 +165,13 @@ Future<int> runAutoArchiveNow({
   Duration pause = const Duration(milliseconds: 120),
 }) async {
   final db = FirebaseFirestore.instance;
-  final metaRef = db.collection('meta').doc('auto_archive');
+  final metaRef =
+      db.collection(_autoArchiveMetaCollection).doc(_autoArchiveMetaDocId);
+  final localPrefs = await SharedPreferences.getInstance();
+  final deviceId = await getOrCreateAutoArchiveDeviceId(prefs: localPrefs);
 
   final nowLocal = DateTime.now();
-  final monthStartLocal = DateTime(nowLocal.year, nowLocal.month, 1, 4);
-  final effectiveMonth =
-      nowLocal.isBefore(monthStartLocal)
-          ? DateTime(nowLocal.year, nowLocal.month - 1, 1)
-          : DateTime(nowLocal.year, nowLocal.month, 1);
+  final effectiveMonth = _effectiveOperationalMonth(nowLocal);
   final monthStartUtc = monthRangeUtc(effectiveMonth).startUtc;
 
   final archiverId = (adminUid?.isNotEmpty ?? false) ? adminUid! : 'system';
@@ -128,6 +184,7 @@ Future<int> runAutoArchiveNow({
 
   try {
     await metaRef.set({
+      _autoArchiveOwnerField: deviceId,
       'last_run': FieldValue.serverTimestamp(),
       'by': archiverId,
       'moved': moved,
@@ -144,15 +201,54 @@ Future<int> runAutoArchiveNow({
     // لا شيء
   }
 
-  // Optional: update archive_months from archive_daily (no sales scan).
+  // Generate archive_months for previous month once.
   final prevMonth = DateTime(
     effectiveMonth.year,
     effectiveMonth.month - 1,
     1,
   );
-  await _updateArchiveMonthSummaryFromDaily(db, prevMonth);
+  await syncMonthlyArchiveForMonth(
+    firestore: db,
+    month: prevMonth,
+    force: true,
+  );
 
   return moved;
+}
+
+DateTime _effectiveOperationalMonth(DateTime nowLocal) {
+  final monthStartLocal = DateTime(nowLocal.year, nowLocal.month, 1, 4);
+  return nowLocal.isBefore(monthStartLocal)
+      ? DateTime(nowLocal.year, nowLocal.month - 1, 1)
+      : DateTime(nowLocal.year, nowLocal.month, 1);
+}
+
+DateTime? _asDate(dynamic value) {
+  if (value is Timestamp) return value.toDate();
+  if (value is DateTime) return value;
+  if (value is String) return DateTime.tryParse(value);
+  if (value is num) {
+    final raw = value.toInt();
+    final ms = raw < 10000000000 ? raw * 1000 : raw;
+    return DateTime.fromMillisecondsSinceEpoch(ms, isUtc: true);
+  }
+  return null;
+}
+
+String _generateUuidV4() {
+  final random = Random.secure();
+
+  String hex(int length) {
+    const chars = '0123456789abcdef';
+    final b = StringBuffer();
+    for (var i = 0; i < length; i++) {
+      b.write(chars[random.nextInt(chars.length)]);
+    }
+    return b.toString();
+  }
+
+  final variant = const ['8', '9', 'a', 'b'][random.nextInt(4)];
+  return '${hex(8)}-${hex(4)}-4${hex(3)}-$variant${hex(3)}-${hex(12)}';
 }
 
 /// Moves old sales into archive_bin, then deletes originals.
@@ -457,70 +553,4 @@ DateTime? _parseDateSafe(dynamic value) {
     return DateTime.tryParse(value);
   }
   return null;
-}
-
-Future<void> _updateArchiveMonthSummaryFromDaily(
-  FirebaseFirestore db,
-  DateTime month,
-) async {
-  final year = month.year;
-  final monthKey = month.month.toString().padLeft(2, '0');
-  final dailyRef = db
-      .collection('archive_daily')
-      .doc('$year')
-      .collection(monthKey);
-  QuerySnapshot<Map<String, dynamic>> snap;
-  try {
-    snap = await dailyRef.get();
-  } catch (_) {
-    return;
-  }
-  if (snap.docs.isEmpty) return;
-
-  double sales = 0, cost = 0, profit = 0, grams = 0, expenses = 0;
-  int cups = 0, units = 0;
-
-  double numVal(dynamic v) {
-    if (v is num) return v.toDouble();
-    if (v is String) {
-      return double.tryParse(v.replaceAll(',', '.')) ?? 0.0;
-    }
-    return 0.0;
-  }
-
-  int intVal(dynamic v) {
-    if (v is int) return v;
-    if (v is num) return v.round();
-    if (v is String) return int.tryParse(v) ?? 0;
-    return 0;
-  }
-
-  for (final doc in snap.docs) {
-    final data = doc.data();
-    sales += numVal(data['sales']);
-    cost += numVal(data['cost']);
-    profit += numVal(data['profit']);
-    grams += numVal(data['grams']);
-    expenses += numVal(data['expenses']);
-    cups += intVal(data['cups'] ?? data['drinks']);
-    units += intVal(data['units'] ?? data['snacks']);
-  }
-
-  final monthId = '$year-$monthKey';
-  await db.collection('archive_months').doc(monthId).set({
-    'summary': {
-      'sales': sales,
-      'cost': cost,
-      'profit': profit,
-      'grams': grams,
-      'drinks': cups,
-      'snacks': units,
-      'expenses': expenses,
-    },
-    'year': year,
-    'monthNumber': month.month,
-    'monthKey': monthId,
-    'source': 'archive_daily',
-    'updated_at': FieldValue.serverTimestamp(),
-  }, SetOptions(merge: true));
 }

@@ -25,11 +25,16 @@ class SalesHistoryCubit extends Cubit<SalesHistoryState> {
   QueryDocumentSnapshot<Map<String, dynamic>>? _lastDoc;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _createdSub;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _settledSub;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _createdDeferredSub;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _settledDeferredSub;
   StreamSubscription<int>? _creditCountSub;
   Timer? _realtimeDebounce;
+  Timer? _summaryDebounce;
   int _summaryRequestId = 0;
   QuerySnapshot<Map<String, dynamic>>? _lastCreatedSnap;
   QuerySnapshot<Map<String, dynamic>>? _lastSettledSnap;
+  QuerySnapshot<Map<String, dynamic>>? _lastCreatedDeferredSnap;
+  QuerySnapshot<Map<String, dynamic>>? _lastSettledDeferredSnap;
 
   Future<void> initialize() async {
     _startCreditCountRealtime();
@@ -204,8 +209,13 @@ class SalesHistoryCubit extends Cubit<SalesHistoryState> {
   void _startRealtime(DateTimeRange range) {
     _createdSub?.cancel();
     _settledSub?.cancel();
+    _createdDeferredSub?.cancel();
+    _settledDeferredSub?.cancel();
+    _summaryDebounce?.cancel();
     _lastCreatedSnap = null;
     _lastSettledSnap = null;
+    _lastCreatedDeferredSnap = null;
+    _lastSettledDeferredSnap = null;
 
     _createdSub = _repository
         .watchCreatedInRange(range, SalesHistoryRepository.pageSize)
@@ -219,6 +229,21 @@ class SalesHistoryCubit extends Cubit<SalesHistoryState> {
         .skip(1)
         .listen((snap) {
           _lastSettledSnap = snap;
+          _scheduleRealtimeMerge(range);
+        }, onError: (_) {});
+
+    _createdDeferredSub = _repository
+        .watchDeferredCreatedInRange(range)
+        .skip(1)
+        .listen((snap) {
+          _lastCreatedDeferredSnap = snap;
+          _scheduleRealtimeMerge(range);
+        }, onError: (_) {});
+    _settledDeferredSub = _repository
+        .watchDeferredSettledInRange(range)
+        .skip(1)
+        .listen((snap) {
+          _lastSettledDeferredSnap = snap;
           _scheduleRealtimeMerge(range);
         }, onError: (_) {});
   }
@@ -261,6 +286,16 @@ class SalesHistoryCubit extends Cubit<SalesHistoryState> {
         combined[doc.id] = doc;
       }
     }
+    if (_lastCreatedDeferredSnap != null) {
+      for (final doc in _lastCreatedDeferredSnap!.docs) {
+        combined[doc.id] = doc;
+      }
+    }
+    if (_lastSettledDeferredSnap != null) {
+      for (final doc in _lastSettledDeferredSnap!.docs) {
+        combined[doc.id] = doc;
+      }
+    }
 
     if (combined.isEmpty) return;
 
@@ -282,6 +317,16 @@ class SalesHistoryCubit extends Cubit<SalesHistoryState> {
     emit(
       state.copyWith(allRecords: merged, groups: _buildGroups(merged, range)),
     );
+
+    _scheduleSummaryRefresh(range);
+  }
+
+  void _scheduleSummaryRefresh(DateTimeRange range) {
+    _summaryDebounce?.cancel();
+    _summaryDebounce = Timer(const Duration(milliseconds: 800), () {
+      unawaited(_loadSummary(range));
+      unawaited(_loadFullTotalsPerDay(range));
+    });
   }
 
   Future<void> _loadSummary(DateTimeRange range) async {
@@ -606,8 +651,11 @@ class SalesHistoryCubit extends Cubit<SalesHistoryState> {
   @override
   Future<void> close() {
     _realtimeDebounce?.cancel();
+    _summaryDebounce?.cancel();
     _createdSub?.cancel();
     _settledSub?.cancel();
+    _createdDeferredSub?.cancel();
+    _settledDeferredSub?.cancel();
     _creditCountSub?.cancel();
     return super.close();
   }

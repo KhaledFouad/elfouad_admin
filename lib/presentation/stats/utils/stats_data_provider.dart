@@ -123,6 +123,8 @@ const Set<String> _knownTypes = {
   'extra',
 };
 
+const List<String> _salesCollections = ['sales', 'deferred_sales'];
+
 bool _isKnownType(String t) => _knownTypes.contains(t);
 
 double? _numIfPresent(Map<String, dynamic> m, String key) {
@@ -486,89 +488,93 @@ Future<List<Map<String, dynamic>>> _fetchSalesRawForMonth(
   final endIso = endUtc.toIso8601String();
   final startMs = startUtc.millisecondsSinceEpoch;
   final endMs = endUtc.millisecondsSinceEpoch;
+  final combined = <String, Map<String, dynamic>>{};
+  final db = FirebaseFirestore.instance;
 
-  final snap = await _getQuerySnapshot(
-    FirebaseFirestore.instance
-        .collection('sales')
-        .where('created_at', isGreaterThanOrEqualTo: startUtc)
-        .where('created_at', isLessThan: endUtc)
-        .orderBy('created_at', descending: false),
-    cacheFirst: cacheFirst,
-  );
-  QuerySnapshot<Map<String, dynamic>>? snapOrig;
-  try {
-    snapOrig = await _getQuerySnapshot(
-      FirebaseFirestore.instance
-          .collection('sales')
-          .where('original_created_at', isGreaterThanOrEqualTo: startUtc)
-          .where('original_created_at', isLessThan: endUtc)
-          .orderBy('original_created_at', descending: false),
+  void mergeDocs(
+    QuerySnapshot<Map<String, dynamic>> snap,
+    String collection,
+  ) {
+    for (final d in snap.docs) {
+      final data = d.data();
+      if (collection == 'deferred_sales' &&
+          (data['is_deferred'] ?? false) != true) {
+        data['is_deferred'] = true;
+      }
+      data['id'] = d.id;
+      combined[d.id] = data;
+    }
+  }
+
+  Future<void> mergeTimestampQueries(String collection) async {
+    final snap = await _getQuerySnapshot(
+      db
+          .collection(collection)
+          .where('created_at', isGreaterThanOrEqualTo: startUtc)
+          .where('created_at', isLessThan: endUtc)
+          .orderBy('created_at', descending: false),
       cacheFirst: cacheFirst,
     );
-  } catch (_) {
-    snapOrig = null;
+    mergeDocs(snap, collection);
+    try {
+      final snapOrig = await _getQuerySnapshot(
+        db
+            .collection(collection)
+            .where('original_created_at', isGreaterThanOrEqualTo: startUtc)
+            .where('original_created_at', isLessThan: endUtc)
+            .orderBy('original_created_at', descending: false),
+        cacheFirst: cacheFirst,
+      );
+      mergeDocs(snapOrig, collection);
+    } catch (_) {}
   }
 
-  final combined = <String, Map<String, dynamic>>{};
-
-  for (final d in snap.docs) {
-    final m = d.data();
-    m['id'] = d.id;
-    combined[d.id] = m;
+  Future<void> mergeStringQueries(String collection) async {
+    try {
+      final snapStr = await _getQuerySnapshot(
+        db
+            .collection(collection)
+            .where('created_at', isGreaterThanOrEqualTo: startIso)
+            .where('created_at', isLessThan: endIso)
+            .orderBy('created_at', descending: false),
+        cacheFirst: cacheFirst,
+      );
+      mergeDocs(snapStr, collection);
+    } catch (_) {}
   }
 
-  if (snapOrig != null) {
-    for (final d in snapOrig.docs) {
-      final m = d.data();
-      m['id'] = d.id;
-      combined[d.id] = m;
-    }
+  Future<void> mergeNumericQueries(String collection) async {
+    try {
+      final snapNum = await _getQuerySnapshot(
+        db
+            .collection(collection)
+            .where('created_at', isGreaterThanOrEqualTo: startMs)
+            .where('created_at', isLessThan: endMs)
+            .orderBy('created_at', descending: false),
+        cacheFirst: cacheFirst,
+      );
+      mergeDocs(snapNum, collection);
+    } catch (_) {}
+  }
+
+  for (final collection in _salesCollections) {
+    await mergeTimestampQueries(collection);
   }
 
   if (combined.isNotEmpty) {
     return combined.values.toList();
   }
 
-  QuerySnapshot<Map<String, dynamic>>? snapStr;
-  try {
-    snapStr = await _getQuerySnapshot(
-      FirebaseFirestore.instance
-          .collection('sales')
-          .where('created_at', isGreaterThanOrEqualTo: startIso)
-          .where('created_at', isLessThan: endIso)
-          .orderBy('created_at', descending: false),
-      cacheFirst: cacheFirst,
-    );
-  } catch (_) {
-    snapStr = null;
-  }
-  if (snapStr != null) {
-    for (final d in snapStr.docs) {
-      final m = d.data();
-      m['id'] = d.id;
-      combined[d.id] = m;
-    }
+  for (final collection in _salesCollections) {
+    await mergeStringQueries(collection);
   }
 
-  QuerySnapshot<Map<String, dynamic>>? snapNum;
-  try {
-    snapNum = await _getQuerySnapshot(
-      FirebaseFirestore.instance
-          .collection('sales')
-          .where('created_at', isGreaterThanOrEqualTo: startMs)
-          .where('created_at', isLessThan: endMs)
-          .orderBy('created_at', descending: false),
-      cacheFirst: cacheFirst,
-    );
-  } catch (_) {
-    snapNum = null;
+  if (combined.isNotEmpty) {
+    return combined.values.toList();
   }
-  if (snapNum != null) {
-    for (final d in snapNum.docs) {
-      final m = d.data();
-      m['id'] = d.id;
-      combined[d.id] = m;
-    }
+
+  for (final collection in _salesCollections) {
+    await mergeNumericQueries(collection);
   }
 
   return combined.values.toList();
@@ -1294,10 +1300,6 @@ Future<List<Map<String, dynamic>>> fetchSalesRawForMonth(
   DateTime month, {
   bool cacheFirst = false,
 }) {
-  assert(() {
-    debugPrint('[WARN] Stats should NOT query sales month');
-    return true;
-  }());
   return _fetchSalesRawForMonth(month, cacheFirst: cacheFirst);
 }
 

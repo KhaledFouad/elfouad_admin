@@ -49,7 +49,6 @@ class ArchiveSummaryTable extends StatelessWidget {
         dataRowMaxHeight: 48,
         columns: [
           DataColumn(label: Text(AppStrings.monthLabel, style: headerStyle)),
-          DataColumn(label: Text('الاتجاه', style: headerStyle)),
           DataColumn(label: Text(AppStrings.salesLabelDefinite, style: headerStyle)),
           DataColumn(label: Text(AppStrings.profitLabelDefinite, style: headerStyle)),
           DataColumn(label: Text(AppStrings.gramsLabel, style: headerStyle)),
@@ -61,20 +60,45 @@ class ArchiveSummaryTable extends StatelessWidget {
           final m = entry.value;
           final s = m.summary;
           final prev = i + 1 < months.length ? months[i + 1].summary : null;
-          final trend = _trendIcon(
-            current: s.sales ?? 0,
-            previous: prev?.sales ?? 0,
-          );
           return DataRow(
             onSelectChanged: onSelect == null ? null : (_) => onSelect!(m),
             cells: [
               DataCell(Text(_labelFor(m))),
-              DataCell(trend),
-              DataCell(Text(_fmtNum(s.sales))),
-              DataCell(Text(_fmtNum(s.profit))),
-              DataCell(Text(_fmtNum(s.grams, decimals: 0))),
-              DataCell(Text(_fmtInt(s.drinks))),
-              DataCell(Text(_fmtInt(s.snacks))),
+              DataCell(
+                _metricCell(
+                  _fmtNum(s.sales),
+                  current: s.sales ?? 0,
+                  previous: prev?.sales ?? 0,
+                ),
+              ),
+              DataCell(
+                _metricCell(
+                  _fmtNum(s.profit),
+                  current: s.profit ?? 0,
+                  previous: prev?.profit ?? 0,
+                ),
+              ),
+              DataCell(
+                _metricCell(
+                  _fmtNum(s.grams, decimals: 0),
+                  current: s.grams ?? 0,
+                  previous: prev?.grams ?? 0,
+                ),
+              ),
+              DataCell(
+                _metricCell(
+                  _fmtInt(s.drinks),
+                  current: (s.drinks ?? 0).toDouble(),
+                  previous: (prev?.drinks ?? 0).toDouble(),
+                ),
+              ),
+              DataCell(
+                _metricCell(
+                  _fmtInt(s.snacks),
+                  current: (s.snacks ?? 0).toDouble(),
+                  previous: (prev?.snacks ?? 0).toDouble(),
+                ),
+              ),
             ],
           );
         }).toList(),
@@ -93,5 +117,20 @@ class ArchiveSummaryTable extends StatelessWidget {
       return const Icon(Icons.trending_down, size: 18, color: Colors.red);
     }
     return const Icon(Icons.trending_flat, size: 18, color: Colors.grey);
+  }
+
+  Widget _metricCell(
+    String text, {
+    required double current,
+    required double previous,
+  }) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(text),
+        const SizedBox(width: 6),
+        _trendIcon(current: current, previous: previous),
+      ],
+    );
   }
 }

@@ -11,6 +11,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 
+const String _recipesGatePassword = '1825';
+
 class RecipesListPage extends StatefulWidget {
   const RecipesListPage({super.key});
 
@@ -20,9 +22,13 @@ class RecipesListPage extends StatefulWidget {
 
 class _RecipesListPageState extends State<RecipesListPage>
     with WidgetsBindingObserver {
+  static bool _unlockedOnce = false;
+  bool _unlocking = false;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _ensureUnlocked());
   }
 
   @override
@@ -92,6 +98,26 @@ class _RecipesListPageState extends State<RecipesListPage>
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const RecipePrepLogPage()),
     );
+  }
+
+  Future<void> _ensureUnlocked() async {
+    if (_unlockedOnce || _unlocking || !mounted) return;
+    _unlocking = true;
+    final ok = await _openPasswordGate();
+    _unlocking = false;
+    if (!mounted) return;
+    if (ok) {
+      _unlockedOnce = true;
+      return;
+    }
+    context.read<NavCubit>().setTab(AppTab.home);
+  }
+
+  Future<bool> _openPasswordGate() async {
+    final ok = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => const _RecipePasswordGate()),
+    );
+    return ok == true;
   }
 
   @override
@@ -313,6 +339,128 @@ class _RecipesListPageState extends State<RecipesListPage>
                       ),
                     );
                   },
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _RecipePasswordGate extends StatefulWidget {
+  const _RecipePasswordGate();
+
+  @override
+  State<_RecipePasswordGate> createState() => _RecipePasswordGateState();
+}
+
+class _RecipePasswordGateState extends State<_RecipePasswordGate> {
+  final TextEditingController _controller = TextEditingController();
+  String? _error;
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _check() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    final raw = _controller.text.trim();
+    if (raw.isEmpty) {
+      setState(() {
+        _error = AppStrings.recipesPasswordHint;
+        _busy = false;
+      });
+      return;
+    }
+    if (raw != _recipesGatePassword) {
+      setState(() {
+        _error = AppStrings.recipesPasswordWrong;
+        _busy = false;
+      });
+      return;
+    }
+    if (!mounted) return;
+    Navigator.of(context).pop(true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text(AppStrings.recipesPasswordTitle),
+          centerTitle: true,
+          backgroundColor: Colors.transparent,
+          flexibleSpace: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF5D4037), Color(0xFF795548)],
+              ),
+            ),
+          ),
+        ),
+        body: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: constraints.maxHeight - 48,
+                ),
+                child: IntrinsicHeight(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Icon(Icons.lock, size: 56, color: Colors.brown),
+                      const SizedBox(height: 12),
+                      const Text(
+                        AppStrings.recipesPasswordSubtitle,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 16),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _controller,
+                        autofocus: true,
+                        obscureText: true,
+                        keyboardType: TextInputType.number,
+                        textInputAction: TextInputAction.done,
+                        decoration: InputDecoration(
+                          labelText: AppStrings.recipesPasswordHint,
+                          errorText: _error,
+                          border: const OutlineInputBorder(),
+                        ),
+                        onSubmitted: (_) => _check(),
+                      ),
+                      const SizedBox(height: 16),
+                      FilledButton(
+                        onPressed: _busy ? null : _check,
+                        child: _busy
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Text(AppStrings.actionUnlock),
+                      ),
+                      const SizedBox(height: 8),
+                      TextButton(
+                        onPressed:
+                            _busy ? null : () => Navigator.of(context).pop(false),
+                        child: const Text(AppStrings.actionCancel),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             );

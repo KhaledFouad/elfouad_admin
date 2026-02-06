@@ -25,23 +25,26 @@ class ArchiveMonthsCubit extends Cubit<ArchiveMonthsState> {
 
   Future<void> load({bool force = false}) async {
     emit(state.copyWith(loading: true, error: null));
+    try {
+      final cached = _filterClosedMonths(await _readCache());
+      if (cached.isNotEmpty && !force) {
+        emit(
+          state.copyWith(
+            months: cached,
+            loading: false,
+            fromCache: true,
+            error: null,
+            lastUpdated: await _readCacheUpdatedAt(),
+          ),
+        );
+        unawaited(_fetchRemote(cached: cached, force: force));
+        return;
+      }
 
-    final cached = await _readCache();
-    if (cached.isNotEmpty && !force) {
-      emit(
-        state.copyWith(
-          months: cached,
-          loading: false,
-          fromCache: true,
-          error: null,
-          lastUpdated: await _readCacheUpdatedAt(),
-        ),
-      );
-      unawaited(_fetchRemote(cached: cached, force: force));
-      return;
+      await _fetchRemote(cached: cached, force: force);
+    } catch (e) {
+      emit(state.copyWith(loading: false, error: e));
     }
-
-    await _fetchRemote(cached: cached, force: force);
   }
 
   Future<void> refresh() async {
@@ -84,16 +87,23 @@ class ArchiveMonthsCubit extends Cubit<ArchiveMonthsState> {
     required bool force,
   }) async {
     try {
-      final query = _db
-          .collection(_monthlyCollection)
-          .orderBy(FieldPath.documentId, descending: true);
+      final base = _db.collection(_monthlyCollection);
+      final query = base.orderBy(FieldPath.documentId, descending: true);
 
-      QuerySnapshot<Map<String, dynamic>> snap = await _getQuerySnapshot(
-        query,
-        cacheFirst: true,
-      );
-      if (snap.docs.isEmpty) {
-        snap = await _getQuerySnapshot(query, cacheFirst: false);
+      final useCache = !force;
+      QuerySnapshot<Map<String, dynamic>> snap;
+      try {
+        snap = await _getQuerySnapshot(query, cacheFirst: useCache);
+        if (snap.docs.isEmpty && useCache) {
+          snap = await _getQuerySnapshot(query, cacheFirst: false);
+        }
+      } on FirebaseException catch (e) {
+        if (e.code == 'failed-precondition') {
+          // Fallback بدون orderBy لو الـ index مش موجود.
+          snap = await _getQuerySnapshot(base, cacheFirst: false);
+        } else {
+          rethrow;
+        }
       }
 
       final months = snap.docs
@@ -101,6 +111,12 @@ class ArchiveMonthsCubit extends Cubit<ArchiveMonthsState> {
             final data = _normalizeMap(doc.data());
             return ArchiveMonth(id: doc.id, data: data);
           })
+          .where(
+            (m) => _isClosedMonth(
+              m,
+              currentMonthStart: DateTime(DateTime.now().year, DateTime.now().month, 1),
+            ),
+          )
           .toList();
 
       if (months.isNotEmpty) {
@@ -158,6 +174,22 @@ class ArchiveMonthsCubit extends Cubit<ArchiveMonthsState> {
       return bd.compareTo(ad);
     });
     return list;
+  }
+
+  List<ArchiveMonth> _filterClosedMonths(List<ArchiveMonth> months) {
+    final currentMonthStart = DateTime(DateTime.now().year, DateTime.now().month, 1);
+    return months
+        .where((m) => _isClosedMonth(m, currentMonthStart: currentMonthStart))
+        .toList();
+  }
+
+  bool _isClosedMonth(
+    ArchiveMonth month, {
+    required DateTime currentMonthStart,
+  }) {
+    final monthDate = month.monthDate;
+    if (monthDate == null) return true;
+    return monthDate.isBefore(currentMonthStart);
   }
 }
 

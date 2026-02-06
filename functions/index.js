@@ -69,18 +69,25 @@ async function fetchSalesForRange(startUtc, endUtc) {
   const start = admin.firestore.Timestamp.fromDate(startUtc.toJSDate());
   const end = admin.firestore.Timestamp.fromDate(endUtc.toJSDate());
   const fields = ['created_at', 'original_created_at', 'settled_at', 'updated_at'];
-  const queries = fields.map((field) =>
-    db
-      .collection('sales')
-      .where(field, '>=', start)
-      .where(field, '<', end)
-      .get(),
-  );
-  const snaps = await Promise.all(queries);
   const combined = new Map();
-  for (const snap of snaps) {
-    for (const doc of snap.docs) {
-      combined.set(doc.id, doc.data());
+  const collections = ['sales', 'deferred_sales'];
+  for (const coll of collections) {
+    const queries = fields.map((field) =>
+      db
+        .collection(coll)
+        .where(field, '>=', start)
+        .where(field, '<', end)
+        .get(),
+    );
+    const snaps = await Promise.all(queries);
+    for (const snap of snaps) {
+      for (const doc of snap.docs) {
+        const data = doc.data();
+        if (coll === 'deferred_sales' && data.is_deferred !== true) {
+          data.is_deferred = true;
+        }
+        combined.set(doc.id, data);
+      }
     }
   }
   return combined;

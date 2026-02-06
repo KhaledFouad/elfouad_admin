@@ -25,11 +25,20 @@ class StatsPage extends StatefulWidget {
 
 class _StatsPageState extends State<StatsPage> {
   bool _profitMode = false;
+  bool _syncedMonth = false;
 
   @override
   void initState() {
     super.initState();
     debugPrint('[STATS] using raw sales fallback for detailed stats');
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_syncedMonth) return;
+    _syncedMonth = true;
+    context.read<StatsCubit>().ensureCurrentMonth();
   }
 
   bool _isTurkishName(String name) {
@@ -614,24 +623,9 @@ class _StatsPageState extends State<StatsPage> {
             ),
           ],
           title: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
             children: [
-              IconButton(
-                tooltip: AppStrings.previousMonthTooltip,
-                icon: const Icon(
-                  Icons.chevron_left_rounded,
-                  color: Colors.white,
-                  size: 25,
-                ),
-                onPressed: () {
-                  final m = context.read<StatsCubit>().state.month;
-                  context.read<StatsCubit>().setMonth(
-                    DateTime(m.year, m.month - 1, 1),
-                  );
-                },
-              ),
-              SizedBox(width: MediaQuery.of(context).size.width * 0.05),
               Text(
                 title,
                 style: const TextStyle(
@@ -639,21 +633,6 @@ class _StatsPageState extends State<StatsPage> {
                   fontSize: 22,
                   color: Colors.white,
                 ),
-              ),
-              SizedBox(width: MediaQuery.of(context).size.width * 0.05),
-              IconButton(
-                tooltip: AppStrings.nextMonthTooltip,
-                icon: const Icon(
-                  Icons.chevron_right_rounded,
-                  color: Colors.white,
-                  size: 25,
-                ),
-                onPressed: () {
-                  final m = context.read<StatsCubit>().state.month;
-                  context.read<StatsCubit>().setMonth(
-                    DateTime(m.year, m.month + 1, 1),
-                  );
-                },
               ),
             ],
           ),

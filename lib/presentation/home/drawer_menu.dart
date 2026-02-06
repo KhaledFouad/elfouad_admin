@@ -47,10 +47,10 @@ class SideMenu extends StatelessWidget {
                 onTap: () => _go(context, AppTab.stats),
               ),
               _MenuItem(
-                icon: Icons.edit_note_outlined,
-                label: AppStrings.tabEdits,
-                selected: selected == AppTab.edits,
-                onTap: () => _go(context, AppTab.edits),
+                icon: Icons.archive_rounded,
+                label: AppStrings.tabArchive,
+                selected: selected == AppTab.archive,
+                onTap: () => _go(context, AppTab.archive),
               ),
               _MenuItem(
                 icon: Icons.edit_note_outlined,

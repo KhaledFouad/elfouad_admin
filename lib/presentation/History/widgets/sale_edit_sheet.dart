@@ -659,8 +659,13 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
     return out;
   }
 
-  Future<void> _applyStockDeltaAndUpdate(Map<String, dynamic> updates) async {
+  Future<void> _applyStockDeltaAndUpdate(
+    Map<String, dynamic> updates, {
+    DocumentReference<Map<String, dynamic>>? targetRef,
+  }) async {
     final saleRef = widget.snap.reference;
+    final resolvedTarget = targetRef ?? saleRef;
+    final moving = resolvedTarget.path != saleRef.path;
     await FirebaseFirestore.instance.runTransaction((tx) async {
       final oldSnap = await tx.get(saleRef);
       final oldSale = oldSnap.data() ?? <String, dynamic>{};
@@ -704,7 +709,12 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
         }
       }
 
-      tx.update(saleRef, updates);
+      if (moving) {
+        tx.set(resolvedTarget, newSale);
+        tx.delete(saleRef);
+      } else {
+        tx.update(saleRef, updates);
+      }
     });
   }
 
@@ -923,7 +933,21 @@ class _SaleEditSheetState extends State<SaleEditSheet> {
         updates['manual_override'] = true;
         updates['updated_at'] = FieldValue.serverTimestamp();
 
-        await _applyStockDeltaAndUpdate(updates);
+        final currentRef = widget.snap.reference;
+        final isDeferredCollection =
+            currentRef.parent.id == 'deferred_sales';
+        DocumentReference<Map<String, dynamic>>? targetRef;
+        if (isDeferred && !isDeferredCollection) {
+          targetRef = currentRef.firestore
+              .collection('deferred_sales')
+              .doc(currentRef.id);
+        } else if (!isDeferred && isDeferredCollection) {
+          targetRef = currentRef.firestore
+              .collection('sales')
+              .doc(currentRef.id);
+        }
+
+        await _applyStockDeltaAndUpdate(updates, targetRef: targetRef);
         if (!mounted) return;
         Navigator.pop(context, true);
         ScaffoldMessenger.of(

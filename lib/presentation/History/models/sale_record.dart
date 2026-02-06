@@ -19,7 +19,8 @@ class SaleRecord {
   bool get isComplimentary => (data['is_complimentary'] ?? false) == true;
 
   bool get isDeferred =>
-      (data['is_deferred'] ?? data['is_credit'] ?? false) == true;
+      (data['is_deferred'] ?? data['is_credit'] ?? false) == true ||
+      snapshot.reference.parent.id == 'deferred_sales';
 
   bool get isPaid => (data['paid'] ?? (!isDeferred)) == true;
 

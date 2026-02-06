@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 const String archiveBinCollection = 'archive_bin';
 const String _defaultArchivedBy = 'device';
+const int _opShiftHours = 4;
 
 Map<String, dynamic> buildArchiveEntry({
   required DocumentReference<Map<String, dynamic>> srcRef,
@@ -30,6 +31,16 @@ Map<String, dynamic> buildArchiveEntry({
 
   final display = _extractDisplayFields(kind, data);
   entry.addAll(display);
+
+  if (kind == 'sale') {
+    final ts = _pickSaleDate(data);
+    if (ts != null) {
+      final dayKey = _opDayKeyFromLocal(ts.toLocal());
+      entry['day_key'] = dayKey;
+      entry['month_key'] = dayKey.substring(0, 7);
+    }
+  }
+
   return entry;
 }
 
@@ -133,4 +144,37 @@ Map<String, dynamic> _extractDisplayFields(
   }
 
   return out;
+}
+
+String _opDayKeyFromLocal(DateTime t) {
+  final shifted = t.subtract(const Duration(hours: _opShiftHours));
+  final y = shifted.year.toString().padLeft(4, '0');
+  final m = shifted.month.toString().padLeft(2, '0');
+  final d = shifted.day.toString().padLeft(2, '0');
+  return '$y-$m-$d';
+}
+
+DateTime? _pickSaleDate(Map<String, dynamic> data) {
+  final primary = _asDateTime(data['original_created_at']);
+  if (primary != null) return primary;
+  final created = _asDateTime(data['created_at']);
+  if (created != null) return created;
+  final settled = _asDateTime(data['settled_at']);
+  if (settled != null) return settled;
+  return _asDateTime(data['updated_at']);
+}
+
+DateTime? _asDateTime(dynamic value) {
+  if (value == null) return null;
+  if (value is Timestamp) return value.toDate();
+  if (value is DateTime) return value;
+  if (value is num) {
+    final raw = value.toInt();
+    final ms = raw < 10000000000 ? raw * 1000 : raw;
+    return DateTime.fromMillisecondsSinceEpoch(ms, isUtc: true);
+  }
+  if (value is String) {
+    return DateTime.tryParse(value);
+  }
+  return null;
 }

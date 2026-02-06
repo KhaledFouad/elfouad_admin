@@ -2,6 +2,7 @@ import 'package:elfouad_admin/core/utils/app_strings.dart';
 import 'package:elfouad_admin/presentation/home/nav_state.dart';
 import 'package:elfouad_admin/presentation/inventory/bloc/inventory_cubit.dart';
 import 'package:elfouad_admin/presentation/inventory/models/inventory_tab.dart';
+import 'package:elfouad_admin/presentation/inventory/pages/inventory_log_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:responsive_framework/responsive_framework.dart';
@@ -41,6 +42,19 @@ class InventoryPage extends StatelessWidget {
                 onPressed: () => context.read<NavCubit>().setTab(AppTab.home),
                 tooltip: AppStrings.tabHome,
               ),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.history),
+                  tooltip: AppStrings.inventoryLogTitle,
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const InventoryLogPage(),
+                      ),
+                    );
+                  },
+                ),
+              ],
               title: const Text(
                 AppStrings.tabInventory,
                 style: TextStyle(

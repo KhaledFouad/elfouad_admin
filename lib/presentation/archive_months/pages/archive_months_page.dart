@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:elfouad_admin/core/utils/app_strings.dart';
 import 'package:elfouad_admin/presentation/History/widgets/summary_pill.dart';
+import 'package:elfouad_admin/presentation/home/nav_state.dart';
 
 import '../bloc/archive_months_cubit.dart';
 import '../bloc/archive_months_state.dart';
@@ -146,18 +147,38 @@ class _ArchiveAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
+    final canPop = Navigator.of(context).canPop();
+    NavCubit? navCubit;
+    try {
+      navCubit = context.read<NavCubit>();
+    } catch (_) {
+      navCubit = null;
+    }
+    final VoidCallback? homeAction =
+        navCubit == null ? null : () => navCubit!.setTab(AppTab.home);
     return ClipRRect(
       borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),
       child: AppBar(
         automaticallyImplyLeading: false,
-        leading: IconButton(
-          icon: const Icon(
-            Icons.arrow_back_ios_new_rounded,
-            color: Colors.white,
-          ),
-          onPressed: () => Navigator.maybePop(context),
-          tooltip: AppStrings.tooltipBack,
-        ),
+        leading: canPop
+            ? IconButton(
+                icon: const Icon(
+                  Icons.arrow_back_ios_new_rounded,
+                  color: Colors.white,
+                ),
+                onPressed: () => Navigator.maybePop(context),
+                tooltip: AppStrings.tooltipBack,
+              )
+            : (homeAction == null
+                    ? null
+                    : IconButton(
+                        icon: const Icon(
+                          Icons.home_rounded,
+                          color: Colors.white,
+                        ),
+                        onPressed: homeAction,
+                        tooltip: AppStrings.tabHome,
+                      )),
         title: const Text(
           AppStrings.archiveTitle,
           style: TextStyle(

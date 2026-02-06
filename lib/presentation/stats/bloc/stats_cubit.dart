@@ -1,13 +1,10 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../models/stats_models.dart';
 import '../models/stats_period.dart';
-import '../utils/op_day.dart';
-import '../utils/stats_data_provider.dart' as stats_data;
 import 'stats_state.dart';
 
 class StatsCubit extends Cubit<StatsState> {
@@ -33,12 +30,12 @@ class StatsCubit extends Cubit<StatsState> {
   static const int _previousMonthsCount = 6;
 
   final Map<String, List<_ArchiveDay>> _monthCache = {};
-  final Map<String, List<Map<String, dynamic>>> _rawMonthCache = {};
+  final Map<String, bool> _monthBreakdownCache = {};
   String? _activeMonthKey;
   Map<String, _ArchiveDay> _activeDaysByKey = {};
   int _previousRequestId = 0;
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _todaySub;
-  bool _useRawOverview = false;
+  bool _hasPeriodBreakdown = true;
 
   Future<void> refresh() => _loadMonth(
         state.month,
@@ -46,12 +43,20 @@ class StatsCubit extends Cubit<StatsState> {
         force: true,
       );
 
+  Future<void> ensureCurrentMonth() async {
+    final now = defaultStatsMonth();
+    final current = state.month;
+    if (current.year == now.year && current.month == now.month) return;
+    await _loadMonth(now, state.period);
+  }
+
   Future<void> setMonth(DateTime month) =>
       _loadMonth(DateTime(month.year, month.month, 1), state.period);
 
   Future<void> setPeriod(StatsPeriod period) async {
-    emit(state.copyWith(period: period, loading: true, error: null));
-    await _computeOverview(period, state.month);
+    final effective = _hasPeriodBreakdown ? period : StatsPeriod.fullMonth;
+    emit(state.copyWith(period: effective, loading: true, error: null));
+    await _computeOverview(effective, state.month);
   }
 
   Future<void> _loadMonth(
@@ -72,34 +77,36 @@ class StatsCubit extends Cubit<StatsState> {
     try {
       final key = _cacheKey(month);
       List<_ArchiveDay> days;
+      bool hasBreakdown;
       if (!force && _monthCache.containsKey(key)) {
         days = _monthCache[key] ?? const [];
+        hasBreakdown = _monthBreakdownCache[key] ?? false;
       } else {
-        days = await _fetchArchiveDailyForMonth(
+        final source = await _fetchArchiveMonthSource(
           month,
           cacheFirst: !force,
         );
+        days = source.days;
+        hasBreakdown = source.hasBreakdown;
         _monthCache[key] = days;
+        _monthBreakdownCache[key] = hasBreakdown;
       }
+
+      _hasPeriodBreakdown = hasBreakdown;
+      final effectivePeriod = hasBreakdown ? period : StatsPeriod.fullMonth;
 
       _activeMonthKey = key;
       _activeDaysByKey = {
         for (final day in days) day.dayKey: day,
       };
-      _startTodayListenerIfNeeded(month);
+      _startArchiveMonthListener(month);
 
-      final rawMonth = await _fetchRawMonth(
-        month,
-        cacheFirst: !force,
-      );
-      final hasRaw = rawMonth.isNotEmpty;
-      _useRawOverview = hasRaw;
-
-      final preview = hasRaw
-          ? _buildThirdsPreviewFromRaw(rawMonth, month)
-          : _buildThirdsPreview(days, month);
+      final preview = hasBreakdown
+          ? _buildThirdsPreview(days, month)
+          : _buildFlatPreview(days);
       emit(
         state.copyWith(
+          period: effectivePeriod,
           preview: preview,
           previewLoading: false,
           previewError: null,
@@ -107,7 +114,7 @@ class StatsCubit extends Cubit<StatsState> {
       );
 
       unawaited(_loadPreviousMonths(month, force: force));
-      await _computeOverview(period, month);
+      await _computeOverview(effectivePeriod, month);
     } catch (e) {
       emit(
         state.copyWith(
@@ -141,25 +148,7 @@ class StatsCubit extends Cubit<StatsState> {
           target,
           cacheFirst: !force,
         );
-        if (kpis == null) {
-          final key = _cacheKey(target);
-          List<_ArchiveDay> days;
-          if (!force && _monthCache.containsKey(key)) {
-            days = _monthCache[key] ?? const [];
-          } else {
-            days = await _fetchArchiveDailyForMonth(
-              target,
-              cacheFirst: !force,
-            );
-            _monthCache[key] = days;
-          }
-          final range = statsComputeRange(target, StatsPeriod.fullMonth);
-          kpis = _sumKpisForRange(
-            days,
-            startUtc: range.startUtc,
-            endUtc: range.endUtc,
-          );
-        }
+        kpis ??= _zeroKpis();
         previous.add(MonthlyKpi(month: target, kpis: kpis));
       }
 
@@ -182,16 +171,11 @@ class StatsCubit extends Cubit<StatsState> {
     }
   }
 
-  Future<void> _computeOverview(StatsPeriod period, DateTime month) async {
+  Future<void> _computeOverview(
+    StatsPeriod period,
+    DateTime month,
+  ) async {
     try {
-      if (_useRawOverview) {
-        final raw = _rawMonthCache[_cacheKey(month)] ??
-            await _fetchRawMonth(month, cacheFirst: true);
-        final overview = await _buildOverviewFromRaw(raw, month, period);
-        emit(state.copyWith(overview: overview, loading: false, error: null));
-        return;
-      }
-
       final days = _activeDaysByKey.values.toList();
       final overview = _buildOverviewFromDaily(days, month, period);
       emit(state.copyWith(overview: overview, loading: false, error: null));
@@ -200,52 +184,38 @@ class StatsCubit extends Cubit<StatsState> {
     }
   }
 
-  void _startTodayListenerIfNeeded(DateTime month) {
+  void _startArchiveMonthListener(DateTime month) {
     _todaySub?.cancel();
-
-    final now = DateTime.now();
-    final dayKey = opDayKeyFromLocal(now);
-    final parsed = _parseDayKey(dayKey);
-    if (parsed == null) return;
-    if (parsed.year != month.year || parsed.month != month.month) return;
-
-    final year = parsed.year.toString();
-    final monthKey = parsed.month.toString().padLeft(2, '0');
     final docRef = FirebaseFirestore.instance
-        .collection('archive_daily')
-        .doc(year)
-        .collection(monthKey)
-        .doc(dayKey);
-
-    debugPrint('[STATS] subscribed to daily doc: $dayKey');
+        .collection('archive_months')
+        .doc(_monthDocId(month));
 
     _todaySub = docRef.snapshots().listen((snap) {
       if (_activeMonthKey != _cacheKey(month)) return;
-      if (!snap.exists) {
-        _activeDaysByKey.remove(dayKey);
-      } else {
-        final day = _ArchiveDay.fromDoc(snap);
-        if (day != null) {
-          _activeDaysByKey[day.dayKey] = day;
-        }
+      final data = snap.data();
+      final source = _monthSourceFromDoc(month, data);
+      if (source.days.isNotEmpty) {
+        _hasPeriodBreakdown = source.hasBreakdown;
+        _activeDaysByKey = {for (final day in source.days) day.dayKey: day};
+        _monthBreakdownCache[_activeMonthKey ?? _cacheKey(month)] =
+            source.hasBreakdown;
       }
       _monthCache[_activeMonthKey ?? _cacheKey(month)] =
           _activeDaysByKey.values.toList();
-      _refreshComputedFromActive();
+      unawaited(_refreshComputedFromActive());
     });
   }
 
-  void _refreshComputedFromActive() {
-    if (_useRawOverview) {
-      return;
-    }
+  Future<void> _refreshComputedFromActive() async {
     final days = _activeDaysByKey.values.toList();
     final overview = _buildOverviewFromDaily(
       days,
       state.month,
       state.period,
     );
-    final preview = _buildThirdsPreview(days, state.month);
+    final preview = _hasPeriodBreakdown
+        ? _buildThirdsPreview(days, state.month)
+        : _buildFlatPreview(days);
     emit(
       state.copyWith(
         overview: overview,
@@ -279,128 +249,17 @@ class StatsCubit extends Cubit<StatsState> {
     );
   }
 
-  Future<List<Map<String, dynamic>>> _fetchRawMonth(
-    DateTime month, {
-    bool cacheFirst = false,
-  }) async {
-    final key = _cacheKey(month);
-    if (cacheFirst && _rawMonthCache.containsKey(key)) {
-      return _rawMonthCache[key] ?? const <Map<String, dynamic>>[];
-    }
-    final daysInMonth = DateTime(month.year, month.month + 1, 0).day;
-    final startLocal = DateTime(month.year, month.month, 1, 4);
-    final endLocal = DateTime(
-      month.year,
-      month.month,
-      daysInMonth,
-      4,
-    ).add(const Duration(days: 1));
-
-    final raw = await stats_data.fetchSalesRawForRange(
-      startLocal: startLocal,
-      endLocal: endLocal,
-      cacheFirst: cacheFirst,
+  ThirdsPreview _buildFlatPreview(List<_ArchiveDay> days) {
+    final total = _sumKpisForRange(
+      days,
+      startUtc: DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+      endUtc: DateTime.utc(9999, 1, 1),
     );
-    _rawMonthCache[key] = raw;
-    return raw;
-  }
-
-  ThirdsPreview _buildThirdsPreviewFromRaw(
-    List<Map<String, dynamic>> raw,
-    DateTime month,
-  ) {
-    final prepared = stats_data.prepareStatsData(raw);
-
-    Kpis kpisForRange(DateTime start, DateTime end) {
-      final filtered = stats_data.filterStatsSales(
-        prepared,
-        startUtc: start,
-        endUtc: end,
-      );
-      return stats_data.buildKpis(
-        filtered,
-        const <Map<String, dynamic>>[],
-        startUtc: start,
-        endUtc: end,
-      );
-    }
-
-    final r1 = statsComputeRange(month, StatsPeriod.firstThird);
-    final r2 = statsComputeRange(month, StatsPeriod.secondThird);
-    final r3 = statsComputeRange(month, StatsPeriod.thirdThird);
-    final rm = statsComputeRange(month, StatsPeriod.fullMonth);
-
     return ThirdsPreview(
-      firstThird: kpisForRange(r1.startUtc, r1.endUtc),
-      secondThird: kpisForRange(r2.startUtc, r2.endUtc),
-      thirdThird: kpisForRange(r3.startUtc, r3.endUtc),
-      month: kpisForRange(rm.startUtc, rm.endUtc),
-    );
-  }
-
-  Future<StatsOverview> _buildOverviewFromRaw(
-    List<Map<String, dynamic>> raw,
-    DateTime month,
-    StatsPeriod period,
-  ) async {
-    final range = statsComputeRange(month, period);
-    final prepared = stats_data.prepareStatsData(raw);
-    final filtered = stats_data.filterStatsSales(
-      prepared,
-      startUtc: range.startUtc,
-      endUtc: range.endUtc,
-    );
-
-    final rawExpenses = await stats_data.fetchStatsExpenses(
-      startUtc: range.startUtc,
-      endUtc: range.endUtc,
-      cacheFirst: true,
-    );
-    final expenses = stats_data.filterStatsExpenses(
-      rawExpenses,
-      startUtc: range.startUtc,
-      endUtc: range.endUtc,
-    );
-
-    final kpis = stats_data.buildKpis(
-      filtered,
-      expenses,
-      startUtc: range.startUtc,
-      endUtc: range.endUtc,
-    );
-
-    return StatsOverview(
-      kpis: kpis,
-      drinks: stats_data.buildDrinksRows(
-        filtered,
-        startUtc: range.startUtc,
-        endUtc: range.endUtc,
-      ),
-      beans: stats_data.buildBeansRows(
-        filtered,
-        startUtc: range.startUtc,
-        endUtc: range.endUtc,
-      ),
-      turkish: stats_data.buildTurkishRows(
-        filtered,
-        startUtc: range.startUtc,
-        endUtc: range.endUtc,
-      ),
-      extras: stats_data.buildExtrasRows(
-        filtered,
-        startUtc: range.startUtc,
-        endUtc: range.endUtc,
-      ),
-      trends: stats_data.buildTrends(
-        filtered,
-        startUtc: range.startUtc,
-        endUtc: range.endUtc,
-      ),
-      highlights: stats_data.buildHighlights(
-        filtered,
-        startUtc: range.startUtc,
-        endUtc: range.endUtc,
-      ),
+      firstThird: total,
+      secondThird: total,
+      thirdThird: total,
+      month: total,
     );
   }
 
@@ -417,10 +276,30 @@ class StatsCubit extends Cubit<StatsState> {
     );
     return StatsOverview(
       kpis: kpis,
-      drinks: const [],
-      beans: const [],
-      turkish: const [],
-      extras: const [],
+      drinks: _sumRowsForRange(
+        days,
+        startUtc: range.startUtc,
+        endUtc: range.endUtc,
+        pickRows: (d) => d.drinksRows,
+      ),
+      beans: _sumRowsForRange(
+        days,
+        startUtc: range.startUtc,
+        endUtc: range.endUtc,
+        pickRows: (d) => d.beansRows,
+      ),
+      turkish: _sumRowsForRange(
+        days,
+        startUtc: range.startUtc,
+        endUtc: range.endUtc,
+        pickRows: (d) => d.turkishRows,
+      ),
+      extras: _sumRowsForRange(
+        days,
+        startUtc: range.startUtc,
+        endUtc: range.endUtc,
+        pickRows: (d) => d.extrasRows,
+      ),
       trends: _buildTrendsFromDaily(
         days,
         startUtc: range.startUtc,
@@ -478,11 +357,13 @@ class StatsCubit extends Cubit<StatsState> {
     final salesByDay = <DateTime, double>{};
     final profitByDay = <DateTime, double>{};
     final servingsByDay = <DateTime, int>{};
+    final ordersByDay = <DateTime, int>{};
 
     double totalSales = 0;
     int totalCups = 0;
     int totalUnits = 0;
     double totalBeansGrams = 0;
+    int totalOrders = 0;
 
     for (final day in days) {
       if (day.startUtc.isBefore(startUtc) || !day.startUtc.isBefore(endUtc)) {
@@ -499,6 +380,10 @@ class StatsCubit extends Cubit<StatsState> {
       final servings = day.cups + day.units;
       if (servings > 0) {
         servingsByDay[key] = (servingsByDay[key] ?? 0) + servings;
+      }
+      if (day.orders > 0) {
+        ordersByDay[key] = (ordersByDay[key] ?? 0) + day.orders;
+        totalOrders += day.orders;
       }
       totalCups += day.cups;
       totalUnits += day.units;
@@ -537,6 +422,7 @@ class StatsCubit extends Cubit<StatsState> {
       required Map<DateTime, double> bySales,
       required Map<DateTime, double> byProfit,
       required Map<DateTime, int> byServings,
+      required Map<DateTime, int> byOrders,
     }) {
       if (day == null) return null;
       return DayHighlight(
@@ -544,7 +430,7 @@ class StatsCubit extends Cubit<StatsState> {
         sales: bySales[day] ?? 0,
         profit: byProfit[day] ?? 0,
         servings: byServings[day] ?? 0,
-        orders: 0,
+        orders: byOrders[day] ?? 0,
       );
     }
 
@@ -572,27 +458,64 @@ class StatsCubit extends Cubit<StatsState> {
         bySales: salesByDay,
         byProfit: profitByDay,
         byServings: servingsByDay,
+        byOrders: ordersByDay,
       ),
       topProfitDay: highlightFor(
         maxDayByProfit,
         bySales: salesByDay,
         byProfit: profitByDay,
         byServings: servingsByDay,
+        byOrders: ordersByDay,
       ),
       busiestDay: highlightFor(
         maxDayByServings,
         bySales: salesByDay,
         byProfit: profitByDay,
         byServings: servingsByDay,
+        byOrders: ordersByDay,
       ),
       averageDailySales: avgDailySales,
       averageDrinksPerDay: avgDrinksPerDay,
       averageSnacksPerDay: avgSnacksPerDay,
       averageBeansGramsPerDay: avgBeansGramsPerDay,
-      averageOrdersPerDay: 0.0,
-      totalOrders: 0,
+      averageOrdersPerDay:
+          activeSalesDays > 0 ? (totalOrders / activeSalesDays) : 0.0,
+      totalOrders: totalOrders,
       activeDays: activeSalesDays,
     );
+  }
+
+  List<GroupRow> _sumRowsForRange(
+    List<_ArchiveDay> days, {
+    required DateTime startUtc,
+    required DateTime endUtc,
+    required List<GroupRow> Function(_ArchiveDay day) pickRows,
+  }) {
+    final byKey = <String, GroupRow>{};
+    for (final day in days) {
+      if (day.startUtc.isBefore(startUtc) || !day.startUtc.isBefore(endUtc)) {
+        continue;
+      }
+      for (final row in pickRows(day)) {
+        final prev = byKey[row.key];
+        byKey[row.key] = (prev ?? GroupRow(key: row.key)).add(
+          s: row.sales,
+          c: row.cost,
+          p: row.profit,
+          g: row.grams,
+          gPlain: row.plainGrams,
+          gSpiced: row.spicedGrams,
+          cu: row.cups,
+        );
+      }
+    }
+    final list = byKey.values.toList();
+    list.sort((a, b) {
+      final bySales = b.sales.compareTo(a.sales);
+      if (bySales != 0) return bySales;
+      return b.cups.compareTo(a.cups);
+    });
+    return list;
   }
 
   Kpis _sumKpisForRange(
@@ -627,21 +550,94 @@ class StatsCubit extends Cubit<StatsState> {
     );
   }
 
-  Future<List<_ArchiveDay>> _fetchArchiveDailyForMonth(
+  Kpis _zeroKpis() => const Kpis(
+        sales: 0,
+        cost: 0,
+        profit: 0,
+        cups: 0,
+        grams: 0,
+        expenses: 0,
+        units: 0,
+      );
+
+  Future<_MonthSource> _fetchArchiveMonthSource(
     DateTime month, {
     bool cacheFirst = false,
   }) async {
-    final year = month.year.toString();
-    final monthKey = month.month.toString().padLeft(2, '0');
-    final query = FirebaseFirestore.instance
-        .collection('archive_daily')
-        .doc(year)
-        .collection(monthKey);
-    final snap = await _getQuerySnapshot(query, cacheFirst: cacheFirst);
-    return snap.docs
-        .map(_ArchiveDay.fromDoc)
+    final docId = _monthDocId(month);
+    final docRef =
+        FirebaseFirestore.instance.collection('archive_months').doc(docId);
+    final snap = await _getDocSnapshot(docRef, cacheFirst: cacheFirst);
+    if (!snap.exists) return const _MonthSource.empty();
+    return _monthSourceFromDoc(month, snap.data());
+  }
+
+  _MonthSource _monthSourceFromDoc(
+    DateTime month,
+    Map<String, dynamic>? data,
+  ) {
+    final days = _decodeDaysFromMonthDoc(data);
+    if (days.isNotEmpty) {
+      return _MonthSource(days: days, hasBreakdown: true);
+    }
+    final summaryDay = _decodeSummaryDayFromMonthDoc(month, data);
+    if (summaryDay == null) {
+      return const _MonthSource.empty();
+    }
+    return _MonthSource(days: [summaryDay], hasBreakdown: false);
+  }
+
+  List<_ArchiveDay> _decodeDaysFromMonthDoc(Map<String, dynamic>? data) {
+    if (data == null) return const [];
+    final rawDays = data['days'];
+    if (rawDays is! List) return const [];
+    return rawDays
+        .whereType<Map>()
+        .map((e) => e.cast<String, dynamic>())
+        .map(_ArchiveDay.fromMap)
         .whereType<_ArchiveDay>()
         .toList();
+  }
+
+  _ArchiveDay? _decodeSummaryDayFromMonthDoc(
+    DateTime month,
+    Map<String, dynamic>? data,
+  ) {
+    if (data == null) return null;
+    final rawSummary =
+        (data['summary'] is Map) ? data['summary'] as Map : data;
+    final summary = rawSummary.cast<String, dynamic>();
+
+    final hasAny = _num(summary['sales']) != 0 ||
+        _num(summary['cost']) != 0 ||
+        _num(summary['profit']) != 0 ||
+        _num(summary['grams']) != 0 ||
+        _int(summary['cups'] ?? summary['drinks']) != 0 ||
+        _int(summary['units'] ?? summary['snacks']) != 0 ||
+        _num(summary['expenses']) != 0 ||
+        _int(summary['orders']) != 0;
+    if (!hasAny) return null;
+
+    final dayLocal = DateTime(month.year, month.month, 1, 4);
+    final dayKey =
+        '${month.year}-${month.month.toString().padLeft(2, '0')}-01';
+    return _ArchiveDay(
+      dayKey: dayKey,
+      startUtc: dayLocal.toUtc(),
+      dayLocal: dayLocal,
+      sales: _num(summary['sales']),
+      cost: _num(summary['cost']),
+      profit: _num(summary['profit']),
+      cups: _int(summary['cups'] ?? summary['drinks']),
+      grams: _num(summary['grams']),
+      units: _int(summary['units'] ?? summary['snacks']),
+      expenses: _num(summary['expenses']),
+      orders: _int(summary['orders']),
+      drinksRows: _rowsFromRaw(data['drinks_rows']),
+      beansRows: _rowsFromRaw(data['beans_rows']),
+      turkishRows: _rowsFromRaw(data['turkish_rows'], turkish: true),
+      extrasRows: _rowsFromRaw(data['extras_rows']),
+    );
   }
 
   Future<Kpis?> _fetchMonthlyKpisFromArchiveMonths(
@@ -668,18 +664,6 @@ class StatsCubit extends Cubit<StatsState> {
       expenses: _num(summary['expenses']),
       units: _int(summary['units'] ?? summary['snacks']),
     );
-  }
-
-  Future<QuerySnapshot<Map<String, dynamic>>> _getQuerySnapshot(
-    Query<Map<String, dynamic>> query, {
-    bool cacheFirst = false,
-  }) async {
-    if (!cacheFirst) return query.get();
-    try {
-      final cached = await query.get(const GetOptions(source: Source.cache));
-      if (cached.docs.isNotEmpty) return cached;
-    } catch (_) {}
-    return query.get();
   }
 
   Future<DocumentSnapshot<Map<String, dynamic>>> _getDocSnapshot(
@@ -720,6 +704,11 @@ class _ArchiveDay {
   final double grams;
   final int units;
   final double expenses;
+  final int orders;
+  final List<GroupRow> drinksRows;
+  final List<GroupRow> beansRows;
+  final List<GroupRow> turkishRows;
+  final List<GroupRow> extrasRows;
 
   const _ArchiveDay({
     required this.dayKey,
@@ -732,12 +721,18 @@ class _ArchiveDay {
     required this.grams,
     required this.units,
     required this.expenses,
+    this.orders = 0,
+    this.drinksRows = const [],
+    this.beansRows = const [],
+    this.turkishRows = const [],
+    this.extrasRows = const [],
   });
 
-  static _ArchiveDay? fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
-    final data = doc.data();
-    if (data == null) return null;
-    final key = (data['dayKey'] ?? doc.id).toString().trim();
+  static _ArchiveDay? fromMap(
+    Map<String, dynamic> data, {
+    String fallbackDayKey = '',
+  }) {
+    final key = (data['dayKey'] ?? fallbackDayKey).toString().trim();
     final parsed = _parseDayKey(key);
     if (parsed == null) return null;
     final dayLocal = DateTime(parsed.year, parsed.month, parsed.day, 4);
@@ -764,6 +759,11 @@ class _ArchiveDay {
       grams: _num(data['grams']),
       units: _int(data['units'] ?? data['snacks']),
       expenses: _num(data['expenses']),
+      orders: _int(data['orders']),
+      drinksRows: _rowsFromRaw(data['drinks_rows']),
+      beansRows: _rowsFromRaw(data['beans_rows']),
+      turkishRows: _rowsFromRaw(data['turkish_rows'], turkish: true),
+      extrasRows: _rowsFromRaw(data['extras_rows']),
     );
   }
 }
@@ -784,11 +784,56 @@ int _int(dynamic v) {
 DateTime? _parseDayKey(String value) {
   final trimmed = value.trim();
   if (trimmed.isEmpty) return null;
-  final match = RegExp(r'^(\\d{4})-(\\d{2})-(\\d{2})\$').firstMatch(trimmed);
+  final match = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(trimmed);
   if (match == null) return null;
   final y = int.tryParse(match.group(1) ?? '');
   final m = int.tryParse(match.group(2) ?? '');
   final d = int.tryParse(match.group(3) ?? '');
   if (y == null || m == null || d == null) return null;
   return DateTime(y, m, d);
+}
+
+List<GroupRow> _rowsFromRaw(
+  dynamic raw, {
+  bool turkish = false,
+}) {
+  if (raw is! List) return const [];
+  final out = <GroupRow>[];
+  for (final item in raw) {
+    if (item is! Map) continue;
+    final map = item.cast<String, dynamic>();
+    final key = (map['key'] ?? map['name'] ?? '').toString().trim();
+    if (key.isEmpty) continue;
+    final plain = _num(map['plainGrams'] ?? (turkish ? map['plainCups'] : 0));
+    final spiced = _num(map['spicedGrams'] ?? (turkish ? map['spicedCups'] : 0));
+    final cups =
+        _int(map['cups']) + (_int(map['cups']) == 0 && turkish ? _int(plain + spiced) : 0);
+    out.add(
+      GroupRow(
+        key: key,
+        sales: _num(map['sales']),
+        cost: _num(map['cost']),
+        profit: _num(map['profit']),
+        grams: _num(map['grams']),
+        plainGrams: plain,
+        spicedGrams: spiced,
+        cups: cups,
+      ),
+    );
+  }
+  return out;
+}
+
+class _MonthSource {
+  final List<_ArchiveDay> days;
+  final bool hasBreakdown;
+
+  const _MonthSource({
+    required this.days,
+    required this.hasBreakdown,
+  });
+
+  const _MonthSource.empty()
+      : days = const <_ArchiveDay>[],
+        hasBreakdown = false;
 }

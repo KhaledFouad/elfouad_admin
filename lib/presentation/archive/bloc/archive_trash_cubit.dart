@@ -5,6 +5,7 @@ import 'package:elfouad_admin/data/repo/sales_history_repository.dart';
 import 'package:elfouad_admin/presentation/archive/bloc/archive_trash_state.dart';
 import 'package:elfouad_admin/presentation/archive/models/archive_entry.dart';
 import 'package:elfouad_admin/services/archive/archive_service.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 class ArchiveTrashCubit extends Cubit<ArchiveTrashState> {
@@ -16,19 +17,22 @@ class ArchiveTrashCubit extends Cubit<ArchiveTrashState> {
             salesRepository ??
             SalesHistoryRepository(firestore ?? FirebaseFirestore.instance),
         super(ArchiveTrashState.initial()) {
-    _subscribe();
+    _subscribe(state.range);
   }
 
   final FirebaseFirestore _firestore;
   final SalesHistoryRepository _salesRepository;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _sub;
 
-  void _subscribe() {
-    _sub = _firestore
+  void _subscribe(DateTimeRange range) {
+    _sub?.cancel();
+    emit(state.copyWith(loading: true, error: null, range: range));
+    final query = _firestore
         .collection(archiveBinCollection)
-        .orderBy('archived_at', descending: true)
-        .snapshots()
-        .listen(
+        .where('archived_at', isGreaterThanOrEqualTo: range.start)
+        .where('archived_at', isLessThan: range.end)
+        .orderBy('archived_at', descending: true);
+    _sub = query.snapshots().listen(
       (snap) {
         final entries = snap.docs.map(ArchiveEntry.fromSnapshot).toList();
         emit(
@@ -44,6 +48,12 @@ class ArchiveTrashCubit extends Cubit<ArchiveTrashState> {
   void setFilter(ArchiveFilter filter) {
     if (filter == state.filter) return;
     emit(state.copyWith(filter: filter));
+  }
+
+  void setRange(DateTimeRange range) {
+    final current = state.range;
+    if (_sameRange(current, range)) return;
+    _subscribe(range);
   }
 
   Future<void> restoreEntry(ArchiveEntry entry) async {
@@ -68,6 +78,10 @@ class ArchiveTrashCubit extends Cubit<ArchiveTrashState> {
       next.remove(id);
     }
     emit(state.copyWith(restoringIds: next));
+  }
+
+  bool _sameRange(DateTimeRange a, DateTimeRange b) {
+    return a.start == b.start && a.end == b.end;
   }
 
   @override

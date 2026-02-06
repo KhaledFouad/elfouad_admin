@@ -64,6 +64,10 @@ class AppStrings {
   static const inventoryAll = 'الكل';
   static const inventorySingles = 'الأصناف المنفردة';
   static const inventoryBlends = 'التوليفات';
+  static const inventoryLogTitle = 'سجل المخزون';
+  static const inventoryLogCreate = 'إضافة';
+  static const inventoryLogUpdate = 'تعديل';
+  static const inventoryLogDelete = 'حذف';
   static const drinksNoStockNote = 'المشروبات لا تُدار كمخزون جرامات هنا.';
   static const forecastTitle = 'توقع احتياج البن';
   static const forecastAnalysisDaysLabel = 'مدة التحليل (يوم)';
