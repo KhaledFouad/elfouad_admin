@@ -41,9 +41,9 @@ class ArchiveMonthsCubit extends Cubit<ArchiveMonthsState> {
             lastUpdated: lastUpdated,
           ),
         );
-        if (_shouldRefreshRemote(cached: cached, lastUpdated: lastUpdated)) {
-          unawaited(_fetchRemote(cached: cached, force: false));
-        }
+        unawaited(
+          _refreshRemoteIfNeeded(cached: cached, lastUpdated: lastUpdated),
+        );
         return;
       }
 
@@ -55,6 +55,19 @@ class ArchiveMonthsCubit extends Cubit<ArchiveMonthsState> {
 
   Future<void> refresh() async {
     await load(force: true);
+  }
+
+  Future<void> _refreshRemoteIfNeeded({
+    required List<ArchiveMonth> cached,
+    required DateTime? lastUpdated,
+  }) async {
+    final staleOrMissingLatest = _shouldRefreshRemote(
+      cached: cached,
+      lastUpdated: lastUpdated,
+    );
+    final hasGaps = await _hasKnownClosedMonthGaps(cached, cacheFirst: true);
+    if (!staleOrMissingLatest && !hasGaps) return;
+    await _fetchRemote(cached: cached, force: false);
   }
 
   Future<DateTime?> _readCacheUpdatedAt() async {
@@ -104,8 +117,12 @@ class ArchiveMonthsCubit extends Cubit<ArchiveMonthsState> {
             cached.any(
               (month) => _monthKeyForArchiveMonth(month) == latestClosedKey,
             );
+        final hasGaps = await _hasKnownClosedMonthGaps(
+          cached,
+          cacheFirst: true,
+        );
 
-        if (!cacheHasLatestClosed) {
+        if (!cacheHasLatestClosed || hasGaps) {
           months = await _fetchAllClosedMonthsFromDaily(cacheFirst: true);
         } else {
           months = await _refreshRecentClosedMonths(cached, cacheFirst: true);
@@ -231,6 +248,52 @@ class ArchiveMonthsCubit extends Cubit<ArchiveMonthsState> {
       1,
     );
     return latestClosed;
+  }
+
+  Future<bool> _hasKnownClosedMonthGaps(
+    List<ArchiveMonth> cached, {
+    required bool cacheFirst,
+  }) async {
+    if (cached.isEmpty) return true;
+
+    final knownKeys = await _discoverKnownClosedMonthKeys(
+      cacheFirst: cacheFirst,
+    );
+    if (knownKeys.isEmpty) return false;
+
+    final cachedKeys = cached
+        .map(_monthKeyForArchiveMonth)
+        .where((key) => key.isNotEmpty)
+        .toSet();
+
+    for (final key in knownKeys) {
+      if (!cachedKeys.contains(key)) return true;
+    }
+    return false;
+  }
+
+  Future<Set<String>> _discoverKnownClosedMonthKeys({
+    required bool cacheFirst,
+  }) async {
+    final keys = <String>{};
+    final years = await _discoverDailyYears(cacheFirst: cacheFirst);
+
+    if (years.isNotEmpty) {
+      final now = DateTime.now();
+      for (final year in years) {
+        final maxMonth = year < now.year
+            ? 12
+            : (year == now.year ? now.month - 1 : 0);
+        if (maxMonth < 1) continue;
+        for (var month = 1; month <= maxMonth; month++) {
+          keys.add(_monthKey(DateTime(year, month, 1)));
+        }
+      }
+      return keys;
+    }
+
+    keys.addAll(await _discoverLegacyMonthKeys(cacheFirst: cacheFirst));
+    return keys;
   }
 
   String _monthKeyForArchiveMonth(ArchiveMonth month) {
