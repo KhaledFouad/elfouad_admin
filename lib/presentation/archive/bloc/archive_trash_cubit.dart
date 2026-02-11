@@ -12,11 +12,11 @@ class ArchiveTrashCubit extends Cubit<ArchiveTrashState> {
   ArchiveTrashCubit({
     FirebaseFirestore? firestore,
     SalesHistoryRepository? salesRepository,
-  })  : _firestore = firestore ?? FirebaseFirestore.instance,
-        _salesRepository =
-            salesRepository ??
-            SalesHistoryRepository(firestore ?? FirebaseFirestore.instance),
-        super(ArchiveTrashState.initial()) {
+  }) : _firestore = firestore ?? FirebaseFirestore.instance,
+       _salesRepository =
+           salesRepository ??
+           SalesHistoryRepository(firestore ?? FirebaseFirestore.instance),
+       super(ArchiveTrashState.initial()) {
     _subscribe(state.range);
   }
 
@@ -32,17 +32,10 @@ class ArchiveTrashCubit extends Cubit<ArchiveTrashState> {
         .where('archived_at', isGreaterThanOrEqualTo: range.start)
         .where('archived_at', isLessThan: range.end)
         .orderBy('archived_at', descending: true);
-    _sub = query.snapshots().listen(
-      (snap) {
-        final entries = snap.docs.map(ArchiveEntry.fromSnapshot).toList();
-        emit(
-          state.copyWith(loading: false, error: null, entries: entries),
-        );
-      },
-      onError: (e, _) => emit(
-        state.copyWith(loading: false, error: e),
-      ),
-    );
+    _sub = query.snapshots().listen((snap) {
+      final entries = snap.docs.map(ArchiveEntry.fromSnapshot).toList();
+      emit(state.copyWith(loading: false, error: null, entries: entries));
+    }, onError: (e, _) => emit(state.copyWith(loading: false, error: e)));
   }
 
   void setFilter(ArchiveFilter filter) {

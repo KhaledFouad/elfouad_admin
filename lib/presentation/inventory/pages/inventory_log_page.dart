@@ -8,10 +8,12 @@ import 'package:responsive_framework/responsive_framework.dart';
 class InventoryLogPage extends StatelessWidget {
   const InventoryLogPage({super.key});
 
-  double _numOf(dynamic v, [double def = 0.0]) {
+  double? _numOrNull(dynamic v) {
+    if (v == null) return null;
     if (v is num) return v.toDouble();
     final raw = '${v ?? ''}'.replaceAll(',', '.').trim();
-    return double.tryParse(raw) ?? def;
+    if (raw.isEmpty) return null;
+    return double.tryParse(raw);
   }
 
   Map<String, dynamic> _mapOf(dynamic v) {
@@ -33,6 +35,50 @@ class InventoryLogPage extends StatelessWidget {
     final trimmedUnit = unit.trim();
     if (trimmedUnit.isEmpty) return formatted;
     return '$formatted $trimmedUnit';
+  }
+
+  bool _isFieldChanged(
+    Map<String, dynamic> before,
+    Map<String, dynamic> after,
+    String key,
+  ) {
+    final hasBefore = before.containsKey(key);
+    final hasAfter = after.containsKey(key);
+    if (!hasBefore && !hasAfter) return false;
+    return !_valueEquals(before[key], after[key]);
+  }
+
+  bool _valueEquals(dynamic a, dynamic b) {
+    final an = _numOrNull(a);
+    final bn = _numOrNull(b);
+    if (an != null && bn != null) {
+      return (an - bn).abs() <= 0.0001;
+    }
+
+    if (a is String || b is String) {
+      final sa = (a ?? '').toString().trim();
+      final sb = (b ?? '').toString().trim();
+      return sa == sb;
+    }
+
+    return a == b;
+  }
+
+  bool _hasTrackedChanges(
+    Map<String, dynamic> before,
+    Map<String, dynamic> after,
+  ) {
+    return _isFieldChanged(before, after, 'stock') ||
+        _isFieldChanged(before, after, 'sell_per_kg') ||
+        _isFieldChanged(before, after, 'cost_per_kg');
+  }
+
+  bool _shouldShowEntry(Map<String, dynamic> data) {
+    final action = (data['action'] ?? '').toString();
+    if (action != 'update') return true;
+    final before = _mapOf(data['before']);
+    final after = _mapOf(data['after']);
+    return _hasTrackedChanges(before, after);
   }
 
   @override
@@ -95,14 +141,15 @@ class InventoryLogPage extends StatelessWidget {
                 if (snapshot.hasError) {
                   return Center(
                     child: Text(
-                      AppStrings.loadFailedSimple(
-                        snapshot.error ?? 'unknown',
-                      ),
+                      AppStrings.loadFailedSimple(snapshot.error ?? 'unknown'),
                     ),
                   );
                 }
                 final docs = snapshot.data?.docs ?? [];
-                if (docs.isEmpty) {
+                final visibleDocs = docs
+                    .where((doc) => _shouldShowEntry(doc.data()))
+                    .toList();
+                if (visibleDocs.isEmpty) {
                   return const Center(child: Text(AppStrings.noItems));
                 }
                 return ListView.separated(
@@ -112,11 +159,11 @@ class InventoryLogPage extends StatelessWidget {
                     horizontalPadding,
                     24,
                   ),
-                  itemCount: docs.length,
+                  itemCount: visibleDocs.length,
                   separatorBuilder: (context, index) =>
                       const SizedBox(height: 10),
                   itemBuilder: (context, index) =>
-                      _buildLogCard(context, docs[index]),
+                      _buildLogCard(context, visibleDocs[index]),
                 );
               },
             ),
@@ -146,12 +193,9 @@ class InventoryLogPage extends StatelessWidget {
     final before = _mapOf(data['before']);
     final after = _mapOf(data['after']);
 
-    final stockBefore = _numOf(before['stock']);
-    final stockAfter = _numOf(after['stock']);
-    final sellBefore = _numOf(before['sell_per_kg']);
-    final sellAfter = _numOf(after['sell_per_kg']);
-    final costBefore = _numOf(before['cost_per_kg']);
-    final costAfter = _numOf(after['cost_per_kg']);
+    final stockChanged = _isFieldChanged(before, after, 'stock');
+    final sellChanged = _isFieldChanged(before, after, 'sell_per_kg');
+    final costChanged = _isFieldChanged(before, after, 'cost_per_kg');
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -193,26 +237,49 @@ class InventoryLogPage extends StatelessWidget {
             runSpacing: 6,
             children: [
               _actionChip(action),
-              if (before.isNotEmpty || after.isNotEmpty)
+              if (stockChanged)
                 _changeChip(
                   AppStrings.stockLabel,
                   _formatStock(
-                    before.isEmpty ? null : stockBefore,
+                    before.containsKey('stock')
+                        ? _numOrNull(before['stock'])
+                        : null,
                     unit,
                   ),
-                  _formatStock(after.isEmpty ? null : stockAfter, unit),
+                  _formatStock(
+                    after.containsKey('stock')
+                        ? _numOrNull(after['stock'])
+                        : null,
+                    unit,
+                  ),
                 ),
-              if (before.isNotEmpty || after.isNotEmpty)
+              if (sellChanged)
                 _changeChip(
                   AppStrings.pricePerKgLabel,
-                  _formatNumber(before.isEmpty ? null : sellBefore),
-                  _formatNumber(after.isEmpty ? null : sellAfter),
+                  _formatNumber(
+                    before.containsKey('sell_per_kg')
+                        ? _numOrNull(before['sell_per_kg'])
+                        : null,
+                  ),
+                  _formatNumber(
+                    after.containsKey('sell_per_kg')
+                        ? _numOrNull(after['sell_per_kg'])
+                        : null,
+                  ),
                 ),
-              if (before.isNotEmpty || after.isNotEmpty)
+              if (costChanged)
                 _changeChip(
                   AppStrings.costPerKgLabel,
-                  _formatNumber(before.isEmpty ? null : costBefore),
-                  _formatNumber(after.isEmpty ? null : costAfter),
+                  _formatNumber(
+                    before.containsKey('cost_per_kg')
+                        ? _numOrNull(before['cost_per_kg'])
+                        : null,
+                  ),
+                  _formatNumber(
+                    after.containsKey('cost_per_kg')
+                        ? _numOrNull(after['cost_per_kg'])
+                        : null,
+                  ),
                 ),
             ],
           ),
@@ -277,10 +344,7 @@ class InventoryLogPage extends StatelessWidget {
               color: Colors.black54,
             ),
           ),
-          Text(
-            text,
-            style: const TextStyle(fontWeight: FontWeight.w700),
-          ),
+          Text(text, style: const TextStyle(fontWeight: FontWeight.w700)),
         ],
       ),
     );

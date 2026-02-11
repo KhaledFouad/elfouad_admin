@@ -4,8 +4,10 @@ import 'dart:developer' as developer;
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:elfouad_admin/presentation/stats/utils/op_day.dart'
-    show monthRangeUtc;
+    show monthRangeUtc, opDayKeyFromLocal;
 import 'package:elfouad_admin/services/archive/archive_service.dart';
+import 'package:elfouad_admin/services/archive/daily_archive_stats.dart'
+    show syncDailyArchiveForDay;
 import 'package:elfouad_admin/services/archive/monthly_archive_stats.dart'
     show syncMonthlyArchiveForMonth;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -14,6 +16,93 @@ const String _autoArchiveMetaCollection = 'meta';
 const String _autoArchiveMetaDocId = 'auto_archive';
 const String _autoArchiveDeviceIdPrefKey = 'auto_archive_device_id';
 const String _autoArchiveOwnerField = 'owner_device_id';
+const String _dailyArchiveRunningField = 'daily_archive_running';
+const String _dailyArchiveRunningUntilField = 'daily_archive_running_until';
+const String _dailyArchiveLastDayKeyField = 'daily_archive_last_day_key';
+
+/// Runs daily archive for a specific already-closed operational day (4AM-based),
+/// exactly once globally across devices, and only from owner device.
+Future<bool> runDailyArchiveForClosedDayIfNeeded({
+  required DateTime closedDayStartLocal,
+  FirebaseFirestore? firestore,
+  SharedPreferences? prefs,
+}) async {
+  final db = firestore ?? FirebaseFirestore.instance;
+  final localPrefs = prefs ?? await SharedPreferences.getInstance();
+
+  final isOwner = await isCurrentDeviceAutoArchiveOwner(
+    firestore: db,
+    prefs: localPrefs,
+  );
+  if (!isOwner) return false;
+
+  final dayKey = opDayKeyFromLocal(closedDayStartLocal);
+  final deviceId = await getOrCreateAutoArchiveDeviceId(prefs: localPrefs);
+  final now = DateTime.now();
+  final lockUntil = now.add(const Duration(minutes: 20));
+  final metaRef = db
+      .collection(_autoArchiveMetaCollection)
+      .doc(_autoArchiveMetaDocId);
+
+  final lockOk = await db.runTransaction((tx) async {
+    final snap = await tx.get(metaRef);
+    final data = snap.data();
+
+    final ownerId = (data?[_autoArchiveOwnerField] ?? '').toString().trim();
+    if (ownerId.isNotEmpty && ownerId != deviceId) {
+      return false;
+    }
+
+    final lastDay = (data?[_dailyArchiveLastDayKeyField] ?? '')
+        .toString()
+        .trim();
+    if (lastDay == dayKey) {
+      return false;
+    }
+
+    final running = data?[_dailyArchiveRunningField] == true;
+    final runningUntil = data?[_dailyArchiveRunningUntilField];
+    if (running &&
+        runningUntil is Timestamp &&
+        runningUntil.toDate().isAfter(now)) {
+      return false;
+    }
+
+    tx.set(metaRef, {
+      if (ownerId.isEmpty) _autoArchiveOwnerField: deviceId,
+      if (ownerId.isEmpty) 'owner_claimed_at': FieldValue.serverTimestamp(),
+      _dailyArchiveRunningField: true,
+      _dailyArchiveRunningUntilField: Timestamp.fromDate(lockUntil),
+      'daily_archive_running_by': deviceId,
+      'daily_archive_target_day': dayKey,
+    }, SetOptions(merge: true));
+    return true;
+  });
+
+  if (!lockOk) return false;
+
+  try {
+    await syncDailyArchiveForDay(firestore: db, dayLocal: closedDayStartLocal);
+
+    await metaRef.set({
+      _dailyArchiveLastDayKeyField: dayKey,
+      'daily_archive_last_synced_at': FieldValue.serverTimestamp(),
+      _dailyArchiveRunningField: false,
+      _dailyArchiveRunningUntilField: FieldValue.delete(),
+      'daily_archive_running_by': FieldValue.delete(),
+      'daily_archive_target_day': FieldValue.delete(),
+    }, SetOptions(merge: true));
+    return true;
+  } catch (_) {
+    await metaRef.set({
+      _dailyArchiveRunningField: false,
+      _dailyArchiveRunningUntilField: FieldValue.delete(),
+      'daily_archive_running_by': FieldValue.delete(),
+      'daily_archive_target_day': FieldValue.delete(),
+    }, SetOptions(merge: true));
+    rethrow;
+  }
+}
 
 Future<String> getOrCreateAutoArchiveDeviceId({
   SharedPreferences? prefs,
@@ -35,12 +124,32 @@ Future<bool> isCurrentDeviceAutoArchiveOwner({
   final db = firestore ?? FirebaseFirestore.instance;
   final localPrefs = prefs ?? await SharedPreferences.getInstance();
   final deviceId = await getOrCreateAutoArchiveDeviceId(prefs: localPrefs);
-  final snap =
-      await db.collection(_autoArchiveMetaCollection).doc(_autoArchiveMetaDocId).get();
-  final data = snap.data();
-  final ownerId = (data?[_autoArchiveOwnerField] ?? '').toString().trim();
-  if (ownerId.isEmpty) return false;
-  return ownerId == deviceId;
+  final metaRef = db
+      .collection(_autoArchiveMetaCollection)
+      .doc(_autoArchiveMetaDocId);
+
+  try {
+    return await db.runTransaction((tx) async {
+      final snap = await tx.get(metaRef);
+      final data = snap.data();
+      final ownerId = (data?[_autoArchiveOwnerField] ?? '').toString().trim();
+
+      if (ownerId.isEmpty) {
+        tx.set(metaRef, {
+          _autoArchiveOwnerField: deviceId,
+          'owner_claimed_at': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+        return true;
+      }
+
+      return ownerId == deviceId;
+    });
+  } catch (_) {
+    final snap = await metaRef.get();
+    final data = snap.data();
+    final ownerId = (data?[_autoArchiveOwnerField] ?? '').toString().trim();
+    return ownerId == deviceId;
+  }
 }
 
 /// Auto-archive old sales into archive_bin on a schedule.
@@ -52,8 +161,9 @@ Future<void> runAutoArchiveIfNeeded({
   Duration pause = const Duration(milliseconds: 120),
 }) async {
   final db = FirebaseFirestore.instance;
-  final metaRef =
-      db.collection(_autoArchiveMetaCollection).doc(_autoArchiveMetaDocId);
+  final metaRef = db
+      .collection(_autoArchiveMetaCollection)
+      .doc(_autoArchiveMetaDocId);
   final localPrefs = await SharedPreferences.getInstance();
   final deviceId = await getOrCreateAutoArchiveDeviceId(prefs: localPrefs);
 
@@ -100,9 +210,7 @@ Future<void> runAutoArchiveIfNeeded({
 
     tx.set(metaRef, {
       'running': true,
-      'running_until': Timestamp.fromDate(
-        now.add(const Duration(minutes: 20)),
-      ),
+      'running_until': Timestamp.fromDate(now.add(const Duration(minutes: 20))),
       if (txOwner.isEmpty) _autoArchiveOwnerField: deviceId,
       if (txOwner.isEmpty) 'owner_claimed_at': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
@@ -165,8 +273,9 @@ Future<int> runAutoArchiveNow({
   Duration pause = const Duration(milliseconds: 120),
 }) async {
   final db = FirebaseFirestore.instance;
-  final metaRef =
-      db.collection(_autoArchiveMetaCollection).doc(_autoArchiveMetaDocId);
+  final metaRef = db
+      .collection(_autoArchiveMetaCollection)
+      .doc(_autoArchiveMetaDocId);
   final localPrefs = await SharedPreferences.getInstance();
   final deviceId = await getOrCreateAutoArchiveDeviceId(prefs: localPrefs);
 
@@ -202,11 +311,7 @@ Future<int> runAutoArchiveNow({
   }
 
   // Generate archive_months for previous month once.
-  final prevMonth = DateTime(
-    effectiveMonth.year,
-    effectiveMonth.month - 1,
-    1,
-  );
+  final prevMonth = DateTime(effectiveMonth.year, effectiveMonth.month - 1, 1);
   await syncMonthlyArchiveForMonth(
     firestore: db,
     month: prevMonth,
@@ -375,7 +480,8 @@ Future<int> _archiveByFieldCutoff({
 
       if (skipIfCreatedAtPresent && data['created_at'] != null) {
         final rawCreated = data['created_at'];
-        final isSupported = rawCreated is Timestamp ||
+        final isSupported =
+            rawCreated is Timestamp ||
             rawCreated is DateTime ||
             rawCreated is num ||
             rawCreated is String;

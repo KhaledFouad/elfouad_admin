@@ -9,20 +9,17 @@ import 'drinks_state.dart';
 
 class DrinksCubit extends Cubit<DrinksState> {
   DrinksCubit({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance,
-        super(const DrinksState(items: [], loading: true, error: null)) {
+    : _firestore = firestore ?? FirebaseFirestore.instance,
+      super(const DrinksState(items: [], loading: true, error: null)) {
     _sub = _firestore
         .collection('drinks')
         .orderBy('name')
         .snapshots()
         .map((snap) => snap.docs.map(drinkRowFromDoc).toList())
         .listen(
-          (items) => emit(
-            state.copyWith(items: items, loading: false, error: null),
-          ),
-          onError: (e, _) => emit(
-            state.copyWith(loading: false, error: e),
-          ),
+          (items) =>
+              emit(state.copyWith(items: items, loading: false, error: null)),
+          onError: (e, _) => emit(state.copyWith(loading: false, error: e)),
         );
   }
 

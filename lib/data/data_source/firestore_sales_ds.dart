@@ -4,11 +4,11 @@ import '../mappers/sale_mapper.dart';
 
 class FirestoreSalesDs {
   final FirebaseFirestore _db;
-  FirestoreSalesDs([FirebaseFirestore? db]) : _db = db ?? FirebaseFirestore.instance;
+  FirestoreSalesDs([FirebaseFirestore? db])
+    : _db = db ?? FirebaseFirestore.instance;
 
   Future<List<Sale>> fetchRaw(DateTime startUtc, DateTime endUtc) async {
-    final combined =
-        <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
+    final combined = <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
     for (final coll in const ['sales', 'deferred_sales']) {
       final q = await _db
           .collection(coll)

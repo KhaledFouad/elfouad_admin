@@ -1,1 +1,1 @@
-enum ManageTab { all, drinks, singles, blends, extras }
+enum ManageTab { all, drinks, singles, blends, extras, tahwiga }

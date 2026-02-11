@@ -4,7 +4,17 @@ import 'package:elfouad_admin/core/utils/app_strings.dart';
 
 class ExtraEditSheet extends StatefulWidget {
   final DocumentSnapshot<Map<String, dynamic>> snap;
-  const ExtraEditSheet({super.key, required this.snap});
+  final String title;
+  final String itemType;
+  final String flagField;
+
+  const ExtraEditSheet({
+    super.key,
+    required this.snap,
+    this.title = AppStrings.editExtraTitle,
+    this.itemType = 'extra',
+    this.flagField = 'is_extra',
+  });
 
   @override
   State<ExtraEditSheet> createState() => _ExtraEditSheetState();
@@ -22,6 +32,8 @@ class _ExtraEditSheetState extends State<ExtraEditSheet> {
   final _stockUnits = TextEditingController();
   bool _active = true;
   bool _busy = false;
+
+  bool get _isTahwiga => widget.itemType == 'tahwiga';
 
   @override
   void initState() {
@@ -89,10 +101,13 @@ class _ExtraEditSheetState extends State<ExtraEditSheet> {
         'unit': _unit.text.trim().isEmpty ? 'piece' : _unit.text.trim(),
         'price_sell': sell,
         'cost_unit': cost,
-        'stock_units': _num(_stockUnits.text),
+        // Tahwiga items are kept non-stocked by design.
+        'stock_units': _isTahwiga ? 0.0 : _num(_stockUnits.text),
         'active': _active,
-        'type': 'extra',
-        'is_extra': true,
+        'type': widget.itemType,
+        widget.flagField: true,
+        if (widget.flagField != 'is_extra') 'is_extra': FieldValue.delete(),
+        if (widget.flagField != 'is_tahwiga') 'is_tahwiga': FieldValue.delete(),
         'updated_at': now,
       };
       _applyPosOrder(upd);
@@ -138,8 +153,8 @@ class _ExtraEditSheetState extends State<ExtraEditSheet> {
                 borderRadius: BorderRadius.circular(100),
               ),
             ),
-            const Text(
-              AppStrings.editExtraTitle,
+            Text(
+              widget.title,
               textAlign: TextAlign.center,
               style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
             ),
@@ -166,8 +181,14 @@ class _ExtraEditSheetState extends State<ExtraEditSheet> {
             ),
             const SizedBox(height: 8),
             _field(AppStrings.unitLabel, _unit),
-            const SizedBox(height: 8),
-            _field(AppStrings.stockUnitsLabel, _stockUnits, numKeyboard: true),
+            if (!_isTahwiga) ...[
+              const SizedBox(height: 8),
+              _field(
+                AppStrings.stockUnitsLabel,
+                _stockUnits,
+                numKeyboard: true,
+              ),
+            ],
             const SizedBox(height: 8),
             _field(
               AppStrings.sellPricePerUnitLabel,

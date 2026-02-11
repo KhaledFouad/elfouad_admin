@@ -16,9 +16,9 @@ class ManageTabCubit extends Cubit<ManageTabState> {
     final raw = prefs.getString(_prefsKey);
     if (raw == null || raw.isEmpty) return;
     final match = ManageTab.values.cast<ManageTab?>().firstWhere(
-          (t) => t?.name == raw,
-          orElse: () => null,
-        );
+      (t) => t?.name == raw,
+      orElse: () => null,
+    );
     if (match != null && match != state.tab) {
       emit(state.copyWith(tab: match));
     }

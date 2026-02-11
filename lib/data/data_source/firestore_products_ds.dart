@@ -1,32 +1,20 @@
 import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:elfouad_admin/services/archive/archive_service.dart';
+
 import '../../domain/entities/product.dart';
 import '../mappers/product_mapper.dart';
 
-/// نفس الاسم القديم لكن بيدير 3 كوليكشن: drinks / singles / blends
+/// Canonical Firestore datasource for products collections.
 class FirestoreProductsDs {
   final FirebaseFirestore _db;
+
   FirestoreProductsDs([FirebaseFirestore? db])
     : _db = db ?? FirebaseFirestore.instance;
 
-  /// يحوّل اسم النوع إلى اسم الكوليكشن
-  String _colForType(String type) {
-    switch (type) {
-      case 'single':
-        return 'singles';
-      case 'ready_blend':
-        return 'blends';
-      case 'drink':
-      default:
-        return 'drinks';
-    }
-  }
-
-  /// Stream موحّد من التلات كوليكشن
   Stream<List<Product>> watchAll() {
     final ctrl = StreamController<List<Product>>.broadcast();
-
     List<Product> singles = [];
     List<Product> blends = [];
     List<Product> drinks = [];
@@ -79,70 +67,67 @@ class FirestoreProductsDs {
     return ctrl.stream;
   }
 
-  /// upsert ذكي:
-  /// - لو id فاضي: يضيف في الكوليكشن المناسب حسب النوع.
-  /// - لو id موجود: يحدّثه في مكانه لو لاقاه، ولو لاقاه في كوليكشن تاني بينقله،
-  ///   ولو مش لاقيه خالص ينشئه في الكوليكشن المناسب بنفس الـ id.
-  Future<void> upsert(Product p) async {
-    final targetCol = _colForType(p.type);
+  String _colForType(String type) => type == 'single'
+      ? 'singles'
+      : type == 'ready_blend'
+      ? 'blends'
+      : 'drinks';
 
+  String _kindForCollection(String col) {
+    switch (col) {
+      case 'singles':
+        return 'product_single';
+      case 'blends':
+        return 'blend';
+      case 'drinks':
+      default:
+        return 'drink';
+    }
+  }
+
+  Future<void> upsert(Product p, {String? oldType}) async {
+    final colNew = _colForType(p.type);
     if (p.id.isEmpty) {
-      // إنشاء جديد
-      await _db.collection(targetCol).add(ProductMapper.toMap(p));
+      await _db.collection(colNew).add(ProductMapper.toMap(p));
       return;
     }
 
-    // محاولة العثور على الـ doc في أي كوليكشن من التلاتة
-    final docSingles = await _db.collection('singles').doc(p.id).get();
-    final docBlends = await _db.collection('blends').doc(p.id).get();
-    final docDrinks = await _db.collection('drinks').doc(p.id).get();
-
-    final existsInSingles = docSingles.exists;
-    final existsInBlends = docBlends.exists;
-    final existsInDrinks = docDrinks.exists;
-
-    // لو موجود في الكوليكشن الهدف → نزود/نحدّث
-    if ((targetCol == 'singles' && existsInSingles) ||
-        (targetCol == 'blends' && existsInBlends) ||
-        (targetCol == 'drinks' && existsInDrinks)) {
+    final colOld = _colForType(oldType ?? p.type);
+    if (colOld != colNew) {
+      final oldRef = _db.collection(colOld).doc(p.id);
+      final oldSnap = await oldRef.get();
+      if (oldSnap.exists) {
+        await archiveThenDelete(
+          srcRef: oldRef,
+          kind: _kindForCollection(colOld),
+          reason: 'move',
+        );
+      }
       await _db
-          .collection(targetCol)
+          .collection(colNew)
           .doc(p.id)
           .set(ProductMapper.toMap(p), SetOptions(merge: true));
       return;
     }
 
-    // لو موجود في كوليكشن تاني → نحذفه من هناك وننشئه/نكتبه في الهدف بنفس الـ id
-    if (existsInSingles && targetCol != 'singles') {
-      await archiveThenDelete(
-        srcRef: _db.collection('singles').doc(p.id),
-        kind: 'product_single',
-        reason: 'move',
-      );
-    }
-    if (existsInBlends && targetCol != 'blends') {
-      await archiveThenDelete(
-        srcRef: _db.collection('blends').doc(p.id),
-        kind: 'blend',
-        reason: 'move',
-      );
-    }
-    if (existsInDrinks && targetCol != 'drinks') {
-      await archiveThenDelete(
-        srcRef: _db.collection('drinks').doc(p.id),
-        kind: 'drink',
-        reason: 'move',
-      );
-    }
-
     await _db
-        .collection(targetCol)
+        .collection(colNew)
         .doc(p.id)
         .set(ProductMapper.toMap(p), SetOptions(merge: true));
   }
 
-  /// يحذف الـ id من أول كوليكشن يلاقيه فيه
-  Future<void> delete(String id) async {
+  Future<void> delete(String id, [String? type]) async {
+    final normalizedType = (type ?? '').trim();
+    if (normalizedType.isNotEmpty) {
+      final col = _colForType(normalizedType);
+      await archiveThenDelete(
+        srcRef: _db.collection(col).doc(id),
+        kind: _kindForCollection(col),
+        reason: 'manual_delete',
+      );
+      return;
+    }
+
     final docSingles = await _db.collection('singles').doc(id).get();
     if (docSingles.exists) {
       await archiveThenDelete(
@@ -152,6 +137,7 @@ class FirestoreProductsDs {
       );
       return;
     }
+
     final docBlends = await _db.collection('blends').doc(id).get();
     if (docBlends.exists) {
       await archiveThenDelete(
@@ -161,6 +147,7 @@ class FirestoreProductsDs {
       );
       return;
     }
+
     final docDrinks = await _db.collection('drinks').doc(id).get();
     if (docDrinks.exists) {
       await archiveThenDelete(
@@ -168,8 +155,6 @@ class FirestoreProductsDs {
         kind: 'drink',
         reason: 'manual_delete',
       );
-      return;
     }
-    // لو مش موجود في أي مكان: لا شيء
   }
 }

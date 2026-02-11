@@ -7,9 +7,11 @@ class InventoryState {
   final List<InventoryRow> singles;
   final List<InventoryRow> blends;
   final List<ExtraInventoryRow> extras;
+  final List<ExtraInventoryRow> tahwiga;
   final bool loadingSingles;
   final bool loadingBlends;
   final bool loadingExtras;
+  final bool loadingTahwiga;
   final Object? error;
 
   const InventoryState({
@@ -17,9 +19,11 @@ class InventoryState {
     required this.singles,
     required this.blends,
     required this.extras,
+    required this.tahwiga,
     required this.loadingSingles,
     required this.loadingBlends,
     required this.loadingExtras,
+    required this.loadingTahwiga,
     required this.error,
   });
 
@@ -30,6 +34,8 @@ class InventoryState {
       case InventoryTab.blends:
         return blends;
       case InventoryTab.extras:
+        return const <InventoryRow>[];
+      case InventoryTab.tahwiga:
         return const <InventoryRow>[];
       case InventoryTab.drinks:
         return const <InventoryRow>[];
@@ -46,16 +52,19 @@ class InventoryState {
     return max <= 0 ? 1 : max;
   }
 
-  bool get loading => loadingSingles || loadingBlends || loadingExtras;
+  bool get loading =>
+      loadingSingles || loadingBlends || loadingExtras || loadingTahwiga;
 
   InventoryState copyWith({
     InventoryTab? tab,
     List<InventoryRow>? singles,
     List<InventoryRow>? blends,
     List<ExtraInventoryRow>? extras,
+    List<ExtraInventoryRow>? tahwiga,
     bool? loadingSingles,
     bool? loadingBlends,
     bool? loadingExtras,
+    bool? loadingTahwiga,
     Object? error,
   }) {
     return InventoryState(
@@ -63,9 +72,11 @@ class InventoryState {
       singles: singles ?? this.singles,
       blends: blends ?? this.blends,
       extras: extras ?? this.extras,
+      tahwiga: tahwiga ?? this.tahwiga,
       loadingSingles: loadingSingles ?? this.loadingSingles,
       loadingBlends: loadingBlends ?? this.loadingBlends,
       loadingExtras: loadingExtras ?? this.loadingExtras,
+      loadingTahwiga: loadingTahwiga ?? this.loadingTahwiga,
       error: error,
     );
   }

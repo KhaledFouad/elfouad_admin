@@ -1,0 +1,19 @@
+// Barrel exports for the history presentation feature.
+export 'bloc/sales_history_cubit.dart';
+export 'bloc/sales_history_state.dart';
+export 'models/credit_account.dart';
+export 'models/history_partial_payment.dart';
+export 'models/history_summary.dart';
+export 'models/payment_event.dart';
+export 'models/sale_component.dart';
+export 'models/sale_record.dart';
+export 'models/sales_day_group.dart';
+export 'pages/credit_accounts_page.dart';
+export 'pages/credit_customer_page.dart';
+export 'pages/sales_history_page.dart';
+export 'widgets/credit_accounts_section.dart';
+export 'widgets/history_day_section.dart';
+export 'widgets/partial_payment_tile.dart';
+export 'widgets/sale_edit_sheet.dart';
+export 'widgets/sale_tile.dart';
+export 'widgets/summary_pill.dart';

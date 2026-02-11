@@ -1,5 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:elfouad_admin/presentation/History/utils/sale_utils.dart';
+import 'package:elfouad_admin/presentation/history/utils/sale_utils.dart';
 
 class ArchiveEntry {
   ArchiveEntry({

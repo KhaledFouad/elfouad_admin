@@ -1,4 +1,5 @@
-import 'package:elfouad_admin/presentation/Expenses/pages/expenses_page.dart';
+import 'package:elfouad_admin/presentation/expenses/feature.dart'
+    show ExpensesPage;
 import 'package:elfouad_admin/presentation/archive_months/pages/archive_months_page.dart';
 import 'package:elfouad_admin/presentation/home/home_dashboard_page.dart';
 import 'package:elfouad_admin/presentation/manage/pages/products_manage_page.dart';
@@ -8,7 +9,8 @@ import 'package:elfouad_admin/presentation/archive/pages/trash_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'nav_state.dart';
-import 'package:elfouad_admin/presentation/History/pages/sales_history_page.dart';
+import 'package:elfouad_admin/presentation/history/feature.dart'
+    show SalesHistoryPage;
 import '../../presentation/stats/pages/stats_page.dart';
 
 class AppShell extends StatefulWidget {

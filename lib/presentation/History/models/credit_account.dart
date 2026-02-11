@@ -1,10 +1,8 @@
 import 'sale_record.dart';
 
 class CreditCustomerAccount {
-  CreditCustomerAccount({
-    required this.name,
-    required List<SaleRecord> sales,
-  }) : sales = List.unmodifiable(sales);
+  CreditCustomerAccount({required this.name, required List<SaleRecord> sales})
+    : sales = List.unmodifiable(sales);
 
   final String name;
   final List<SaleRecord> sales;

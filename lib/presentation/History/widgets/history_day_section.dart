@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:elfouad_admin/core/utils/app_strings.dart';
 
 import '../models/history_summary.dart';
+import '../models/history_partial_payment.dart';
+import '../models/sale_record.dart';
 import '../models/sales_day_group.dart';
 import 'sale_tile.dart';
+import 'partial_payment_tile.dart';
 import 'summary_pill.dart';
 
 class HistoryDaySection extends StatelessWidget {
@@ -86,10 +89,48 @@ class HistoryDaySection extends StatelessWidget {
               ],
             ),
             const Divider(height: 18),
-            ...group.entries.map((sale) => SaleTile(record: sale)),
+            ..._timelineItems(group).map((item) {
+              if (item.sale != null) {
+                return SaleTile(record: item.sale!);
+              }
+              return PartialPaymentTile(payment: item.partialPayment!);
+            }),
           ],
         ),
       ),
     );
   }
+
+  List<_DayTimelineItem> _timelineItems(SalesDayGroup group) {
+    final out = <_DayTimelineItem>[
+      ...group.entries.map(
+        (sale) => _DayTimelineItem(
+          at: sale.effectiveTime,
+          sale: sale,
+          partialPayment: null,
+        ),
+      ),
+      ...group.partialPayments.map(
+        (payment) => _DayTimelineItem(
+          at: payment.at,
+          sale: null,
+          partialPayment: payment,
+        ),
+      ),
+    ];
+    out.sort((a, b) => b.at.compareTo(a.at));
+    return out;
+  }
+}
+
+class _DayTimelineItem {
+  const _DayTimelineItem({
+    required this.at,
+    required this.sale,
+    required this.partialPayment,
+  });
+
+  final DateTime at;
+  final SaleRecord? sale;
+  final HistoryPartialPayment? partialPayment;
 }

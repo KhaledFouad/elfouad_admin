@@ -11,11 +11,7 @@ class DrinksState {
     required this.error,
   });
 
-  DrinksState copyWith({
-    List<DrinkRow>? items,
-    bool? loading,
-    Object? error,
-  }) {
+  DrinksState copyWith({List<DrinkRow>? items, bool? loading, Object? error}) {
     return DrinksState(
       items: items ?? this.items,
       loading: loading ?? this.loading,

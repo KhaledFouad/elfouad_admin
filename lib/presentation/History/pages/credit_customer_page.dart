@@ -1,6 +1,5 @@
 import 'dart:math' as math;
 
-import 'package:elfouad_admin/presentation/History/models/payment_event.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:elfouad_admin/core/utils/app_strings.dart';
@@ -9,6 +8,7 @@ import 'package:responsive_framework/responsive_framework.dart';
 import '../bloc/sales_history_cubit.dart';
 import '../bloc/sales_history_state.dart';
 import '../models/credit_account.dart';
+import '../models/payment_event.dart';
 import '../models/sale_component.dart';
 import '../models/sale_record.dart';
 import '../utils/sale_utils.dart';
@@ -25,6 +25,8 @@ class CreditCustomerPage extends StatefulWidget {
 
 class _CreditCustomerPageState extends State<CreditCustomerPage> {
   bool _busy = false;
+  final GlobalKey<ScaffoldMessengerState> _messengerKey =
+      GlobalKey<ScaffoldMessengerState>();
 
   @override
   Widget build(BuildContext context) {
@@ -36,83 +38,87 @@ class _CreditCustomerPageState extends State<CreditCustomerPage> {
 
     return Directionality(
       textDirection: TextDirection.rtl,
-      child: Scaffold(
-        appBar: _CreditCustomerAppBar(title: widget.customerName),
-        body: BlocBuilder<SalesHistoryCubit, SalesHistoryState>(
-          builder: (context, state) {
-            final account = _findAccount(state, widget.customerName);
-            if (account == null) {
-              if (state.isCreditLoading) {
-                return const Center(child: CircularProgressIndicator());
+      child: ScaffoldMessenger(
+        key: _messengerKey,
+        child: Scaffold(
+          appBar: _CreditCustomerAppBar(title: widget.customerName),
+          body: BlocBuilder<SalesHistoryCubit, SalesHistoryState>(
+            builder: (context, state) {
+              final account = _findAccount(state, widget.customerName);
+              if (account == null) {
+                if (state.isCreditLoading) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                return Center(child: Text(AppStrings.labelNoCreditAccounts));
               }
-              return Center(child: Text(AppStrings.labelNoCreditAccounts));
-            }
 
-            final totalOwed = account.totalOwed;
-            final sales = account.sales;
+              final totalOwed = account.totalOwed;
+              final sales = account.sales;
 
-            return Align(
-              alignment: Alignment.topCenter,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: contentMaxWidth),
-                child: Column(
-                  children: [
-                    Padding(
-                      padding: EdgeInsets.fromLTRB(
-                        horizontalPadding,
-                        12,
-                        horizontalPadding,
-                        8,
+              return Align(
+                alignment: Alignment.topCenter,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: contentMaxWidth),
+                  child: Column(
+                    children: [
+                      Padding(
+                        padding: EdgeInsets.fromLTRB(
+                          horizontalPadding,
+                          12,
+                          horizontalPadding,
+                          8,
+                        ),
+                        child: _AccountHeader(
+                          account: account,
+                          totalOwed: totalOwed,
+                          busy: _busy,
+                          onPayAmount: totalOwed <= 0 || _busy
+                              ? null
+                              : () => _handlePayAmount(account),
+                        ),
                       ),
-                      child: _AccountHeader(
-                        account: account,
-                        totalOwed: totalOwed,
-                        busy: _busy,
-                        onPayAmount: totalOwed <= 0 || _busy
-                            ? null
-                            : () => _handlePayAmount(account),
+                      Expanded(
+                        child: sales.isEmpty
+                            ? Center(
+                                child: Text(
+                                  AppStrings.labelNoCreditSalesForCustomer,
+                                ),
+                              )
+                            : ListView.separated(
+                                padding: EdgeInsets.fromLTRB(
+                                  horizontalPadding,
+                                  0,
+                                  horizontalPadding,
+                                  20,
+                                ),
+                                itemCount: sales.length,
+                                separatorBuilder: (context, index) =>
+                                    const SizedBox(height: 10),
+                                itemBuilder: (context, index) {
+                                  final record = sales[index];
+                                  return _CreditSaleTile(
+                                    record: record,
+                                    busy: _busy,
+                                    onPay:
+                                        record.outstandingAmount > 0 && !_busy
+                                        ? () => _handlePaySale(record)
+                                        : null,
+                                    onEdit: _busy
+                                        ? null
+                                        : () => _handleEditSale(record),
+                                    onDelete: _busy
+                                        ? null
+                                        : () => _handleDeleteSale(record),
+                                  );
+                                },
+                              ),
                       ),
-                    ),
-                    Expanded(
-                      child: sales.isEmpty
-                          ? Center(
-                              child: Text(
-                                AppStrings.labelNoCreditSalesForCustomer,
-                              ),
-                            )
-                          : ListView.separated(
-                              padding: EdgeInsets.fromLTRB(
-                                horizontalPadding,
-                                0,
-                                horizontalPadding,
-                                20,
-                              ),
-                              itemCount: sales.length,
-                              separatorBuilder: (context, index) =>
-                                  const SizedBox(height: 10),
-                              itemBuilder: (context, index) {
-                                final record = sales[index];
-                                return _CreditSaleTile(
-                                  record: record,
-                                  busy: _busy,
-                                  onPay: record.outstandingAmount > 0 && !_busy
-                                      ? () => _handlePaySale(record)
-                                      : null,
-                                  onEdit: _busy
-                                      ? null
-                                      : () => _handleEditSale(record),
-                                  onDelete: _busy
-                                      ? null
-                                      : () => _handleDeleteSale(record),
-                                );
-                              },
-                            ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
       ),
     );
@@ -155,20 +161,15 @@ class _CreditCustomerPageState extends State<CreditCustomerPage> {
     if (confirmed != true) return;
 
     final cubit = context.read<SalesHistoryCubit>();
-    final messenger = ScaffoldMessenger.of(context);
     setState(() => _busy = true);
     try {
       await cubit.settleDeferredSale(record.id);
       if (mounted) {
-        messenger.showSnackBar(
-          const SnackBar(content: Text(AppStrings.dialogDeferredSettled)),
-        );
+        _showSnack(_messengerState(), AppStrings.dialogDeferredSettled);
       }
     } catch (error) {
       if (mounted) {
-        messenger.showSnackBar(
-          SnackBar(content: Text(AppStrings.deferredSettleFailed(error))),
-        );
+        _showSnack(_messengerState(), AppStrings.deferredSettleFailed(error));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -196,7 +197,6 @@ class _CreditCustomerPageState extends State<CreditCustomerPage> {
     }
 
     final cubit = context.read<SalesHistoryCubit>();
-    final messenger = ScaffoldMessenger.of(context);
     setState(() => _busy = true);
     try {
       await cubit.applyCreditPayment(
@@ -204,15 +204,11 @@ class _CreditCustomerPageState extends State<CreditCustomerPage> {
         amount: amountToPay,
       );
       if (mounted) {
-        messenger.showSnackBar(
-          const SnackBar(content: Text(AppStrings.dialogPaymentDone)),
-        );
+        _showSnack(_messengerState(), AppStrings.dialogPaymentDone);
       }
     } catch (error) {
       if (mounted) {
-        messenger.showSnackBar(
-          SnackBar(content: Text(AppStrings.deferredSettleFailed(error))),
-        );
+        _showSnack(_messengerState(), AppStrings.deferredSettleFailed(error));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -257,20 +253,15 @@ class _CreditCustomerPageState extends State<CreditCustomerPage> {
     );
 
     if (confirmed != true || !mounted) return;
-    final messenger = ScaffoldMessenger.of(context);
     final cubit = context.read<SalesHistoryCubit>();
     try {
       await cubit.deleteSale(record.id);
       if (mounted) {
-        messenger.showSnackBar(
-          const SnackBar(content: Text(AppStrings.saleDeletedRollback)),
-        );
+        _showSnack(_messengerState(), AppStrings.saleDeletedRollback);
       }
     } catch (error) {
       if (mounted) {
-        messenger.showSnackBar(
-          SnackBar(content: Text(AppStrings.saleDeleteFailed(error))),
-        );
+        _showSnack(_messengerState(), AppStrings.saleDeleteFailed(error));
       }
     }
   }
@@ -304,9 +295,17 @@ class _CreditCustomerPageState extends State<CreditCustomerPage> {
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    _showSnack(_messengerState(), message);
+  }
+
+  void _showSnack(ScaffoldMessengerState messenger, String message) {
+    messenger
+      ..removeCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message, key: UniqueKey())));
+  }
+
+  ScaffoldMessengerState _messengerState() {
+    return _messengerKey.currentState ?? ScaffoldMessenger.of(context);
   }
 
   double? _parseAmount(String raw) {
@@ -531,6 +530,14 @@ class _CreditSaleTile extends StatelessWidget {
     final due = record.outstandingAmount;
     final isPaid = due <= 0;
     final settledAt = record.settledAt;
+    final totalPrice = record.totalPrice;
+    final totalCost = record.totalCost;
+    final profit = record.isComplimentary
+        ? 0.0
+        : parseDouble(record.data['profit_total']);
+    final resolvedProfit = record.isComplimentary
+        ? 0.0
+        : (profit != 0 ? profit : (totalPrice - totalCost));
     final paymentEvents = List.of(record.paymentEvents)
       ..sort((a, b) => b.at.compareTo(a.at));
 
@@ -576,14 +583,30 @@ class _CreditSaleTile extends StatelessWidget {
               runSpacing: 6,
               children: [
                 Text(
-                  isPaid
-                      ? '${AppStrings.labelInvoiceTotal}: ${record.totalPrice.toStringAsFixed(2)}'
-                      : '${AppStrings.labelAmountDue}: ${due.toStringAsFixed(2)}',
+                  '${AppStrings.labelInvoiceTotal}: ${totalPrice.toStringAsFixed(2)}',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                Text(
+                  '${AppStrings.costLabelDefinite}: ${totalCost.toStringAsFixed(2)}',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                Text(
+                  '${AppStrings.profitLabelDefinite}: ${resolvedProfit.toStringAsFixed(2)}',
                   style: TextStyle(
-                    fontWeight: isPaid ? FontWeight.w600 : FontWeight.w700,
-                    color: isPaid ? Colors.black87 : Colors.orange.shade900,
+                    fontWeight: FontWeight.w700,
+                    color: resolvedProfit >= 0
+                        ? Colors.green.shade800
+                        : Colors.red.shade700,
                   ),
                 ),
+                if (!isPaid)
+                  Text(
+                    '${AppStrings.labelAmountDue}: ${due.toStringAsFixed(2)}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: Colors.orange.shade900,
+                    ),
+                  ),
               ],
             ),
             if (onEdit != null || onDelete != null)

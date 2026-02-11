@@ -1,4 +1,4 @@
-import 'package:elfouad_admin/presentation/Expenses/utils/expenses_utils.dart';
+import 'package:elfouad_admin/presentation/expenses/utils/expenses_utils.dart';
 import 'package:elfouad_admin/presentation/archive/models/archive_entry.dart';
 import 'package:flutter/material.dart';
 
@@ -33,13 +33,13 @@ class ArchiveTrashState {
   });
 
   factory ArchiveTrashState.initial() => ArchiveTrashState(
-        loading: true,
-        error: null,
-        entries: [],
-        filter: ArchiveFilter.all,
-        restoringIds: <String>{},
-        range: todayOperationalRangeLocal(),
-      );
+    loading: true,
+    error: null,
+    entries: [],
+    filter: ArchiveFilter.all,
+    restoringIds: <String>{},
+    range: todayOperationalRangeLocal(),
+  );
 
   ArchiveTrashState copyWith({
     bool? loading,

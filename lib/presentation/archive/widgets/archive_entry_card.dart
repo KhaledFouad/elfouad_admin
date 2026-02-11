@@ -1,6 +1,7 @@
 import 'package:elfouad_admin/core/utils/app_strings.dart';
-import 'package:elfouad_admin/presentation/History/models/sale_component.dart';
-import 'package:elfouad_admin/presentation/History/utils/sale_utils.dart';
+import 'package:elfouad_admin/presentation/history/feature.dart'
+    show SaleComponent;
+import 'package:elfouad_admin/presentation/history/utils/sale_utils.dart';
 import 'package:elfouad_admin/presentation/archive/models/archive_entry.dart';
 import 'package:elfouad_admin/presentation/archive/utils/archive_utils.dart';
 import 'package:flutter/material.dart';
@@ -63,7 +64,8 @@ class _ArchivedSaleCard extends StatelessWidget {
     final type = detectSaleType(data);
     final title = buildTitleLine(data, type);
 
-    final createdAt = entry.createdAtOriginal ??
+    final createdAt =
+        entry.createdAtOriginal ??
         parseDate(data['created_at'] ?? data['createdAt']);
     final settledAt = parseOptionalDate(data['settled_at']);
     final isComplimentary = (data['is_complimentary'] ?? false) == true;
@@ -78,8 +80,9 @@ class _ArchivedSaleCard extends StatelessWidget {
       isPaid: isPaid,
     );
     final usesSettledTime = !isSameMinute(effectiveTime, createdAt);
-    final displayTime =
-        (isDeferred && isPaid) ? formatTime(createdAt) : formatTime(effectiveTime);
+    final displayTime = (isDeferred && isPaid)
+        ? formatTime(createdAt)
+        : formatTime(effectiveTime);
 
     final totalPrice = entry.totalPrice ?? parseDouble(data['total_price']);
     final totalCost = parseDouble(data['total_cost']);
@@ -140,8 +143,10 @@ class _ArchivedSaleCard extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Column(
                   children: components
-                      .map((component) =>
-                          _ArchiveComponentRow(component: component))
+                      .map(
+                        (component) =>
+                            _ArchiveComponentRow(component: component),
+                      )
                       .toList(),
                 ),
               ),
@@ -157,9 +162,7 @@ class _ArchivedSaleCard extends StatelessWidget {
                     const Icon(Icons.history, size: 16, color: Colors.brown),
                     const SizedBox(width: 6),
                     Text(
-                      AppStrings.originalDateLabel(
-                        formatDateTime(createdAt),
-                      ),
+                      AppStrings.originalDateLabel(formatDateTime(createdAt)),
                       style: const TextStyle(
                         fontSize: 12,
                         color: Colors.black54,
@@ -177,8 +180,11 @@ class _ArchivedSaleCard extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.delete_outline,
-                      size: 16, color: Colors.brown),
+                  const Icon(
+                    Icons.delete_outline,
+                    size: 16,
+                    color: Colors.brown,
+                  ),
                   const SizedBox(width: 6),
                   Text(
                     '${AppStrings.recycleBinTitle}: ${formatDateTime(entry.archivedAt)}',

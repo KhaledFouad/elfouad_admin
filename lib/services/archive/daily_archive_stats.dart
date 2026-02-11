@@ -74,10 +74,20 @@ Future<void> syncDailyArchiveStats({
   await localPrefs.setString(_dailyArchivePrefKey, todayKey);
 }
 
+Future<void> syncDailyArchiveForDay({
+  FirebaseFirestore? firestore,
+  required DateTime dayLocal,
+}) async {
+  final db = firestore ?? FirebaseFirestore.instance;
+  await _syncOneDay(db, opStartLocal(dayLocal));
+}
+
 Future<void> backfillDailyArchiveForMonth({
   FirebaseFirestore? firestore,
   required DateTime month,
   bool includeLiveSales = true,
+  bool refreshExisting = false,
+  bool writeEmptyDays = false,
 }) async {
   final db = firestore ?? FirebaseFirestore.instance;
   final year = month.year;
@@ -97,7 +107,7 @@ Future<void> backfillDailyArchiveForMonth({
   }
 
   final existing = dailySnap.docs.map((d) => d.id).toSet();
-  if (existing.length >= daysInMonth) return;
+  if (!refreshExisting && existing.length >= daysInMonth) return;
 
   final rawById = await _fetchArchiveSalesForMonth(
     db,
@@ -127,7 +137,7 @@ Future<void> backfillDailyArchiveForMonth({
   for (var day = 1; day <= daysInMonth; day++) {
     final dayStartLocal = DateTime(year, month.month, day, kOpShiftHours);
     final dayKey = opDayKeyFromLocal(dayStartLocal);
-    if (existing.contains(dayKey)) continue;
+    if (!refreshExisting && existing.contains(dayKey)) continue;
 
     final startUtc = dayStartLocal.toUtc();
     final endUtc = dayStartLocal.add(const Duration(days: 1)).toUtc();
@@ -184,7 +194,7 @@ Future<void> backfillDailyArchiveForMonth({
       extrasRows: extrasRows,
     );
 
-    if (!hasAny) continue;
+    if (!hasAny && !writeEmptyDays) continue;
 
     final ref = dailyRef.doc(dayKey);
     batch.set(
@@ -319,8 +329,11 @@ Future<Map<String, Map<String, dynamic>>> _fetchArchiveSalesForMonth(
   final out = <String, Map<String, dynamic>>{};
 
   try {
-    final snap =
-        await db.collection('archive').doc('$year').collection(monthKey).get();
+    final snap = await db
+        .collection('archive')
+        .doc('$year')
+        .collection(monthKey)
+        .get();
     for (final doc in snap.docs) {
       if (_summaryDocIds.contains(doc.id)) continue;
       final data = doc.data();
@@ -330,22 +343,17 @@ Future<Map<String, Map<String, dynamic>>> _fetchArchiveSalesForMonth(
     }
   } catch (_) {}
 
-  if (out.isEmpty) {
-    final fromBin = await _fetchArchiveBinForMonth(db, month);
-    for (final entry in fromBin) {
-      final id = _pickSaleId(entry, fallback: '');
-      if (id.isEmpty) continue;
-      out.putIfAbsent(id, () => entry);
-    }
+  final fromBin = await _fetchArchiveBinForMonth(db, month);
+  for (final entry in fromBin) {
+    final id = _pickSaleId(entry, fallback: '');
+    if (id.isEmpty) continue;
+    out.putIfAbsent(id, () => entry);
   }
 
   if (includeLiveSales) {
     final liveRaw = await fetchSalesRawForMonth(month, cacheFirst: true);
     for (final sale in liveRaw) {
-      final id = _pickSaleId(
-        sale,
-        fallback: (sale['id'] ?? '').toString(),
-      );
+      final id = _pickSaleId(sale, fallback: (sale['id'] ?? '').toString());
       if (id.isEmpty) continue;
       out.putIfAbsent(id, () => sale);
     }
@@ -368,13 +376,11 @@ Future<List<Map<String, dynamic>>> _fetchArchiveBinForMonth(
   DocumentSnapshot<Map<String, dynamic>>? last;
 
   while (true) {
-    // Composite index (if Firestore asks):
-    // archive_bin: kind ASC, month_key ASC, archived_at ASC
+    // Keep this query index-light to avoid requiring composite indexes on
+    // background maintenance. We filter by kind/time in memory.
     Query<Map<String, dynamic>> q = db
         .collection('archive_bin')
-        .where('kind', isEqualTo: 'sale')
         .where('month_key', isEqualTo: targetMonthKey)
-        .orderBy('archived_at')
         .limit(400);
     if (last != null) q = q.startAfterDocument(last);
 
@@ -383,6 +389,7 @@ Future<List<Map<String, dynamic>>> _fetchArchiveBinForMonth(
 
     for (final doc in snap.docs) {
       final entry = doc.data();
+      if ((entry['kind'] ?? '').toString() != 'sale') continue;
       final dataRaw = entry['data'];
       if (dataRaw is! Map) continue;
       final data = dataRaw.cast<String, dynamic>();
@@ -400,10 +407,7 @@ Future<List<Map<String, dynamic>>> _fetchArchiveBinForMonth(
   return out;
 }
 
-String _pickSaleId(
-  Map<String, dynamic> data, {
-  required String fallback,
-}) {
+String _pickSaleId(Map<String, dynamic> data, {required String fallback}) {
   final id = (data['id'] ?? data['sale_id'] ?? data['invoice_id'] ?? '')
       .toString()
       .trim();
@@ -493,10 +497,7 @@ Future<List<Map<String, dynamic>>> _fetchSalesRawForDay(
 
   final combined = <String, Map<String, dynamic>>{};
 
-  void mergeDocs(
-    QuerySnapshot<Map<String, dynamic>> snap,
-    String collection,
-  ) {
+  void mergeDocs(QuerySnapshot<Map<String, dynamic>> snap, String collection) {
     for (final d in snap.docs) {
       final m = d.data();
       if (collection == 'deferred_sales' &&
@@ -508,57 +509,51 @@ Future<List<Map<String, dynamic>>> _fetchSalesRawForDay(
     }
   }
 
-  for (final collection in _salesCollections) {
-    final snap = await _getQuerySnapshot(
-      db
-          .collection(collection)
-          .where('created_at', isGreaterThanOrEqualTo: startUtc)
-          .where('created_at', isLessThan: endUtc)
-          .orderBy('created_at', descending: false),
-    );
-    mergeDocs(snap, collection);
-
+  Future<void> mergeRange(
+    String collection,
+    String field, {
+    required dynamic start,
+    required dynamic end,
+  }) async {
     try {
-      final snapOrig = await _getQuerySnapshot(
+      final snap = await _getQuerySnapshot(
         db
             .collection(collection)
-            .where('original_created_at', isGreaterThanOrEqualTo: startUtc)
-            .where('original_created_at', isLessThan: endUtc)
-            .orderBy('original_created_at', descending: false),
+            .where(field, isGreaterThanOrEqualTo: start)
+            .where(field, isLessThan: end)
+            .orderBy(field, descending: false),
       );
-      mergeDocs(snapOrig, collection);
+      mergeDocs(snap, collection);
     } catch (_) {}
   }
 
+  Future<void> mergeStage({
+    required dynamic start,
+    required dynamic end,
+  }) async {
+    for (final collection in _salesCollections) {
+      await mergeRange(collection, 'created_at', start: start, end: end);
+      await mergeRange(
+        collection,
+        'original_created_at',
+        start: start,
+        end: end,
+      );
+      if (collection == 'deferred_sales') {
+        await mergeRange(collection, 'settled_at', start: start, end: end);
+        await mergeRange(collection, 'updated_at', start: start, end: end);
+        await mergeRange(collection, 'last_payment_at', start: start, end: end);
+      }
+    }
+  }
+
+  await mergeStage(start: startUtc, end: endUtc);
   if (combined.isNotEmpty) return combined.values.toList();
 
-  for (final collection in _salesCollections) {
-    try {
-      final snapStr = await _getQuerySnapshot(
-        db
-            .collection(collection)
-            .where('created_at', isGreaterThanOrEqualTo: startIso)
-            .where('created_at', isLessThan: endIso)
-            .orderBy('created_at', descending: false),
-      );
-      mergeDocs(snapStr, collection);
-    } catch (_) {}
-  }
-
+  await mergeStage(start: startIso, end: endIso);
   if (combined.isNotEmpty) return combined.values.toList();
 
-  for (final collection in _salesCollections) {
-    try {
-      final snapNum = await _getQuerySnapshot(
-        db
-            .collection(collection)
-            .where('created_at', isGreaterThanOrEqualTo: startMs)
-            .where('created_at', isLessThan: endMs)
-            .orderBy('created_at', descending: false),
-      );
-      mergeDocs(snapNum, collection);
-    } catch (_) {}
-  }
+  await mergeStage(start: startMs, end: endMs);
 
   return combined.values.toList();
 }
@@ -602,6 +597,8 @@ Map<String, dynamic> _buildDailyPayload({
   required List<GroupRow> extrasRows,
 }) {
   final dayKey = opDayKeyFromLocal(dayStartLocal);
+  final drinksSummary = _rowsSummary(drinksRows);
+  final extrasSummary = _rowsSummary(extrasRows);
   return {
     'dayKey': dayKey,
     'year': dayStartLocal.year,
@@ -621,9 +618,21 @@ Map<String, dynamic> _buildDailyPayload({
     'expenses': kpis.expenses,
     'orders': orders,
     'drinks_rows': _encodeRows(drinksRows),
+    // Keep an explicit alias for UI details to avoid schema mismatch.
+    'drinks_details_rows': _encodeRows(drinksRows),
     'beans_rows': _encodeRows(beansRows),
     'turkish_rows': _encodeRows(turkishRows, turkish: true),
     'extras_rows': _encodeRows(extrasRows),
+    'extras_details_rows': _encodeRows(extrasRows),
+    // Explicit numeric totals for drinks/snacks details.
+    'drinks_sales': drinksSummary.sales,
+    'drinks_cost': drinksSummary.cost,
+    'drinks_profit': drinksSummary.profit,
+    'drinks_count': drinksSummary.count,
+    'extras_sales': extrasSummary.sales,
+    'extras_cost': extrasSummary.cost,
+    'extras_profit': extrasSummary.profit,
+    'extras_count': extrasSummary.count,
     'updated_at': FieldValue.serverTimestamp(),
   };
 }
@@ -649,6 +658,22 @@ List<Map<String, dynamic>> _encodeRows(
         },
       )
       .toList();
+}
+
+({double sales, double cost, double profit, int count}) _rowsSummary(
+  List<GroupRow> rows,
+) {
+  double sales = 0;
+  double cost = 0;
+  double profit = 0;
+  int count = 0;
+  for (final row in rows) {
+    sales += row.sales;
+    cost += row.cost;
+    profit += row.profit;
+    count += row.cups;
+  }
+  return (sales: sales, cost: cost, profit: profit, count: count);
 }
 
 Future<QuerySnapshot<Map<String, dynamic>>> _getQuerySnapshot(

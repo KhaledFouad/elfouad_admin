@@ -12,6 +12,7 @@ import 'package:elfouad_admin/presentation/manage/widgets/product_edit_sheet.dar
     show ProductEditSheet;
 import 'package:elfouad_admin/presentation/manage/bloc/extras_cubit.dart';
 import 'package:elfouad_admin/presentation/manage/bloc/manage_tab_cubit.dart';
+import 'package:elfouad_admin/presentation/manage/bloc/tahwiga_cubit.dart';
 import 'package:elfouad_admin/presentation/manage/bloc/manage_tab_state.dart';
 import 'package:elfouad_admin/presentation/manage/models/drink_row.dart';
 import 'package:elfouad_admin/presentation/manage/models/extra_row.dart';
@@ -37,14 +38,17 @@ class ManagePage extends StatefulWidget {
 
 class _ManagePageState extends State<ManagePage> {
   static const _pageSize = 40;
+  static const _tahwigaCollection = 'tahwiga_options';
   late final _PagedQuery<DrinkRow> _drinks;
   late final _PagedQuery<ExtraRow> _extras;
+  late final _PagedQuery<ExtraRow> _tahwiga;
   late final _PagedQuery<InventoryRow> _singles;
   late final _PagedQuery<InventoryRow> _blends;
   final Set<ManageTab> _pendingRealtimeRefresh = <ManageTab>{};
   Timer? _realtimeDebounce;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _drinksSub;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _extrasSub;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _tahwigaSub;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _singlesSub;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _blendsSub;
 
@@ -59,6 +63,14 @@ class _ManagePageState extends State<ManagePage> {
     );
     _extras = _PagedQuery<ExtraRow>(
       query: FirebaseFirestore.instance.collection('extras').orderBy('name'),
+      mapDoc: extraRowFromDoc,
+      pageSize: _pageSize,
+      onUpdate: _safeSetState,
+    );
+    _tahwiga = _PagedQuery<ExtraRow>(
+      query: FirebaseFirestore.instance
+          .collection(_tahwigaCollection)
+          .orderBy('name'),
       mapDoc: extraRowFromDoc,
       pageSize: _pageSize,
       onUpdate: _safeSetState,
@@ -89,6 +101,7 @@ class _ManagePageState extends State<ManagePage> {
     _realtimeDebounce?.cancel();
     _drinksSub?.cancel();
     _extrasSub?.cancel();
+    _tahwigaSub?.cancel();
     _singlesSub?.cancel();
     _blendsSub?.cancel();
     super.dispose();
@@ -112,6 +125,12 @@ class _ManagePageState extends State<ManagePage> {
         .snapshots()
         .skip(1)
         .listen((_) => _scheduleRealtimeRefresh(ManageTab.extras));
+    _tahwigaSub = db
+        .collection(_tahwigaCollection)
+        .orderBy('name')
+        .snapshots()
+        .skip(1)
+        .listen((_) => _scheduleRealtimeRefresh(ManageTab.tahwiga));
     _singlesSub = db
         .collection('singles')
         .orderBy('name')
@@ -153,8 +172,12 @@ class _ManagePageState extends State<ManagePage> {
       case ManageTab.extras:
         _extras.loadInitial();
         break;
+      case ManageTab.tahwiga:
+        _tahwiga.loadInitial();
+        break;
       case ManageTab.all:
         _extras.loadInitial();
+        _tahwiga.loadInitial();
         _blends.loadInitial();
         _singles.loadInitial();
         _drinks.loadInitial();
@@ -176,9 +199,13 @@ class _ManagePageState extends State<ManagePage> {
       case ManageTab.extras:
         await _extras.refresh();
         break;
+      case ManageTab.tahwiga:
+        await _tahwiga.refresh();
+        break;
       case ManageTab.all:
         await Future.wait([
           _extras.refresh(),
+          _tahwiga.refresh(),
           _blends.refresh(),
           _singles.refresh(),
           _drinks.refresh(),
@@ -360,7 +387,8 @@ class _ManagePageState extends State<ManagePage> {
                           IconButton(
                             icon: const Icon(Icons.delete_outline),
                             tooltip: AppStrings.actionDelete,
-                            onPressed: () => _confirmDeleteInventory(context, r),
+                            onPressed: () =>
+                                _confirmDeleteInventory(context, r),
                           ),
                         ],
                       ),
@@ -497,6 +525,95 @@ class _ManagePageState extends State<ManagePage> {
       );
     }
 
+    Widget tahwiga0() {
+      if (_tahwiga.loading && _tahwiga.items.isEmpty) return _loading();
+      if (_tahwiga.error != null) {
+        return _err(AppStrings.tahwigaLabel)(_tahwiga.error!, StackTrace.empty);
+      }
+      final rows = _tahwiga.items;
+      if (rows.isEmpty) return emptyState();
+      return Column(
+        children: [
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: rows.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 8),
+            itemBuilder: (_, index) {
+              final e = rows[index];
+              return Card(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Column(
+                  children: [
+                    ListTile(
+                      key: ValueKey('tahwiga_${e.id}'),
+                      title: Text(
+                        e.name,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      subtitle: Wrap(
+                        spacing: 10,
+                        runSpacing: 6,
+                        children: [
+                          if (e.category.isNotEmpty)
+                            _pill(
+                              Icons.category,
+                              AppStrings.categoryLabel,
+                              e.category,
+                            ),
+                          _pill(
+                            Icons.attach_money,
+                            AppStrings.sellPriceLabel,
+                            _fmtNum(e.priceSell),
+                          ),
+                          _pill(
+                            Icons.money_off,
+                            AppStrings.costLabelDefinite,
+                            _fmtNum(e.costUnit),
+                          ),
+                          if (!e.active)
+                            _pill(
+                              Icons.pause_circle_filled,
+                              AppStrings.statusLabel,
+                              AppStrings.inactiveLabel,
+                            ),
+                        ],
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.edit),
+                            tooltip: AppStrings.actionEdit,
+                            onPressed: () => _openExtraEditor(
+                              context,
+                              e.id,
+                              collection: _tahwigaCollection,
+                              title: AppStrings.editTahwigaTitle,
+                              itemType: 'tahwiga',
+                              flagField: 'is_tahwiga',
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline),
+                            tooltip: AppStrings.actionDelete,
+                            onPressed: () => _confirmDeleteTahwiga(context, e),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+          loadMore(_tahwiga),
+        ],
+      );
+    }
+
     Widget content() {
       switch (tab) {
         case ManageTab.drinks:
@@ -507,11 +624,16 @@ class _ManagePageState extends State<ManagePage> {
           return blends0();
         case ManageTab.extras:
           return extras0();
+        case ManageTab.tahwiga:
+          return tahwiga0();
         case ManageTab.all:
           return Column(
             children: [
-              _Section(AppStrings.snacksLabel),
+              _Section(AppStrings.extrasLabel),
               extras0(),
+              const SizedBox(height: 8),
+              _Section(AppStrings.tahwigaLabel),
+              tahwiga0(),
               const SizedBox(height: 8),
               _Section(AppStrings.inventoryBlends),
               blends0(),
@@ -623,8 +745,14 @@ class _ManagePageState extends State<ManagePage> {
                         ),
                         _mChip(
                           context,
-                          AppStrings.snacksLabel,
+                          AppStrings.extrasLabel,
                           ManageTab.extras,
+                          tab,
+                        ),
+                        _mChip(
+                          context,
+                          AppStrings.tahwigaLabel,
+                          ManageTab.tahwiga,
                           tab,
                         ),
                       ],
@@ -643,16 +771,13 @@ class _ManagePageState extends State<ManagePage> {
               useSafeArea: true,
               isScrollControlled: true,
               shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.vertical(
-                  top: Radius.circular(18),
-                ),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
               ),
               builder: (_) => MultiBlocProvider(
                 providers: [
-                  BlocProvider.value(
-                    value: context.read<InventoryCubit>(),
-                  ),
+                  BlocProvider.value(value: context.read<InventoryCubit>()),
                   BlocProvider.value(value: context.read<ExtrasCubit>()),
+                  BlocProvider.value(value: context.read<TahwigaCubit>()),
                 ],
                 child: AddItemSheet(initialType: _newTypeForTab(tab)),
               ),
@@ -809,6 +934,34 @@ class _ManagePageState extends State<ManagePage> {
       }
     }
   }
+
+  Future<void> _confirmDeleteTahwiga(BuildContext context, ExtraRow e) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text(AppStrings.deleteTahwigaTitle),
+        content: Text(AppStrings.deleteExtraConfirm(e.name)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text(AppStrings.actionCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text(AppStrings.actionDelete),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) {
+      await deleteTahwiga(e.id);
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text(AppStrings.deleteSuccess)));
+      }
+    }
+  }
 }
 
 Future<void> _confirmDeleteInventory(
@@ -880,16 +1033,27 @@ Future<void> _openProductEditor(
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
     ),
-    builder: (_) => BlocProvider.value(
-      value: context.read<InventoryCubit>(),
+    builder: (_) => MultiBlocProvider(
+      providers: [
+        BlocProvider.value(value: context.read<InventoryCubit>()),
+        BlocProvider.value(value: context.read<ExtrasCubit>()),
+        BlocProvider.value(value: context.read<TahwigaCubit>()),
+      ],
       child: ProductEditSheet(collection: collection, snap: snap),
     ),
   );
 }
 
-Future<void> _openExtraEditor(BuildContext context, String id) async {
+Future<void> _openExtraEditor(
+  BuildContext context,
+  String id, {
+  String collection = 'extras',
+  String title = AppStrings.editExtraTitle,
+  String itemType = 'extra',
+  String flagField = 'is_extra',
+}) async {
   final snap = await FirebaseFirestore.instance
-      .collection('extras')
+      .collection(collection)
       .doc(id)
       .get();
 
@@ -901,7 +1065,12 @@ Future<void> _openExtraEditor(BuildContext context, String id) async {
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
     ),
-    builder: (_) => ExtraEditSheet(snap: snap),
+    builder: (_) => ExtraEditSheet(
+      snap: snap,
+      title: title,
+      itemType: itemType,
+      flagField: flagField,
+    ),
   );
 }
 
@@ -915,6 +1084,8 @@ NewItemType _newTypeForTab(ManageTab tab) {
       return NewItemType.blend;
     case ManageTab.extras:
       return NewItemType.extra;
+    case ManageTab.tahwiga:
+      return NewItemType.tahwiga;
     case ManageTab.all:
       return NewItemType.blend;
   }

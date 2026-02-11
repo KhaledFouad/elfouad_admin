@@ -90,9 +90,7 @@ class RecipePrepLogPage extends StatelessWidget {
                 if (snapshot.hasError) {
                   return Center(
                     child: Text(
-                      AppStrings.loadFailedSimple(
-                        snapshot.error ?? 'unknown',
-                      ),
+                      AppStrings.loadFailedSimple(snapshot.error ?? 'unknown'),
                     ),
                   );
                 }
@@ -226,10 +224,7 @@ class RecipePrepLogPage extends StatelessWidget {
               ),
             ),
           ),
-          Text(
-            value,
-            style: const TextStyle(fontWeight: FontWeight.w700),
-          ),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
         ],
       ),
     );
@@ -319,9 +314,7 @@ class RecipePrepLogPage extends StatelessWidget {
                         const SizedBox(height: 12),
                         const Text(
                           AppStrings.componentsLabel,
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                          ),
+                          style: TextStyle(fontWeight: FontWeight.w700),
                         ),
                         const SizedBox(height: 6),
                         if (components.isEmpty)
@@ -376,10 +369,7 @@ class RecipePrepLogPage extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 6),
       child: Row(
         children: [
-          Text(
-            '$label: ',
-            style: const TextStyle(color: Colors.black54),
-          ),
+          Text('$label: ', style: const TextStyle(color: Colors.black54)),
           Expanded(
             child: Text(
               value,

@@ -4,7 +4,9 @@ import '../models/extra_row.dart';
 
 double parseExtraNumber(dynamic value) {
   if (value is num) return value.toDouble();
-  if (value is String) return double.tryParse(value.replaceAll(',', '.')) ?? 0.0;
+  if (value is String) {
+    return double.tryParse(value.replaceAll(',', '.')) ?? 0.0;
+  }
   return 0.0;
 }
 

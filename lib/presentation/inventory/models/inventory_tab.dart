@@ -1,1 +1,1 @@
-enum InventoryTab { all, singles, blends, extras, drinks }
+enum InventoryTab { all, singles, blends, extras, tahwiga, drinks }

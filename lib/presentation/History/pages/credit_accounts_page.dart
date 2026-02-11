@@ -167,10 +167,7 @@ class _CreditAccountsPageState extends State<CreditAccountsPage> {
 
     final cubit = context.read<SalesHistoryCubit>();
     try {
-      await cubit.renameCreditCustomer(
-        oldName: account.name,
-        newName: newName,
-      );
+      await cubit.renameCreditCustomer(oldName: account.name, newName: newName);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text(AppStrings.creditAccountRenamed)),
@@ -183,9 +180,7 @@ class _CreditAccountsPageState extends State<CreditAccountsPage> {
     }
   }
 
-  HistorySummary _summaryForAccounts(
-    List<CreditCustomerAccount> accounts,
-  ) {
+  HistorySummary _summaryForAccounts(List<CreditCustomerAccount> accounts) {
     if (accounts.isEmpty) {
       return HistorySummary.empty();
     }

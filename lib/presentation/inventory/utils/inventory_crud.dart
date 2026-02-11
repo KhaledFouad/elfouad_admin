@@ -63,10 +63,10 @@ Future<void> updateInventoryRow(
 }
 
 Future<void> deleteInventoryRow(InventoryRow row) => archiveThenDelete(
-      srcRef: row.ref,
-      kind: 'inventory_row',
-      reason: 'manual_delete',
-    );
+  srcRef: row.ref,
+  kind: 'inventory_row',
+  reason: 'manual_delete',
+);
 
 Future<void> createInventoryRow({
   required bool isBlend,

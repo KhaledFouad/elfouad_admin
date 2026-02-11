@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -9,39 +7,30 @@ import 'stats_state.dart';
 
 class StatsCubit extends Cubit<StatsState> {
   StatsCubit()
-      : super(
-          StatsState(
-            month: defaultStatsMonth(),
-            period: defaultStatsPeriod(),
-            overview: null,
-            preview: null,
-            previousMonths: const [],
-            loading: true,
-            previewLoading: true,
-            previousLoading: true,
-            error: null,
-            previewError: null,
-            previousError: null,
-          ),
-        ) {
+    : super(
+        StatsState(
+          month: defaultStatsMonth(),
+          period: defaultStatsPeriod(),
+          overview: null,
+          preview: null,
+          previousMonths: const [],
+          loading: true,
+          previewLoading: true,
+          previousLoading: false,
+          error: null,
+          previewError: null,
+          previousError: null,
+        ),
+      ) {
     _loadMonth(state.month, state.period);
   }
 
-  static const int _previousMonthsCount = 6;
-
   final Map<String, List<_ArchiveDay>> _monthCache = {};
-  final Map<String, bool> _monthBreakdownCache = {};
-  String? _activeMonthKey;
   Map<String, _ArchiveDay> _activeDaysByKey = {};
-  int _previousRequestId = 0;
-  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _todaySub;
-  bool _hasPeriodBreakdown = true;
 
-  Future<void> refresh() => _loadMonth(
-        state.month,
-        state.period,
-        force: true,
-      );
+  Future<void> refresh() {
+    return _loadMonth(state.month, state.period, force: true);
+  }
 
   Future<void> ensureCurrentMonth() async {
     final now = defaultStatsMonth();
@@ -54,9 +43,8 @@ class StatsCubit extends Cubit<StatsState> {
       _loadMonth(DateTime(month.year, month.month, 1), state.period);
 
   Future<void> setPeriod(StatsPeriod period) async {
-    final effective = _hasPeriodBreakdown ? period : StatsPeriod.fullMonth;
-    emit(state.copyWith(period: effective, loading: true, error: null));
-    await _computeOverview(effective, state.month);
+    emit(state.copyWith(period: period, loading: true, error: null));
+    await _computeOverview(period, state.month);
   }
 
   Future<void> _loadMonth(
@@ -77,44 +65,25 @@ class StatsCubit extends Cubit<StatsState> {
     try {
       final key = _cacheKey(month);
       List<_ArchiveDay> days;
-      bool hasBreakdown;
       if (!force && _monthCache.containsKey(key)) {
         days = _monthCache[key] ?? const [];
-        hasBreakdown = _monthBreakdownCache[key] ?? false;
       } else {
-        final source = await _fetchArchiveMonthSource(
-          month,
-          cacheFirst: !force,
-        );
-        days = source.days;
-        hasBreakdown = source.hasBreakdown;
+        days = await _fetchArchiveDailyForMonth(month, cacheFirst: !force);
         _monthCache[key] = days;
-        _monthBreakdownCache[key] = hasBreakdown;
       }
 
-      _hasPeriodBreakdown = hasBreakdown;
-      final effectivePeriod = hasBreakdown ? period : StatsPeriod.fullMonth;
+      _activeDaysByKey = {for (final day in days) day.dayKey: day};
 
-      _activeMonthKey = key;
-      _activeDaysByKey = {
-        for (final day in days) day.dayKey: day,
-      };
-      _startArchiveMonthListener(month);
-
-      final preview = hasBreakdown
-          ? _buildThirdsPreview(days, month)
-          : _buildFlatPreview(days);
+      final preview = _buildThirdsPreview(days, month);
       emit(
         state.copyWith(
-          period: effectivePeriod,
           preview: preview,
           previewLoading: false,
           previewError: null,
         ),
       );
 
-      unawaited(_loadPreviousMonths(month, force: force));
-      await _computeOverview(effectivePeriod, month);
+      await _computeOverview(period, month);
     } catch (e) {
       emit(
         state.copyWith(
@@ -129,52 +98,7 @@ class StatsCubit extends Cubit<StatsState> {
     }
   }
 
-  Future<void> _loadPreviousMonths(
-    DateTime month, {
-    bool force = false,
-  }) async {
-    final requestId = ++_previousRequestId;
-    emit(
-      state.copyWith(
-        previousLoading: true,
-        previousError: null,
-      ),
-    );
-    try {
-      final previous = <MonthlyKpi>[];
-      for (var i = 1; i <= _previousMonthsCount; i++) {
-        final target = DateTime(month.year, month.month - i, 1);
-        Kpis? kpis = await _fetchMonthlyKpisFromArchiveMonths(
-          target,
-          cacheFirst: !force,
-        );
-        kpis ??= _zeroKpis();
-        previous.add(MonthlyKpi(month: target, kpis: kpis));
-      }
-
-      if (requestId != _previousRequestId) return;
-      emit(
-        state.copyWith(
-          previousMonths: previous,
-          previousLoading: false,
-          previousError: null,
-        ),
-      );
-    } catch (e) {
-      if (requestId != _previousRequestId) return;
-      emit(
-        state.copyWith(
-          previousLoading: false,
-          previousError: e,
-        ),
-      );
-    }
-  }
-
-  Future<void> _computeOverview(
-    StatsPeriod period,
-    DateTime month,
-  ) async {
+  Future<void> _computeOverview(StatsPeriod period, DateTime month) async {
     try {
       final days = _activeDaysByKey.values.toList();
       final overview = _buildOverviewFromDaily(days, month, period);
@@ -184,54 +108,7 @@ class StatsCubit extends Cubit<StatsState> {
     }
   }
 
-  void _startArchiveMonthListener(DateTime month) {
-    _todaySub?.cancel();
-    final docRef = FirebaseFirestore.instance
-        .collection('archive_months')
-        .doc(_monthDocId(month));
-
-    _todaySub = docRef.snapshots().listen((snap) {
-      if (_activeMonthKey != _cacheKey(month)) return;
-      final data = snap.data();
-      final source = _monthSourceFromDoc(month, data);
-      if (source.days.isNotEmpty) {
-        _hasPeriodBreakdown = source.hasBreakdown;
-        _activeDaysByKey = {for (final day in source.days) day.dayKey: day};
-        _monthBreakdownCache[_activeMonthKey ?? _cacheKey(month)] =
-            source.hasBreakdown;
-      }
-      _monthCache[_activeMonthKey ?? _cacheKey(month)] =
-          _activeDaysByKey.values.toList();
-      unawaited(_refreshComputedFromActive());
-    });
-  }
-
-  Future<void> _refreshComputedFromActive() async {
-    final days = _activeDaysByKey.values.toList();
-    final overview = _buildOverviewFromDaily(
-      days,
-      state.month,
-      state.period,
-    );
-    final preview = _hasPeriodBreakdown
-        ? _buildThirdsPreview(days, state.month)
-        : _buildFlatPreview(days);
-    emit(
-      state.copyWith(
-        overview: overview,
-        preview: preview,
-        loading: false,
-        previewLoading: false,
-        error: null,
-        previewError: null,
-      ),
-    );
-  }
-
-  ThirdsPreview _buildThirdsPreview(
-    List<_ArchiveDay> days,
-    DateTime month,
-  ) {
+  ThirdsPreview _buildThirdsPreview(List<_ArchiveDay> days, DateTime month) {
     Kpis kpisForRange(DateTime start, DateTime end) {
       return _sumKpisForRange(days, startUtc: start, endUtc: end);
     }
@@ -246,20 +123,6 @@ class StatsCubit extends Cubit<StatsState> {
       secondThird: kpisForRange(r2.startUtc, r2.endUtc),
       thirdThird: kpisForRange(r3.startUtc, r3.endUtc),
       month: kpisForRange(rm.startUtc, rm.endUtc),
-    );
-  }
-
-  ThirdsPreview _buildFlatPreview(List<_ArchiveDay> days) {
-    final total = _sumKpisForRange(
-      days,
-      startUtc: DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
-      endUtc: DateTime.utc(9999, 1, 1),
-    );
-    return ThirdsPreview(
-      firstThird: total,
-      secondThird: total,
-      thirdThird: total,
-      month: total,
     );
   }
 
@@ -320,32 +183,67 @@ class StatsCubit extends Cubit<StatsState> {
   }) {
     final totalSales = <DayVal>[];
     final totalProfit = <DayVal>[];
-    final drinks = <DayVal>[];
-    final grams = <DayVal>[];
+    final beansGrams = <DayVal>[];
+    final beansSales = <DayVal>[];
+    final beansProfit = <DayVal>[];
+    final turkishCups = <DayVal>[];
+    final turkishSales = <DayVal>[];
+    final turkishProfit = <DayVal>[];
 
     final filtered = days.where((d) {
       return !d.startUtc.isBefore(startUtc) && d.startUtc.isBefore(endUtc);
-    }).toList()
-      ..sort((a, b) => a.startUtc.compareTo(b.startUtc));
+    }).toList()..sort((a, b) => a.startUtc.compareTo(b.startUtc));
 
     for (final day in filtered) {
       final localDay = day.dayLocal;
       final hasAny =
           day.sales != 0 || day.profit != 0 || day.cups != 0 || day.grams != 0;
       if (!hasAny) continue;
+
+      double beansSalesValue = 0;
+      double beansProfitValue = 0;
+      for (final row in day.beansRows) {
+        beansSalesValue += row.sales;
+        beansProfitValue += row.profit;
+      }
+
+      int turkishCupsValue = 0;
+      double turkishSalesValue = 0;
+      double turkishProfitValue = 0;
+      for (final row in day.turkishRows) {
+        final cups = row.cups > 0
+            ? row.cups
+            : (row.plainGrams + row.spicedGrams).round();
+        turkishCupsValue += cups;
+        turkishSalesValue += row.sales;
+        turkishProfitValue += row.profit;
+      }
+
       totalSales.add(DayVal(localDay, day.sales));
       totalProfit.add(DayVal(localDay, day.profit));
-      drinks.add(DayVal(localDay, day.cups.toDouble()));
-      grams.add(DayVal(localDay, day.grams));
+      if (day.grams != 0 || beansSalesValue != 0 || beansProfitValue != 0) {
+        beansGrams.add(DayVal(localDay, day.grams));
+        beansSales.add(DayVal(localDay, beansSalesValue));
+        beansProfit.add(DayVal(localDay, beansProfitValue));
+      }
+      if (turkishCupsValue != 0 ||
+          turkishSalesValue != 0 ||
+          turkishProfitValue != 0) {
+        turkishCups.add(DayVal(localDay, turkishCupsValue.toDouble()));
+        turkishSales.add(DayVal(localDay, turkishSalesValue));
+        turkishProfit.add(DayVal(localDay, turkishProfitValue));
+      }
     }
 
     return TrendsBundle(
       totalSales: totalSales,
       totalProfit: totalProfit,
-      drinksSales: drinks,
-      drinksProfit: drinks,
-      beansSales: grams,
-      beansProfit: grams,
+      beansGrams: beansGrams,
+      beansSales: beansSales,
+      beansProfit: beansProfit,
+      turkishCups: turkishCups,
+      turkishSales: turkishSales,
+      turkishProfit: turkishProfit,
     );
   }
 
@@ -436,8 +334,16 @@ class StatsCubit extends Cubit<StatsState> {
 
     final activeSalesDays = salesByDay.keys.length;
     final activeProdDays = servingsByDay.keys.length;
-    final activeBeansDays =
-        days.where((d) => d.grams > 0).map((d) => d.dayLocal).toSet().length;
+    final activeBeansDays = days
+        .where(
+          (d) =>
+              !d.startUtc.isBefore(startUtc) &&
+              d.startUtc.isBefore(endUtc) &&
+              d.grams > 0,
+        )
+        .map((d) => d.dayLocal)
+        .toSet()
+        .length;
 
     final avgDailySales = activeSalesDays > 0
         ? (totalSales / activeSalesDays)
@@ -478,8 +384,9 @@ class StatsCubit extends Cubit<StatsState> {
       averageDrinksPerDay: avgDrinksPerDay,
       averageSnacksPerDay: avgSnacksPerDay,
       averageBeansGramsPerDay: avgBeansGramsPerDay,
-      averageOrdersPerDay:
-          activeSalesDays > 0 ? (totalOrders / activeSalesDays) : 0.0,
+      averageOrdersPerDay: activeSalesDays > 0
+          ? (totalOrders / activeSalesDays)
+          : 0.0,
       totalOrders: totalOrders,
       activeDays: activeSalesDays,
     );
@@ -550,147 +457,34 @@ class StatsCubit extends Cubit<StatsState> {
     );
   }
 
-  Kpis _zeroKpis() => const Kpis(
-        sales: 0,
-        cost: 0,
-        profit: 0,
-        cups: 0,
-        grams: 0,
-        expenses: 0,
-        units: 0,
-      );
-
-  Future<_MonthSource> _fetchArchiveMonthSource(
+  Future<List<_ArchiveDay>> _fetchArchiveDailyForMonth(
     DateTime month, {
     bool cacheFirst = false,
   }) async {
-    final docId = _monthDocId(month);
-    final docRef =
-        FirebaseFirestore.instance.collection('archive_months').doc(docId);
-    final snap = await _getDocSnapshot(docRef, cacheFirst: cacheFirst);
-    if (!snap.exists) return const _MonthSource.empty();
-    return _monthSourceFromDoc(month, snap.data());
+    final year = month.year.toString();
+    final monthKey = month.month.toString().padLeft(2, '0');
+    final query = FirebaseFirestore.instance
+        .collection('archive_daily')
+        .doc(year)
+        .collection(monthKey);
+    final snap = await _getQuerySnapshot(query, cacheFirst: cacheFirst);
+    return snap.docs.map(_ArchiveDay.fromDoc).whereType<_ArchiveDay>().toList();
   }
 
-  _MonthSource _monthSourceFromDoc(
-    DateTime month,
-    Map<String, dynamic>? data,
-  ) {
-    final days = _decodeDaysFromMonthDoc(data);
-    if (days.isNotEmpty) {
-      return _MonthSource(days: days, hasBreakdown: true);
-    }
-    final summaryDay = _decodeSummaryDayFromMonthDoc(month, data);
-    if (summaryDay == null) {
-      return const _MonthSource.empty();
-    }
-    return _MonthSource(days: [summaryDay], hasBreakdown: false);
-  }
-
-  List<_ArchiveDay> _decodeDaysFromMonthDoc(Map<String, dynamic>? data) {
-    if (data == null) return const [];
-    final rawDays = data['days'];
-    if (rawDays is! List) return const [];
-    return rawDays
-        .whereType<Map>()
-        .map((e) => e.cast<String, dynamic>())
-        .map(_ArchiveDay.fromMap)
-        .whereType<_ArchiveDay>()
-        .toList();
-  }
-
-  _ArchiveDay? _decodeSummaryDayFromMonthDoc(
-    DateTime month,
-    Map<String, dynamic>? data,
-  ) {
-    if (data == null) return null;
-    final rawSummary =
-        (data['summary'] is Map) ? data['summary'] as Map : data;
-    final summary = rawSummary.cast<String, dynamic>();
-
-    final hasAny = _num(summary['sales']) != 0 ||
-        _num(summary['cost']) != 0 ||
-        _num(summary['profit']) != 0 ||
-        _num(summary['grams']) != 0 ||
-        _int(summary['cups'] ?? summary['drinks']) != 0 ||
-        _int(summary['units'] ?? summary['snacks']) != 0 ||
-        _num(summary['expenses']) != 0 ||
-        _int(summary['orders']) != 0;
-    if (!hasAny) return null;
-
-    final dayLocal = DateTime(month.year, month.month, 1, 4);
-    final dayKey =
-        '${month.year}-${month.month.toString().padLeft(2, '0')}-01';
-    return _ArchiveDay(
-      dayKey: dayKey,
-      startUtc: dayLocal.toUtc(),
-      dayLocal: dayLocal,
-      sales: _num(summary['sales']),
-      cost: _num(summary['cost']),
-      profit: _num(summary['profit']),
-      cups: _int(summary['cups'] ?? summary['drinks']),
-      grams: _num(summary['grams']),
-      units: _int(summary['units'] ?? summary['snacks']),
-      expenses: _num(summary['expenses']),
-      orders: _int(summary['orders']),
-      drinksRows: _rowsFromRaw(data['drinks_rows']),
-      beansRows: _rowsFromRaw(data['beans_rows']),
-      turkishRows: _rowsFromRaw(data['turkish_rows'], turkish: true),
-      extrasRows: _rowsFromRaw(data['extras_rows']),
-    );
-  }
-
-  Future<Kpis?> _fetchMonthlyKpisFromArchiveMonths(
-    DateTime month, {
+  Future<QuerySnapshot<Map<String, dynamic>>> _getQuerySnapshot(
+    Query<Map<String, dynamic>> query, {
     bool cacheFirst = false,
   }) async {
-    final docId = _monthDocId(month);
-    final docRef =
-        FirebaseFirestore.instance.collection('archive_months').doc(docId);
-    final doc = await _getDocSnapshot(docRef, cacheFirst: cacheFirst);
-    if (!doc.exists) return null;
-    final data = doc.data();
-    if (data == null) return null;
-    final rawSummary =
-        (data['summary'] is Map) ? data['summary'] as Map : data;
-    final summary = rawSummary.cast<String, dynamic>();
-
-    return Kpis(
-      sales: _num(summary['sales']),
-      cost: _num(summary['cost']),
-      profit: _num(summary['profit']),
-      cups: _int(summary['cups'] ?? summary['drinks']),
-      grams: _num(summary['grams']),
-      expenses: _num(summary['expenses']),
-      units: _int(summary['units'] ?? summary['snacks']),
-    );
-  }
-
-  Future<DocumentSnapshot<Map<String, dynamic>>> _getDocSnapshot(
-    DocumentReference<Map<String, dynamic>> ref, {
-    bool cacheFirst = false,
-  }) async {
-    if (!cacheFirst) return ref.get();
+    if (!cacheFirst) return query.get();
     try {
-      final cached = await ref.get(const GetOptions(source: Source.cache));
-      if (cached.exists) return cached;
+      final cached = await query.get(const GetOptions(source: Source.cache));
+      if (cached.docs.isNotEmpty) return cached;
     } catch (_) {}
-    return ref.get();
+    return query.get();
   }
 
   String _cacheKey(DateTime month) =>
       '${month.year.toString().padLeft(4, '0')}-${month.month.toString().padLeft(2, '0')}';
-
-  String _monthDocId(DateTime month) {
-    final m = month.month.toString().padLeft(2, '0');
-    return '${month.year}-$m';
-  }
-
-  @override
-  Future<void> close() {
-    _todaySub?.cancel();
-    return super.close();
-  }
 }
 
 class _ArchiveDay {
@@ -728,6 +522,12 @@ class _ArchiveDay {
     this.extrasRows = const [],
   });
 
+  static _ArchiveDay? fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data();
+    if (data == null) return null;
+    return _ArchiveDay.fromMap(data, fallbackDayKey: doc.id);
+  }
+
   static _ArchiveDay? fromMap(
     Map<String, dynamic> data, {
     String fallbackDayKey = '',
@@ -760,10 +560,16 @@ class _ArchiveDay {
       units: _int(data['units'] ?? data['snacks']),
       expenses: _num(data['expenses']),
       orders: _int(data['orders']),
-      drinksRows: _rowsFromRaw(data['drinks_rows']),
+      drinksRows: _rowsFromAny(data, const [
+        'drinks_rows',
+        'drinks_details_rows',
+      ]),
       beansRows: _rowsFromRaw(data['beans_rows']),
       turkishRows: _rowsFromRaw(data['turkish_rows'], turkish: true),
-      extrasRows: _rowsFromRaw(data['extras_rows']),
+      extrasRows: _rowsFromAny(data, const [
+        'extras_rows',
+        'extras_details_rows',
+      ]),
     );
   }
 }
@@ -793,10 +599,7 @@ DateTime? _parseDayKey(String value) {
   return DateTime(y, m, d);
 }
 
-List<GroupRow> _rowsFromRaw(
-  dynamic raw, {
-  bool turkish = false,
-}) {
+List<GroupRow> _rowsFromRaw(dynamic raw, {bool turkish = false}) {
   if (raw is! List) return const [];
   final out = <GroupRow>[];
   for (final item in raw) {
@@ -805,9 +608,12 @@ List<GroupRow> _rowsFromRaw(
     final key = (map['key'] ?? map['name'] ?? '').toString().trim();
     if (key.isEmpty) continue;
     final plain = _num(map['plainGrams'] ?? (turkish ? map['plainCups'] : 0));
-    final spiced = _num(map['spicedGrams'] ?? (turkish ? map['spicedCups'] : 0));
+    final spiced = _num(
+      map['spicedGrams'] ?? (turkish ? map['spicedCups'] : 0),
+    );
     final cups =
-        _int(map['cups']) + (_int(map['cups']) == 0 && turkish ? _int(plain + spiced) : 0);
+        _int(map['cups']) +
+        (_int(map['cups']) == 0 && turkish ? _int(plain + spiced) : 0);
     out.add(
       GroupRow(
         key: key,
@@ -824,16 +630,15 @@ List<GroupRow> _rowsFromRaw(
   return out;
 }
 
-class _MonthSource {
-  final List<_ArchiveDay> days;
-  final bool hasBreakdown;
-
-  const _MonthSource({
-    required this.days,
-    required this.hasBreakdown,
-  });
-
-  const _MonthSource.empty()
-      : days = const <_ArchiveDay>[],
-        hasBreakdown = false;
+List<GroupRow> _rowsFromAny(
+  Map<String, dynamic> data,
+  List<String> keys, {
+  bool turkish = false,
+}) {
+  for (final key in keys) {
+    if (!data.containsKey(key)) continue;
+    final rows = _rowsFromRaw(data[key], turkish: turkish);
+    if (rows.isNotEmpty) return rows;
+  }
+  return const [];
 }

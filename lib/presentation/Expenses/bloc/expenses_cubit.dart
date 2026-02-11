@@ -10,15 +10,15 @@ import 'expenses_state.dart';
 
 class ExpensesCubit extends Cubit<ExpensesState> {
   ExpensesCubit({FirestoreExpensesDs? ds})
-      : _ds = ds ?? FirestoreExpensesDs(),
-        super(
-          ExpensesState(
-            range: todayOperationalRangeLocal(),
-            items: const [],
-            loading: true,
-            error: null,
-          ),
-        ) {
+    : _ds = ds ?? FirestoreExpensesDs(),
+      super(
+        ExpensesState(
+          range: todayOperationalRangeLocal(),
+          items: const [],
+          loading: true,
+          error: null,
+        ),
+      ) {
     _subscribe(state.range);
   }
 
@@ -52,14 +52,13 @@ class ExpensesCubit extends Cubit<ExpensesState> {
 
   void _subscribe(DateTimeRange range) {
     _sub?.cancel();
-    _sub = _ds.watchInRange(range.start.toUtc(), range.end.toUtc()).listen(
-      (items) => emit(
-        state.copyWith(items: items, loading: false, error: null),
-      ),
-      onError: (e, _) => emit(
-        state.copyWith(loading: false, error: e),
-      ),
-    );
+    _sub = _ds
+        .watchInRange(range.start.toUtc(), range.end.toUtc())
+        .listen(
+          (items) =>
+              emit(state.copyWith(items: items, loading: false, error: null)),
+          onError: (e, _) => emit(state.copyWith(loading: false, error: e)),
+        );
   }
 
   @override

@@ -90,9 +90,8 @@ class _MonthPoint {
 }
 
 List<_MonthPoint> _buildPoints(List<ArchiveMonth> months) {
-  final list = months
-      .where((m) => m.monthDate != null && !m.summary.isEmpty)
-      .map((m) {
+  final list =
+      months.where((m) => m.monthDate != null && !m.summary.isEmpty).map((m) {
         final s = m.summary;
         return _MonthPoint(
           month: m.monthDate!,
@@ -101,9 +100,7 @@ List<_MonthPoint> _buildPoints(List<ArchiveMonth> months) {
           cups: s.drinks ?? 0,
           grams: s.grams ?? 0,
         );
-      })
-      .toList()
-    ..sort((a, b) => a.month.compareTo(b.month));
+      }).toList()..sort((a, b) => a.month.compareTo(b.month));
   return list;
 }
 
@@ -175,10 +172,7 @@ class _TwoLineChart extends StatelessWidget {
           child: Wrap(
             spacing: 12,
             runSpacing: 4,
-            children: [
-              _legendDot(color1, label1),
-              _legendDot(color2, label2),
-            ],
+            children: [_legendDot(color1, label1), _legendDot(color2, label2)],
           ),
         ),
         const SizedBox(height: 6),
@@ -221,8 +215,7 @@ class _TwoLineChart extends StatelessWidget {
                       if (index < 0 || index >= count) {
                         return const SizedBox.shrink();
                       }
-                      if (index % interval.round() != 0 &&
-                          index != count - 1) {
+                      if (index % interval.round() != 0 && index != count - 1) {
                         return const SizedBox.shrink();
                       }
                       return Text(
@@ -241,7 +234,9 @@ class _TwoLineChart extends StatelessWidget {
                     return touchedSpots.map((s) {
                       final index = s.x.toInt();
                       final label = labelFor(index);
-                      final v = isInt ? s.y.toStringAsFixed(0) : s.y.toStringAsFixed(2);
+                      final v = isInt
+                          ? s.y.toStringAsFixed(0)
+                          : s.y.toStringAsFixed(2);
                       return LineTooltipItem(
                         '$label — $v',
                         const TextStyle(color: Colors.white),
@@ -250,10 +245,7 @@ class _TwoLineChart extends StatelessWidget {
                   },
                 ),
               ),
-              lineBarsData: [
-                _line(spots1, color1),
-                _line(spots2, color2),
-              ],
+              lineBarsData: [_line(spots1, color1), _line(spots2, color2)],
             ),
           ),
         ),
@@ -367,8 +359,9 @@ class _SingleLineChart extends StatelessWidget {
                     showTitles: true,
                     reservedSize: 44,
                     getTitlesWidget: (v, meta) {
-                      final text =
-                          isInt ? v.toStringAsFixed(0) : v.toStringAsFixed(0);
+                      final text = isInt
+                          ? v.toStringAsFixed(0)
+                          : v.toStringAsFixed(0);
                       return Text(text, style: const TextStyle(fontSize: 10));
                     },
                   ),
@@ -383,8 +376,7 @@ class _SingleLineChart extends StatelessWidget {
                       if (index < 0 || index >= count) {
                         return const SizedBox.shrink();
                       }
-                      if (index % interval.round() != 0 &&
-                          index != count - 1) {
+                      if (index % interval.round() != 0 && index != count - 1) {
                         return const SizedBox.shrink();
                       }
                       return Text(

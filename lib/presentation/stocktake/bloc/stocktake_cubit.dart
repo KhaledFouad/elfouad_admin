@@ -15,9 +15,11 @@ class StocktakeCubit extends Cubit<StocktakeState> {
     emit(state.copyWith(mode: next));
   }
 
-  void setFilter(StocktakeFilter filter) => emit(state.copyWith(filter: filter));
+  void setFilter(StocktakeFilter filter) =>
+      emit(state.copyWith(filter: filter));
 
-  void setOverwrite(bool overwrite) => emit(state.copyWith(overwrite: overwrite));
+  void setOverwrite(bool overwrite) =>
+      emit(state.copyWith(overwrite: overwrite));
 
   void setSearchQuery(String query) =>
       emit(state.copyWith(searchQuery: query.trim()));

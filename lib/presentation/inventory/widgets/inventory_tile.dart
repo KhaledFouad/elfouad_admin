@@ -64,37 +64,40 @@ class InventoryTile extends StatelessWidget {
     );
   }
 
-  factory InventoryTile.extra({Key? key, required ExtraInventoryRow row}) {
+  factory InventoryTile.extra({
+    Key? key,
+    required ExtraInventoryRow row,
+    bool showStock = true,
+  }) {
     final subtitle = row.category.trim();
     final title = subtitle.isEmpty ? row.name : '${row.name} — $subtitle';
 
-    return InventoryTile._(
-      key: key,
-      title: title,
-      chips: [
+    final chips = <_InventoryChipData>[
+      if (showStock)
         _InventoryChipData(
           icon: Icons.scale,
           label: AppStrings.stockLabel,
           value: _formatStock(row.stockUnits, row.unit),
         ),
+      _InventoryChipData(
+        icon: Icons.sell,
+        label: AppStrings.pricePerUnitLabel,
+        value: _formatNumber(row.priceSell),
+      ),
+      _InventoryChipData(
+        icon: Icons.money_off,
+        label: AppStrings.costPerUnitLabel,
+        value: _formatNumber(row.costUnit),
+      ),
+      if (!row.active)
         _InventoryChipData(
-          icon: Icons.sell,
-          label: AppStrings.pricePerUnitLabel,
-          value: _formatNumber(row.priceSell),
+          icon: Icons.pause_circle_filled,
+          label: AppStrings.statusLabel,
+          value: AppStrings.inactiveLabel,
         ),
-        _InventoryChipData(
-          icon: Icons.money_off,
-          label: AppStrings.costPerUnitLabel,
-          value: _formatNumber(row.costUnit),
-        ),
-        if (!row.active)
-          _InventoryChipData(
-            icon: Icons.pause_circle_filled,
-            label: AppStrings.statusLabel,
-            value: AppStrings.inactiveLabel,
-          ),
-      ],
-    );
+    ];
+
+    return InventoryTile._(key: key, title: title, chips: chips);
   }
 
   @override

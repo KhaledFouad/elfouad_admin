@@ -194,7 +194,7 @@ class AppStrings {
   static const invoiceNumberLabel = 'رقم الفاتورة';
   static const paymentMethodLabel = 'طريقة الدفع';
   static const invoiceItemsLabel = 'بنود الفاتورة';
-  static const lineTotalPriceLabel = 'إجمالي السطر';
+  static const lineTotalPriceLabel = 'إجمالي السعر';
   static const cupsCountLabel = 'عدد الأكواب (quantity)';
   static const gramsQuantityLabel = 'الكمية بالجرامات (grams)';
   static const ginsengGramsLabel = 'جرامات الجنسنج (ginseng_grams)';
@@ -223,6 +223,10 @@ class AppStrings {
   static const drinkRoastsHint = 'اختياري: اتركها فارغة لو مفيش تحميص.';
   static const spicedOptionLabel = 'إضافة خيار المحوج';
   static const ginsengOptionLabel = 'إضافة خيار الجنسنج';
+  static const additionsOptionLabel = 'إضافة خيار التحويجة';
+  static const additionsPickerTitle = 'التحويجات المتاحة';
+  static const additionsEmptyHint = 'لا توجد تحويجات مفعلة في المخزون.';
+  static const additionsRequiredPrompt = 'اختر تحويجة واحدة على الأقل.';
   static const ginsengPricePerKgLabel = 'سعر الجنسنج/كجم';
   static const ginsengCostPerKgLabel = 'تكلفة الجنسنج/كجم';
   static const spicedExtraPriceLabel = 'زيادة السعر (محوج)';
@@ -265,11 +269,13 @@ class AppStrings {
   static const categoryLabel = 'التصنيف';
   static const sellPriceLabel = 'سعر البيع';
   static const extrasLabel = 'الإضافات';
+  static const tahwigaLabel = 'التحويجة';
   static const drinksLabelDefinite = 'المشروبات';
   static const addNewItemTooltip = 'إضافة عنصر جديد';
   static const deleteDrinkTitle = 'حذف المشروب';
   static const deleteDrinkConfirm = 'هل تريد حذف هذا المشروب؟';
   static const deleteExtraTitle = 'حذف الإضافة';
+  static const deleteTahwigaTitle = 'حذف التحويجة';
   static const deleteItemTitle = 'حذف العنصر';
   static const deleteSuccess = 'تم الحذف';
   static const saveSuccess = 'تم الحفظ';
@@ -298,6 +304,7 @@ class AppStrings {
   static const unitCupBottleLabel = 'الوحدة (cup/bottle)';
   static const priceLabelDefinite = 'السعر';
   static const editExtraTitle = 'تعديل إضافة';
+  static const editTahwigaTitle = 'تعديل تحويجة';
   static const unitLabel = 'الوحدة';
   static const enterKgPrompt = 'اكتب كمية بالكيلوجرام > 0';
   static const recipeNotFound = 'Recipe not found';
@@ -349,11 +356,14 @@ class AppStrings {
   static const coffeeGramsLabel = 'جرامات البن';
   static const drinksAndSnacksTitle = 'مشروبات و سناكس';
   static const dailyHighlightsTitle = 'أبرز المؤشرات اليومية';
-  static const beansByNameTitle = 'البن حسب الاسم';
+  static const beansByNameTitle = 'إحصائيات مبيعات البن';
   static const turkishCoffeeTitle = 'القهوة التركي';
   static String turkishCoffeeTotalCups(num cups) =>
       'إجمالي أكواب التركي: ${cups.toStringAsFixed(0)}';
   static const dailyTrendsTitle = 'الاتجاهات الزمنية (يومي)';
+  static const salesProfitTrendTitle = 'اتجاه المبيعات والربح (يومي)';
+  static const beansGramsTrendTitle = 'اتجاه جرامات البن (يومي)';
+  static const turkishTrendTitle = 'اتجاه القهوة التركي (يومي)';
   static const previousMonthTooltip = 'الشهر السابق';
   static const nextMonthTooltip = 'الشهر التالي';
   static const noDataForRange = 'لا توجد بيانات للمدى المختار';
@@ -529,6 +539,14 @@ class AppStrings {
   static const hintExample100 = 'مثال: 100';
   static const errorEnterValidAmount = enterValidAmountPrompt;
   static const creditPaymentExceedsTotal = 'المبلغ المدفوع أكبر من المستحق.';
+  static const partialPaymentEditTitle = 'تعديل الدفعة';
+  static const partialPaymentDeleteTitle = 'حذف الدفعة';
+  static const partialPaymentDeleteConfirm = 'هل تريد حذف هذه الدفعة الجزئية؟';
+  static const partialPaymentUpdated = 'تم تعديل الدفعة';
+  static const partialPaymentDeleted = 'تم حذف الدفعة';
+  static const partialPaymentBadge = 'دفعة جزئية';
+  static const partialPaymentAmountLabel = 'المدفوع';
+  static const partialPaymentRegisteredHint = 'دفعة جزئية مرتبطة بحساب أجل.';
 
   static String salesAmount(num value) =>
       '$salesLabel: ${value.toStringAsFixed(2)}';
@@ -537,6 +555,8 @@ class AppStrings {
       'سيتم تسوية مبلغ ${amount.toStringAsFixed(2)}. هل تريد المتابعة؟';
   static String partialPaymentLine(num amount, String at) =>
       '${priceShort(amount)} - $at';
+  static String additionsSelectedCount(int count) =>
+      'تم اختيار $count ${count == 1 ? 'تحويجة' : 'تحويجات'}';
   static String originalDateLabel(String formatted) => originalDate(formatted);
   static String deferredSettleFailed(Object error) =>
       deferredSettlementFailed(error);

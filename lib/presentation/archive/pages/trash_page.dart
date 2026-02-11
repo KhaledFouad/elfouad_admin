@@ -5,7 +5,7 @@ import 'package:elfouad_admin/presentation/archive/models/archive_entry.dart';
 import 'package:elfouad_admin/presentation/archive/utils/archive_utils.dart';
 import 'package:elfouad_admin/presentation/archive/widgets/archive_entry_card.dart';
 import 'package:elfouad_admin/presentation/home/nav_state.dart';
-import 'package:elfouad_admin/presentation/Expenses/utils/expenses_utils.dart';
+import 'package:elfouad_admin/presentation/expenses/utils/expenses_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:responsive_framework/responsive_framework.dart';
@@ -58,8 +58,7 @@ class TrashPage extends StatelessWidget {
                     actions: [
                       IconButton(
                         tooltip: AppStrings.actionFilterByDate,
-                        onPressed: () =>
-                            _pickRange(context, state.range),
+                        onPressed: () => _pickRange(context, state.range),
                         icon: const Icon(Icons.filter_alt_rounded),
                         color: Colors.white,
                       ),
@@ -71,8 +70,8 @@ class TrashPage extends StatelessWidget {
                           tooltip: AppStrings.actionOperationalDay,
                           onPressed: () {
                             context.read<ArchiveTrashCubit>().setRange(
-                                  todayOperationalRangeLocal(),
-                                );
+                              todayOperationalRangeLocal(),
+                            );
                           },
                           icon: const Icon(Icons.restart_alt),
                           color: Colors.white,
@@ -114,20 +113,15 @@ class TrashPage extends StatelessWidget {
     );
   }
 
-  Future<void> _pickRange(
-    BuildContext context,
-    DateTimeRange current,
-  ) async {
+  Future<void> _pickRange(BuildContext context, DateTimeRange current) async {
     final picked = await showDateRangePicker(
       context: context,
       firstDate: DateTime(DateTime.now().year - 2),
       lastDate: DateTime(DateTime.now().year + 1),
       initialDateRange: current,
       locale: const Locale('ar'),
-      builder: (context, child) => Directionality(
-        textDirection: TextDirection.rtl,
-        child: child!,
-      ),
+      builder: (context, child) =>
+          Directionality(textDirection: TextDirection.rtl, child: child!),
     );
     if (!context.mounted) return;
     if (picked != null) {
@@ -145,8 +139,8 @@ class TrashPage extends StatelessWidget {
       );
       final end = endBase.add(const Duration(days: 1));
       context.read<ArchiveTrashCubit>().setRange(
-            DateTimeRange(start: start, end: end),
-          );
+        DateTimeRange(start: start, end: end),
+      );
     }
   }
 

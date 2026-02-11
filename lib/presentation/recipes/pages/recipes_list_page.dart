@@ -95,9 +95,9 @@ class _RecipesListPageState extends State<RecipesListPage>
   }
 
   void _openPrepLog() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const RecipePrepLogPage()),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const RecipePrepLogPage()));
   }
 
   Future<void> _ensureUnlocked() async {
@@ -449,14 +449,17 @@ class _RecipePasswordGateState extends State<_RecipePasswordGate> {
                             ? const SizedBox(
                                 width: 18,
                                 height: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
                             : const Text(AppStrings.actionUnlock),
                       ),
                       const SizedBox(height: 8),
                       TextButton(
-                        onPressed:
-                            _busy ? null : () => Navigator.of(context).pop(false),
+                        onPressed: _busy
+                            ? null
+                            : () => Navigator.of(context).pop(false),
                         child: const Text(AppStrings.actionCancel),
                       ),
                     ],

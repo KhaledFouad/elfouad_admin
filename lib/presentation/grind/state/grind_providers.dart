@@ -85,10 +85,10 @@ class GrindState {
 
 class GrindCubit extends Cubit<GrindState> {
   GrindCubit({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance,
-        super(
-          const GrindState(items: [], query: '', loading: true, error: null),
-        ) {
+    : _firestore = firestore ?? FirebaseFirestore.instance,
+      super(
+        const GrindState(items: [], query: '', loading: true, error: null),
+      ) {
     _subscribe();
   }
 
@@ -106,9 +106,7 @@ class GrindCubit extends Cubit<GrindState> {
         .map((s) => s.docs.map(_fromDoc).toList())
         .listen(
           (rows) => _emitCombined(singles: rows),
-          onError: (e, _) => emit(
-            state.copyWith(loading: false, error: e),
-          ),
+          onError: (e, _) => emit(state.copyWith(loading: false, error: e)),
         );
 
     _blendsSub = _firestore
@@ -118,15 +116,18 @@ class GrindCubit extends Cubit<GrindState> {
         .map((s) => s.docs.map(_fromDoc).toList())
         .listen(
           (rows) => _emitCombined(blends: rows),
-          onError: (e, _) => emit(
-            state.copyWith(loading: false, error: e),
-          ),
+          onError: (e, _) => emit(state.copyWith(loading: false, error: e)),
         );
   }
 
-  void _emitCombined({List<InventoryRow>? singles, List<InventoryRow>? blends}) {
-    final nextSingles = singles ?? state.items.where((i) => i.coll == 'singles').toList();
-    final nextBlends = blends ?? state.items.where((i) => i.coll == 'blends').toList();
+  void _emitCombined({
+    List<InventoryRow>? singles,
+    List<InventoryRow>? blends,
+  }) {
+    final nextSingles =
+        singles ?? state.items.where((i) => i.coll == 'singles').toList();
+    final nextBlends =
+        blends ?? state.items.where((i) => i.coll == 'blends').toList();
 
     nextBlends.sort((a, b) {
       final r = _blendRank(a.name).compareTo(_blendRank(b.name));

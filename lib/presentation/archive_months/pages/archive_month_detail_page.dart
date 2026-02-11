@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:elfouad_admin/core/utils/app_strings.dart';
-import 'package:elfouad_admin/presentation/History/widgets/summary_pill.dart';
+import 'package:elfouad_admin/presentation/history/feature.dart'
+    show SummaryPill;
 import 'package:elfouad_admin/presentation/stats/widgets/beans_by_name_table.dart';
 import 'package:elfouad_admin/presentation/stats/widgets/turkish_coffee_table.dart';
 
@@ -33,8 +34,7 @@ class ArchiveMonthDetailPage extends StatelessWidget {
     final summary = month.summary;
     final turkishRows = _parseTurkishRows(month.data['turkish_rows']);
     final beansRows = _parseBeanRows(month.data['beans_rows']);
-    final totalTurkishCups =
-        turkishRows.fold<int>(0, (s, r) => s + r.cups);
+    final totalTurkishCups = turkishRows.fold<int>(0, (s, r) => s + r.cups);
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
@@ -52,10 +52,7 @@ class ArchiveMonthDetailPage extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Padding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 4,
-                      ),
+                      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                       child: Text(
                         AppStrings.archiveSummaryTitle,
                         style: TextStyle(fontWeight: FontWeight.w800),
@@ -118,10 +115,7 @@ class ArchiveMonthDetailPage extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Padding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 4,
-                      ),
+                      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                       child: Text(
                         AppStrings.turkishCoffeeTitle,
                         style: TextStyle(fontWeight: FontWeight.w800),
@@ -155,10 +149,7 @@ class ArchiveMonthDetailPage extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Padding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 4,
-                      ),
+                      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                       child: Text(
                         AppStrings.beansByNameTitle,
                         style: TextStyle(fontWeight: FontWeight.w800),
@@ -225,53 +216,56 @@ class _ArchiveMonthAppBar extends StatelessWidget
   }
 }
 
-
 List<TurkishRow> _parseTurkishRows(dynamic raw) {
   if (raw is! List) return [];
-  return raw.map((entry) {
-    final map = _asStringMap(entry);
-    if (map.isEmpty) return null;
-    final name = (map['name'] ?? '').toString().trim();
-    if (name.isEmpty) return null;
-    final cups = _intFrom(map['cups']);
-    final plain = _intFrom(map['plainCups'] ?? map['plain_cups']);
-    final spiced = _intFrom(map['spicedCups'] ?? map['spiced_cups']);
-    final totalCups = cups > 0 ? cups : (plain + spiced);
-    return TurkishRow(
-      name: name,
-      cups: totalCups,
-      plainCups: plain,
-      spicedCups: spiced,
-      sales: _numFrom(map['sales']),
-      cost: _numFrom(map['cost']),
-    );
-  }).whereType<TurkishRow>().toList();
+  return raw
+      .map((entry) {
+        final map = _asStringMap(entry);
+        if (map.isEmpty) return null;
+        final name = (map['name'] ?? '').toString().trim();
+        if (name.isEmpty) return null;
+        final cups = _intFrom(map['cups']);
+        final plain = _intFrom(map['plainCups'] ?? map['plain_cups']);
+        final spiced = _intFrom(map['spicedCups'] ?? map['spiced_cups']);
+        final totalCups = cups > 0 ? cups : (plain + spiced);
+        return TurkishRow(
+          name: name,
+          cups: totalCups,
+          plainCups: plain,
+          spicedCups: spiced,
+          sales: _numFrom(map['sales']),
+          cost: _numFrom(map['cost']),
+        );
+      })
+      .whereType<TurkishRow>()
+      .toList();
 }
 
 List<BeanRow> _parseBeanRows(dynamic raw) {
   if (raw is! List) return [];
-  return raw.map((entry) {
-    final map = _asStringMap(entry);
-    if (map.isEmpty) return null;
-    final name = (map['name'] ?? '').toString().trim();
-    if (name.isEmpty) return null;
-    return BeanRow(
-      name: name,
-      grams: _numFrom(map['grams']),
-      plainGrams: _numFrom(map['plainGrams'] ?? map['plain_grams']),
-      spicedGrams: _numFrom(map['spicedGrams'] ?? map['spiced_grams']),
-      sales: _numFrom(map['sales']),
-      cost: _numFrom(map['cost']),
-    );
-  }).whereType<BeanRow>().toList();
+  return raw
+      .map((entry) {
+        final map = _asStringMap(entry);
+        if (map.isEmpty) return null;
+        final name = (map['name'] ?? '').toString().trim();
+        if (name.isEmpty) return null;
+        return BeanRow(
+          name: name,
+          grams: _numFrom(map['grams']),
+          plainGrams: _numFrom(map['plainGrams'] ?? map['plain_grams']),
+          spicedGrams: _numFrom(map['spicedGrams'] ?? map['spiced_grams']),
+          sales: _numFrom(map['sales']),
+          cost: _numFrom(map['cost']),
+        );
+      })
+      .whereType<BeanRow>()
+      .toList();
 }
 
 Map<String, dynamic> _asStringMap(dynamic entry) {
   if (entry is Map<String, dynamic>) return entry;
   if (entry is Map) {
-    return entry.map(
-      (key, value) => MapEntry(key.toString(), value),
-    );
+    return entry.map((key, value) => MapEntry(key.toString(), value));
   }
   return {};
 }

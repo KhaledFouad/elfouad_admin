@@ -16,12 +16,12 @@ class ArchiveMonthsState {
   });
 
   factory ArchiveMonthsState.initial() => const ArchiveMonthsState(
-        months: [],
-        loading: true,
-        fromCache: false,
-        error: null,
-        lastUpdated: null,
-      );
+    months: [],
+    loading: true,
+    fromCache: false,
+    error: null,
+    lastUpdated: null,
+  );
 
   ArchiveMonthsState copyWith({
     List<ArchiveMonth>? months,

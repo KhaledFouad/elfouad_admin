@@ -4,10 +4,14 @@ import 'package:elfouad_admin/presentation/auth/lock_gate_page.dart';
 import 'package:elfouad_admin/presentation/stats/utils/op_day.dart'
     show opDayKeyFromLocal, kOpShiftHours;
 import 'package:elfouad_admin/services/auth/auth_service.dart';
-import 'package:elfouad_admin/services/archive/auto_archiver.dart.dart'
-    show runAutoArchiveIfNeeded, isCurrentDeviceAutoArchiveOwner;
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:elfouad_admin/services/archive/auto_archiver.dart'
+    show
+        runAutoArchiveIfNeeded,
+        isCurrentDeviceAutoArchiveOwner,
+        runDailyArchiveForClosedDayIfNeeded;
 import 'package:elfouad_admin/services/archive/daily_archive_stats.dart'
-    show syncDailyArchiveStats;
+    show backfillDailyArchiveForMonth;
 import 'package:elfouad_admin/services/archive/monthly_archive_stats.dart'
     show syncMonthlyArchiveForMonth;
 import 'package:elfouad_admin/services/sales/deferred_sales_migration.dart'
@@ -25,8 +29,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 const _primaryHex = 0xFF543824;
 const _accentHex = 0xFFC49A6C;
-const _maintenanceLastDayKey = 'maintenance_last_day_key';
+const _maintenanceLastClosedDayKey = 'maintenance_last_closed_day_key';
 const _maintenanceLastArchiveMonthKey = 'maintenance_last_archive_month_key';
+const _maintenanceLastClosedMonthKey = 'maintenance_last_closed_month_key';
+const _maintenanceDailySchemaVersionKey = 'maintenance_daily_schema_version';
+const _maintenanceRepair20260211DecemberMissingDoneKey =
+    'maintenance_repair_2026_02_11_december_missing_v2_done';
+const _dailyArchiveSchemaVersion = 10;
 
 Future<void> _initFirebase() async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
@@ -39,9 +48,19 @@ Future<void> _scheduleMaintenance() async {
 
   final prefs = await SharedPreferences.getInstance();
   final now = DateTime.now();
-  final todayKey = opDayKeyFromLocal(now);
-  final lastDayKey = prefs.getString(_maintenanceLastDayKey);
-  if (lastDayKey == todayKey) return;
+  final currentOpStart = DateTime(now.year, now.month, now.day, kOpShiftHours);
+  final effectiveOpStart = now.isBefore(currentOpStart)
+      ? currentOpStart.subtract(const Duration(days: 1))
+      : currentOpStart;
+  final closedDayStart = effectiveOpStart.subtract(const Duration(days: 1));
+  final closedDayKey = opDayKeyFromLocal(closedDayStart);
+  final lastClosedDayKey = prefs.getString(_maintenanceLastClosedDayKey);
+  final storedSchemaVersion =
+      prefs.getInt(_maintenanceDailySchemaVersionKey) ?? 0;
+  final shouldRunDailyMaintenance =
+      lastClosedDayKey != closedDayKey ||
+      storedSchemaVersion < _dailyArchiveSchemaVersion;
+  if (!shouldRunDailyMaintenance) return;
 
   bool isOwner = false;
   if (kReleaseMode) {
@@ -52,25 +71,38 @@ Future<void> _scheduleMaintenance() async {
     }
   }
 
+  await _ensureDecemberArchiveDailyCompleteIfNeeded(
+    prefs: prefs,
+    nowLocal: now,
+  );
+
+  if (kReleaseMode && !isOwner) {
+    await prefs.setString(_maintenanceLastClosedDayKey, closedDayKey);
+    await prefs.setInt(
+      _maintenanceDailySchemaVersionKey,
+      _dailyArchiveSchemaVersion,
+    );
+    return;
+  }
+
   try {
-    await syncDailyArchiveStats(
+    await runDailyArchiveForClosedDayIfNeeded(
+      closedDayStartLocal: closedDayStart,
       prefs: prefs,
-      defaultBackfillDays: 3,
-      maxBackfillDays: 31,
-      allowExtendedBackfill: isOwner,
     );
+    await prefs.setString(_maintenanceLastClosedDayKey, closedDayKey);
   } catch (_) {}
 
-  try {
-    await syncMonthlyArchiveForMonth(
-      month: DateTime(now.year, now.month, 1),
-      force: true,
-    );
-  } catch (_) {}
+  await _syncClosedMonthArchiveIfNeeded(prefs: prefs, nowLocal: now);
 
-  await prefs.setString(_maintenanceLastDayKey, todayKey);
+  await prefs.setInt(
+    _maintenanceDailySchemaVersionKey,
+    _dailyArchiveSchemaVersion,
+  );
 
-  if (!kReleaseMode) return;
+  if (!kReleaseMode) {
+    return;
+  }
 
   final effectiveMonthKey = _effectiveMaintenanceMonthKey(DateTime.now());
   final lastArchiveMonth = prefs.getString(_maintenanceLastArchiveMonthKey);
@@ -86,12 +118,57 @@ Future<void> _scheduleMaintenance() async {
 }
 
 String _effectiveMaintenanceMonthKey(DateTime nowLocal) {
-  final monthStartLocal = DateTime(nowLocal.year, nowLocal.month, 1, kOpShiftHours);
+  return _monthKey(_effectiveMaintenanceMonth(nowLocal));
+}
+
+DateTime _effectiveMaintenanceMonth(DateTime nowLocal) {
+  final monthStartLocal = DateTime(
+    nowLocal.year,
+    nowLocal.month,
+    1,
+    kOpShiftHours,
+  );
   final effectiveMonth = nowLocal.isBefore(monthStartLocal)
       ? DateTime(nowLocal.year, nowLocal.month - 1, 1)
       : DateTime(nowLocal.year, nowLocal.month, 1);
-  final m = effectiveMonth.month.toString().padLeft(2, '0');
-  return '${effectiveMonth.year}-$m';
+  return effectiveMonth;
+}
+
+String _monthKey(DateTime month) {
+  final m = month.month.toString().padLeft(2, '0');
+  return '${month.year}-$m';
+}
+
+Future<void> _syncClosedMonthArchiveIfNeeded({
+  required SharedPreferences prefs,
+  required DateTime nowLocal,
+}) async {
+  final effectiveMonth = _effectiveMaintenanceMonth(nowLocal);
+  final closedMonth = DateTime(
+    effectiveMonth.year,
+    effectiveMonth.month - 1,
+    1,
+  );
+  final closedMonthKey = _monthKey(closedMonth);
+  final lastClosedMonthKey = prefs.getString(_maintenanceLastClosedMonthKey);
+  if (lastClosedMonthKey == closedMonthKey) return;
+
+  try {
+    await syncMonthlyArchiveForMonth(month: closedMonth, force: true);
+    await prefs.setString(_maintenanceLastClosedMonthKey, closedMonthKey);
+  } catch (_) {}
+}
+
+Future<void> _backfillDecemberMissingDays(DateTime nowLocal) async {
+  final targetYear = nowLocal.month >= 12 ? nowLocal.year : nowLocal.year - 1;
+  final december = DateTime(targetYear, 12, 1);
+  await backfillDailyArchiveForMonth(
+    month: december,
+    includeLiveSales: true,
+    refreshExisting: true,
+    writeEmptyDays: true,
+  );
+  await syncMonthlyArchiveForMonth(month: december, force: true);
 }
 
 late final Future<void> _firebaseInit;
@@ -259,6 +336,43 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       navigatorObservers: [_routeTracker],
       home: _BootstrapGate(initFuture: widget.initFuture),
     );
+  }
+}
+
+Future<void> _ensureDecemberArchiveDailyCompleteIfNeeded({
+  required SharedPreferences prefs,
+  required DateTime nowLocal,
+}) async {
+  final alreadyDone =
+      prefs.getBool(_maintenanceRepair20260211DecemberMissingDoneKey) ?? false;
+  if (alreadyDone) return;
+
+  final targetYear = nowLocal.month >= 12 ? nowLocal.year : nowLocal.year - 1;
+  final expectedDays = DateUtils.getDaysInMonth(targetYear, 12);
+
+  try {
+    final existing = await FirebaseFirestore.instance
+        .collection('archive_daily')
+        .doc('$targetYear')
+        .collection('12')
+        .get();
+    if (existing.docs.length >= expectedDays) {
+      await prefs.setBool(
+        _maintenanceRepair20260211DecemberMissingDoneKey,
+        true,
+      );
+      return;
+    }
+  } catch (_) {
+    // Will retry next launch.
+    return;
+  }
+
+  try {
+    await _backfillDecemberMissingDays(nowLocal);
+    await prefs.setBool(_maintenanceRepair20260211DecemberMissingDoneKey, true);
+  } catch (_) {
+    // Will retry next launch.
   }
 }
 

@@ -8,25 +8,24 @@ import '../utils/extras_helpers.dart';
 import 'extras_state.dart';
 
 class ExtrasCubit extends Cubit<ExtrasState> {
-  ExtrasCubit({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance,
-        super(const ExtrasState(items: [], loading: true, error: null)) {
+  ExtrasCubit({FirebaseFirestore? firestore, String collectionPath = 'extras'})
+    : _firestore = firestore ?? FirebaseFirestore.instance,
+      _collectionPath = collectionPath,
+      super(const ExtrasState(items: [], loading: true, error: null)) {
     _sub = _firestore
-        .collection('extras')
+        .collection(_collectionPath)
         .orderBy('name')
         .snapshots()
         .map((snap) => snap.docs.map(extraRowFromDoc).toList())
         .listen(
-          (items) => emit(
-            state.copyWith(items: items, loading: false, error: null),
-          ),
-          onError: (e, _) => emit(
-            state.copyWith(loading: false, error: e),
-          ),
+          (items) =>
+              emit(state.copyWith(items: items, loading: false, error: null)),
+          onError: (e, _) => emit(state.copyWith(loading: false, error: e)),
         );
   }
 
   final FirebaseFirestore _firestore;
+  final String _collectionPath;
   StreamSubscription<List<ExtraRow>>? _sub;
 
   @override

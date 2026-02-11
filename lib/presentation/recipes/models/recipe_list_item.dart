@@ -36,9 +36,9 @@ class RecipeListItem {
   String get title => variant.isEmpty ? name : '$name - $variant';
 
   int get sumPercent => components.fold<int>(
-        0,
-        (s, c) => s + (c.percent.isNaN ? 0 : c.percent.round()),
-      );
+    0,
+    (s, c) => s + (c.percent.isNaN ? 0 : c.percent.round()),
+  );
 
   bool get isComplete => sumPercent == 100;
 }

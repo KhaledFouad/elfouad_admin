@@ -23,10 +23,10 @@ Future<void> updateDrinkRow(
 }
 
 Future<void> deleteDrink(String id) => archiveThenDelete(
-      srcRef: FirebaseFirestore.instance.collection('drinks').doc(id),
-      kind: 'drink',
-      reason: 'manual_delete',
-    );
+  srcRef: FirebaseFirestore.instance.collection('drinks').doc(id),
+  kind: 'drink',
+  reason: 'manual_delete',
+);
 
 Future<void> createDrink({
   required String name,

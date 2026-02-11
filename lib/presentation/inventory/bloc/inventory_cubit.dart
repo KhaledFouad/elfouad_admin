@@ -11,19 +11,21 @@ import 'inventory_state.dart';
 
 class InventoryCubit extends Cubit<InventoryState> {
   InventoryCubit({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance,
-        super(
-          const InventoryState(
-            tab: InventoryTab.all,
-            singles: [],
-            blends: [],
-            extras: [],
-            loadingSingles: true,
-            loadingBlends: true,
-            loadingExtras: true,
-            error: null,
-          ),
-        ) {
+    : _firestore = firestore ?? FirebaseFirestore.instance,
+      super(
+        const InventoryState(
+          tab: InventoryTab.all,
+          singles: [],
+          blends: [],
+          extras: [],
+          tahwiga: [],
+          loadingSingles: true,
+          loadingBlends: true,
+          loadingExtras: true,
+          loadingTahwiga: true,
+          error: null,
+        ),
+      ) {
     _subscribe();
   }
 
@@ -31,6 +33,7 @@ class InventoryCubit extends Cubit<InventoryState> {
   StreamSubscription<List<InventoryRow>>? _singlesSub;
   StreamSubscription<List<InventoryRow>>? _blendsSub;
   StreamSubscription<List<ExtraInventoryRow>>? _extrasSub;
+  StreamSubscription<List<ExtraInventoryRow>>? _tahwigaSub;
 
   void setTab(InventoryTab tab) => emit(state.copyWith(tab: tab));
 
@@ -42,15 +45,10 @@ class InventoryCubit extends Cubit<InventoryState> {
         .map((snap) => sortByNameVariant(snap.docs.map(inventoryRowFromDoc)))
         .listen(
           (rows) => emit(
-            state.copyWith(
-              singles: rows,
-              loadingSingles: false,
-              error: null,
-            ),
+            state.copyWith(singles: rows, loadingSingles: false, error: null),
           ),
-          onError: (e, _) => emit(
-            state.copyWith(loadingSingles: false, error: e),
-          ),
+          onError: (e, _) =>
+              emit(state.copyWith(loadingSingles: false, error: e)),
         );
 
     _blendsSub = _firestore
@@ -60,15 +58,10 @@ class InventoryCubit extends Cubit<InventoryState> {
         .map((snap) => sortByNameVariant(snap.docs.map(inventoryRowFromDoc)))
         .listen(
           (rows) => emit(
-            state.copyWith(
-              blends: rows,
-              loadingBlends: false,
-              error: null,
-            ),
+            state.copyWith(blends: rows, loadingBlends: false, error: null),
           ),
-          onError: (e, _) => emit(
-            state.copyWith(loadingBlends: false, error: e),
-          ),
+          onError: (e, _) =>
+              emit(state.copyWith(loadingBlends: false, error: e)),
         );
 
     _extrasSub = _firestore
@@ -78,15 +71,23 @@ class InventoryCubit extends Cubit<InventoryState> {
         .map((snap) => snap.docs.map(extraInventoryRowFromDoc).toList())
         .listen(
           (rows) => emit(
-            state.copyWith(
-              extras: rows,
-              loadingExtras: false,
-              error: null,
-            ),
+            state.copyWith(extras: rows, loadingExtras: false, error: null),
           ),
-          onError: (e, _) => emit(
-            state.copyWith(loadingExtras: false, error: e),
+          onError: (e, _) =>
+              emit(state.copyWith(loadingExtras: false, error: e)),
+        );
+
+    _tahwigaSub = _firestore
+        .collection('tahwiga_options')
+        .orderBy('name')
+        .snapshots()
+        .map((snap) => snap.docs.map(extraInventoryRowFromDoc).toList())
+        .listen(
+          (rows) => emit(
+            state.copyWith(tahwiga: rows, loadingTahwiga: false, error: null),
           ),
+          onError: (e, _) =>
+              emit(state.copyWith(loadingTahwiga: false, error: e)),
         );
   }
 
@@ -95,6 +96,7 @@ class InventoryCubit extends Cubit<InventoryState> {
     await _singlesSub?.cancel();
     await _blendsSub?.cancel();
     await _extrasSub?.cancel();
+    await _tahwigaSub?.cancel();
     return super.close();
   }
 }

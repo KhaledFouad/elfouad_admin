@@ -100,6 +100,7 @@ Future<void> _syncOneMonth(
       firestore: db,
       month: month,
       includeLiveSales: true,
+      refreshExisting: refresh,
     );
   }
 
@@ -154,8 +155,9 @@ Future<Map<String, dynamic>?> _buildMonthlyFromDaily(
   }
 
   days.sort(
-    (a, b) =>
-        (a['dayKey'] ?? '').toString().compareTo((b['dayKey'] ?? '').toString()),
+    (a, b) => (a['dayKey'] ?? '').toString().compareTo(
+      (b['dayKey'] ?? '').toString(),
+    ),
   );
 
   final monthId = _monthKey(month);
@@ -188,12 +190,26 @@ Map<String, dynamic> _normalizeDay(
   DateTime month,
 ) {
   final dayKey = _resolveDayKey(docId, data, month);
-  final startFallback =
-      DateTime(dayKey.year, dayKey.month, dayKey.day, 4).toUtc().toIso8601String();
-  final endFallback = DateTime(dayKey.year, dayKey.month, dayKey.day, 4)
-      .add(const Duration(days: 1))
-      .toUtc()
-      .toIso8601String();
+  final startFallback = DateTime(
+    dayKey.year,
+    dayKey.month,
+    dayKey.day,
+    4,
+  ).toUtc().toIso8601String();
+  final endFallback = DateTime(
+    dayKey.year,
+    dayKey.month,
+    dayKey.day,
+    4,
+  ).add(const Duration(days: 1)).toUtc().toIso8601String();
+  final drinksRows = _asRowList(
+    data['drinks_rows'] ?? data['drinks_details_rows'],
+  );
+  final extrasRows = _asRowList(
+    data['extras_rows'] ?? data['extras_details_rows'],
+  );
+  final drinksTotals = _rowsSummary(drinksRows);
+  final extrasTotals = _rowsSummary(extrasRows);
 
   return {
     'dayKey': _dayKeyString(dayKey),
@@ -201,8 +217,9 @@ Map<String, dynamic> _normalizeDay(
     'monthNumber': _int(data['monthNumber']) == 0
         ? dayKey.month
         : _int(data['monthNumber']),
-    'dayNumber':
-        _int(data['dayNumber']) == 0 ? dayKey.day : _int(data['dayNumber']),
+    'dayNumber': _int(data['dayNumber']) == 0
+        ? dayKey.day
+        : _int(data['dayNumber']),
     'startUtc': _toIsoUtc(data['startUtc'] ?? data['start_utc'], startFallback),
     'endUtc': _toIsoUtc(data['endUtc'] ?? data['end_utc'], endFallback),
     'sales': _num(data['sales']),
@@ -215,14 +232,44 @@ Map<String, dynamic> _normalizeDay(
     'snacks': _int(data['units'] ?? data['snacks']),
     'expenses': _num(data['expenses']),
     'orders': _int(data['orders']),
-    'drinks_rows': _asRowList(data['drinks_rows']),
+    'drinks_rows': drinksRows,
+    'drinks_details_rows': drinksRows,
     'beans_rows': _asRowList(data['beans_rows']),
     'turkish_rows': _asRowList(data['turkish_rows']),
-    'extras_rows': _asRowList(data['extras_rows']),
+    'extras_rows': extrasRows,
+    'extras_details_rows': extrasRows,
+    'drinks_sales': _num(data['drinks_sales']) != 0
+        ? _num(data['drinks_sales'])
+        : drinksTotals.sales,
+    'drinks_cost': _num(data['drinks_cost']) != 0
+        ? _num(data['drinks_cost'])
+        : drinksTotals.cost,
+    'drinks_profit': _num(data['drinks_profit']) != 0
+        ? _num(data['drinks_profit'])
+        : drinksTotals.profit,
+    'drinks_count': _int(data['drinks_count']) != 0
+        ? _int(data['drinks_count'])
+        : drinksTotals.count,
+    'extras_sales': _num(data['extras_sales']) != 0
+        ? _num(data['extras_sales'])
+        : extrasTotals.sales,
+    'extras_cost': _num(data['extras_cost']) != 0
+        ? _num(data['extras_cost'])
+        : extrasTotals.cost,
+    'extras_profit': _num(data['extras_profit']) != 0
+        ? _num(data['extras_profit'])
+        : extrasTotals.profit,
+    'extras_count': _int(data['extras_count']) != 0
+        ? _int(data['extras_count'])
+        : extrasTotals.count,
   };
 }
 
-DateTime _resolveDayKey(String docId, Map<String, dynamic> data, DateTime month) {
+DateTime _resolveDayKey(
+  String docId,
+  Map<String, dynamic> data,
+  DateTime month,
+) {
   final raw = (data['dayKey'] ?? docId).toString().trim();
   final parsed = _parseDayKey(raw);
   if (parsed != null) return parsed;
@@ -269,10 +316,23 @@ DateTime? _asDate(dynamic value) {
 
 List<Map<String, dynamic>> _asRowList(dynamic value) {
   if (value is! List) return const <Map<String, dynamic>>[];
-  return value
-      .whereType<Map>()
-      .map((e) => e.cast<String, dynamic>())
-      .toList();
+  return value.whereType<Map>().map((e) => e.cast<String, dynamic>()).toList();
+}
+
+({double sales, double cost, double profit, int count}) _rowsSummary(
+  List<Map<String, dynamic>> rows,
+) {
+  double sales = 0;
+  double cost = 0;
+  double profit = 0;
+  int count = 0;
+  for (final row in rows) {
+    sales += _num(row['sales']);
+    cost += _num(row['cost']);
+    profit += _num(row['profit']);
+    count += _int(row['cups']);
+  }
+  return (sales: sales, cost: cost, profit: profit, count: count);
 }
 
 double _num(dynamic v) {

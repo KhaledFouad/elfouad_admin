@@ -219,11 +219,7 @@ class _StocktakeViewState extends State<_StocktakeView> {
             spacing: 8,
             runSpacing: 6,
             children: [
-              _filterChip(
-                AppStrings.inventoryAll,
-                StocktakeFilter.all,
-                filter,
-              ),
+              _filterChip(AppStrings.inventoryAll, StocktakeFilter.all, filter),
               _filterChip(
                 AppStrings.inventorySingles,
                 StocktakeFilter.singles,

@@ -8,8 +8,6 @@ import 'package:elfouad_admin/presentation/stats/widgets/kpi_wrap.dart';
 import 'package:elfouad_admin/presentation/stats/widgets/period_chips.dart';
 import 'package:elfouad_admin/presentation/stats/widgets/turkish_coffee_table.dart';
 import 'package:elfouad_admin/presentation/stats/widgets/triple_trend_chart.dart';
-import 'package:elfouad_admin/services/archive/auto_archiver.dart.dart'
-    show runAutoArchiveNow;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
@@ -24,13 +22,12 @@ class StatsPage extends StatefulWidget {
 }
 
 class _StatsPageState extends State<StatsPage> {
-  bool _profitMode = false;
   bool _syncedMonth = false;
 
   @override
   void initState() {
     super.initState();
-    debugPrint('[STATS] using raw sales fallback for detailed stats');
+    debugPrint('[STATS] using archive_daily breakdown for stats');
   }
 
   @override
@@ -51,31 +48,6 @@ class _StatsPageState extends State<StatsPage> {
     if (idx <= 0) return name;
     return name.substring(0, idx);
   }
-
-  Future<void> _runManualArchive(BuildContext context) async {
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(
-      const SnackBar(content: Text('جاري ترحيل الأرشيف...')),
-    );
-    try {
-      final moved = await runAutoArchiveNow(
-        adminUid: AppStrings.systemUserId,
-        batchSize: 200,
-      );
-      if (!mounted) return;
-      await context.read<StatsCubit>().refresh();
-      messenger.showSnackBar(
-        SnackBar(content: Text('تم ترحيل $moved عملية للأرشيف')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(content: Text('فشل ترحيل الأرشيف: $e')),
-      );
-    }
-  }
-
 
   @override
   Widget build(BuildContext context) {
@@ -225,96 +197,6 @@ class _StatsPageState extends State<StatsPage> {
 
                 const SizedBox(height: 16),
                 */
-
-                Card(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Padding(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 4,
-                          ),
-                          child: Text(
-                            AppStrings.drinksAndSnacksTitle,
-                            style: TextStyle(fontWeight: FontWeight.w800),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        if (state.loading)
-                          const SizedBox(
-                            height: 120,
-                            child: Center(child: CircularProgressIndicator()),
-                          )
-                        else if (state.error != null)
-                          Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: Text(
-                              AppStrings.loadFailed(
-                                AppStrings.drinksDataLabel,
-                                state.error ?? 'unknown',
-                              ),
-                            ),
-                          )
-                        else if (state.overview != null)
-                          Builder(
-                            builder: (context) {
-                              final bundle = state.overview!;
-                              final drinkRows = bundle.drinks
-                                  .where(
-                                    (x) =>
-                                        !_isTurkishName(_baseName(x.name)),
-                                  )
-                                  .map(
-                                    (x) => DrinkRow(
-                                      name: x.name,
-                                      cups: x.cups,
-                                      sales: x.sales,
-                                      cost: x.cost,
-                                      profit: x.profit,
-                                      avgPrice: x.cups > 0
-                                          ? (x.sales / x.cups)
-                                          : 0,
-                                    ),
-                                  )
-                                  .toList();
-                              final snackRows = bundle.extras
-                                  .map(
-                                    (x) => DrinkRow(
-                                      name: x.name,
-                                      cups: x.cups,
-                                      sales: x.sales,
-                                      cost: x.cost,
-                                      profit: x.profit,
-                                      avgPrice: x.cups > 0
-                                          ? (x.sales / x.cups)
-                                          : 0,
-                                    ),
-                                  )
-                                  .toList();
-                              final combined = [...drinkRows, ...snackRows]
-                                ..sort((a, b) => b.sales.compareTo(a.sales));
-                              if (combined.isEmpty) {
-                                return const Padding(
-                                  padding: EdgeInsets.all(8.0),
-                                  child: Text(AppStrings.noDataForRange),
-                                );
-                              }
-                              return DrinksByNameTable(rows: combined);
-                            },
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
                 Card(
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
@@ -353,22 +235,21 @@ class _StatsPageState extends State<StatsPage> {
                         else if (state.overview != null)
                           Builder(
                             builder: (context) {
-                              final rows = state.overview!.turkish
-                                  .map((x) {
-                                    final plain = x.plainGrams.round();
-                                    final spiced = x.spicedGrams.round();
-                                    final cups =
-                                        x.cups > 0 ? x.cups : (plain + spiced);
-                                    return TurkishRow(
-                                      name: x.name,
-                                      cups: cups,
-                                      plainCups: plain,
-                                      spicedCups: spiced,
-                                      sales: x.sales,
-                                      cost: x.cost,
-                                    );
-                                  })
-                                  .toList();
+                              final rows = state.overview!.turkish.map((x) {
+                                final plain = x.plainGrams.round();
+                                final spiced = x.spicedGrams.round();
+                                final cups = x.cups > 0
+                                    ? x.cups
+                                    : (plain + spiced);
+                                return TurkishRow(
+                                  name: x.name,
+                                  cups: cups,
+                                  plainCups: plain,
+                                  spicedCups: spiced,
+                                  sales: x.sales,
+                                  cost: x.cost,
+                                );
+                              }).toList();
                               final totalCups = rows.fold<int>(
                                 0,
                                 (s, r) => s + r.cups,
@@ -517,7 +398,8 @@ class _StatsPageState extends State<StatsPage> {
                   ),
                 ),
 
-                // ???? ?????: ??????/??? (?????? + ??????? + ??)
+                const SizedBox(height: 16),
+
                 Card(
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
@@ -527,35 +409,103 @@ class _StatsPageState extends State<StatsPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: [
-                            const Text(
-                              AppStrings.dailyTrendsTitle,
-                              style: TextStyle(fontWeight: FontWeight.w800),
-                            ),
-                            const Spacer(),
-                            SegmentedButton<bool>(
-                              segments: const [
-                                ButtonSegment<bool>(
-                                  value: false,
-                                  label: Text(AppStrings.salesLabel),
-                                ),
-                                ButtonSegment<bool>(
-                                  value: true,
-                                  label: Text(AppStrings.profitLabel),
-                                ),
-                              ],
-                              selected: <bool>{_profitMode},
-                              onSelectionChanged: (s) =>
-                                  setState(() => _profitMode = s.first),
-                              style: const ButtonStyle(
-                                visualDensity: VisualDensity(
-                                  horizontal: -2,
-                                  vertical: -2,
-                                ),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 4,
+                          ),
+                          child: Text(
+                            AppStrings.drinksAndSnacksTitle,
+                            style: TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        if (state.loading)
+                          const SizedBox(
+                            height: 120,
+                            child: Center(child: CircularProgressIndicator()),
+                          )
+                        else if (state.error != null)
+                          Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: Text(
+                              AppStrings.loadFailed(
+                                AppStrings.drinksDataLabel,
+                                state.error ?? 'unknown',
                               ),
                             ),
-                          ],
+                          )
+                        else if (state.overview != null)
+                          Builder(
+                            builder: (context) {
+                              final bundle = state.overview!;
+                              final drinkRows = bundle.drinks
+                                  .where(
+                                    (x) => !_isTurkishName(_baseName(x.name)),
+                                  )
+                                  .map(
+                                    (x) => DrinkRow(
+                                      name: x.name,
+                                      cups: x.cups,
+                                      sales: x.sales,
+                                      cost: x.cost,
+                                      profit: x.profit,
+                                      avgPrice: x.cups > 0
+                                          ? (x.sales / x.cups)
+                                          : 0,
+                                    ),
+                                  )
+                                  .toList();
+                              final snackRows = bundle.extras
+                                  .map(
+                                    (x) => DrinkRow(
+                                      name: x.name,
+                                      cups: x.cups,
+                                      sales: x.sales,
+                                      cost: x.cost,
+                                      profit: x.profit,
+                                      avgPrice: x.cups > 0
+                                          ? (x.sales / x.cups)
+                                          : 0,
+                                    ),
+                                  )
+                                  .toList();
+                              final combined = [...drinkRows, ...snackRows]
+                                ..sort((a, b) => b.sales.compareTo(a.sales));
+                              if (combined.isEmpty) {
+                                return const Padding(
+                                  padding: EdgeInsets.all(8.0),
+                                  child: Text(AppStrings.noDataForRange),
+                                );
+                              }
+                              return DrinksByNameTable(rows: combined);
+                            },
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+
+                Card(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 4,
+                          ),
+                          child: Text(
+                            AppStrings.salesProfitTrendTitle,
+                            style: TextStyle(fontWeight: FontWeight.w800),
+                          ),
                         ),
                         const SizedBox(height: 8),
                         if (state.loading)
@@ -574,17 +524,118 @@ class _StatsPageState extends State<StatsPage> {
                           Builder(
                             builder: (context) {
                               final t = state.overview!.trends;
-                              return TripleTrendChart(
-                                line1: _profitMode
-                                    ? t.totalProfit
-                                    : t.totalSales,
-                                lineDrinks: _profitMode
-                                    ? t.drinksProfit
-                                    : t.drinksSales,
-                                lineBeansGrams: _profitMode
-                                    ? t.beansProfit
-                                    : t.beansSales,
-                                asProfit: _profitMode,
+                              return SalesProfitTrendChart(
+                                sales: t.totalSales,
+                                profit: t.totalProfit,
+                              );
+                            },
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+
+                Card(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 4,
+                          ),
+                          child: Text(
+                            AppStrings.beansGramsTrendTitle,
+                            style: TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        if (state.loading)
+                          const SizedBox(
+                            height: 220,
+                            child: Center(child: CircularProgressIndicator()),
+                          )
+                        else if (state.error != null)
+                          Text(
+                            AppStrings.loadFailed(
+                              AppStrings.trendLabel,
+                              state.error ?? 'unknown',
+                            ),
+                          )
+                        else if (state.overview != null)
+                          Builder(
+                            builder: (context) {
+                              final t = state.overview!.trends;
+                              return DetailTrendChart(
+                                primary: t.beansGrams,
+                                sales: t.beansSales,
+                                profit: t.beansProfit,
+                                primaryLegend: AppStrings.beansGramsLegend,
+                                primaryTooltipLabel:
+                                    AppStrings.coffeeGramsLabel,
+                                primaryColor: const Color(0xFFF4511E),
+                                primaryAsInt: false,
+                              );
+                            },
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+
+                Card(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 4,
+                          ),
+                          child: Text(
+                            AppStrings.turkishTrendTitle,
+                            style: TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        if (state.loading)
+                          const SizedBox(
+                            height: 220,
+                            child: Center(child: CircularProgressIndicator()),
+                          )
+                        else if (state.error != null)
+                          Text(
+                            AppStrings.loadFailed(
+                              AppStrings.trendLabel,
+                              state.error ?? 'unknown',
+                            ),
+                          )
+                        else if (state.overview != null)
+                          Builder(
+                            builder: (context) {
+                              final t = state.overview!.trends;
+                              return DetailTrendChart(
+                                primary: t.turkishCups,
+                                sales: t.turkishSales,
+                                profit: t.turkishProfit,
+                                primaryLegend: AppStrings.cupsLabel,
+                                primaryTooltipLabel: AppStrings.cupsLabel,
+                                primaryColor: const Color(0xFF6D4C41),
+                                primaryAsInt: true,
                               );
                             },
                           ),
@@ -615,13 +666,6 @@ class _StatsPageState extends State<StatsPage> {
             onPressed: () => context.read<NavCubit>().setTab(AppTab.home),
             tooltip: AppStrings.tabHome,
           ),
-          actions: [
-            IconButton(
-              tooltip: 'ترحيل الأرشيف الآن',
-              icon: const Icon(Icons.archive_rounded, color: Colors.white),
-              onPressed: () => _runManualArchive(context),
-            ),
-          ],
           title: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,

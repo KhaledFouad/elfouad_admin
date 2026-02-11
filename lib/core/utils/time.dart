@@ -8,7 +8,9 @@ class OpTime {
   static (DateTime, DateTime) todayOperationalRangeUtc() {
     final now = DateTime.now();
     final today4 = DateTime(now.year, now.month, now.day, 4);
-    final startLocal = now.isBefore(today4) ? today4.subtract(const Duration(days: 1)) : today4;
+    final startLocal = now.isBefore(today4)
+        ? today4.subtract(const Duration(days: 1))
+        : today4;
     final endLocal = startLocal.add(const Duration(days: 1));
     return (startLocal.toUtc(), endLocal.toUtc());
   }

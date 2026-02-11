@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:elfouad_admin/core/utils/app_strings.dart';
-import 'package:elfouad_admin/presentation/History/widgets/summary_pill.dart';
+import 'package:elfouad_admin/presentation/history/feature.dart'
+    show SummaryPill;
 import 'package:elfouad_admin/presentation/home/nav_state.dart';
 
 import '../bloc/archive_months_cubit.dart';
@@ -103,9 +104,7 @@ class _ArchiveMonthsView extends StatelessWidget {
                     const Card(
                       child: Padding(
                         padding: EdgeInsets.all(16),
-                        child: Center(
-                          child: Text('لا توجد بيانات للشهر بعد'),
-                        ),
+                        child: Center(child: Text('لا توجد بيانات للشهر بعد')),
                       ),
                     )
                   else
@@ -132,9 +131,7 @@ class _ArchiveMonthsView extends StatelessWidget {
 
   void _openMonth(BuildContext context, ArchiveMonth month) {
     Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ArchiveMonthDetailPage(month: month),
-      ),
+      MaterialPageRoute(builder: (_) => ArchiveMonthDetailPage(month: month)),
     );
   }
 }
@@ -154,8 +151,9 @@ class _ArchiveAppBar extends StatelessWidget implements PreferredSizeWidget {
     } catch (_) {
       navCubit = null;
     }
-    final VoidCallback? homeAction =
-        navCubit == null ? null : () => navCubit!.setTab(AppTab.home);
+    final VoidCallback? homeAction = navCubit == null
+        ? null
+        : () => navCubit!.setTab(AppTab.home);
     return ClipRRect(
       borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),
       child: AppBar(
@@ -170,15 +168,12 @@ class _ArchiveAppBar extends StatelessWidget implements PreferredSizeWidget {
                 tooltip: AppStrings.tooltipBack,
               )
             : (homeAction == null
-                    ? null
-                    : IconButton(
-                        icon: const Icon(
-                          Icons.home_rounded,
-                          color: Colors.white,
-                        ),
-                        onPressed: homeAction,
-                        tooltip: AppStrings.tabHome,
-                      )),
+                  ? null
+                  : IconButton(
+                      icon: const Icon(Icons.home_rounded, color: Colors.white),
+                      onPressed: homeAction,
+                      tooltip: AppStrings.tabHome,
+                    )),
         title: const Text(
           AppStrings.archiveTitle,
           style: TextStyle(
@@ -276,7 +271,9 @@ class _ArchiveMonthCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(18),
         child: Card(
           elevation: 2,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
           child: Padding(
             padding: const EdgeInsets.all(12),
             child: Column(

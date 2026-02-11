@@ -126,17 +126,21 @@ class StatsOverview {
 class TrendsBundle {
   final List<DayVal> totalSales;
   final List<DayVal> totalProfit;
-  final List<DayVal> drinksSales;
-  final List<DayVal> drinksProfit;
+  final List<DayVal> beansGrams;
   final List<DayVal> beansSales;
   final List<DayVal> beansProfit;
+  final List<DayVal> turkishCups;
+  final List<DayVal> turkishSales;
+  final List<DayVal> turkishProfit;
   const TrendsBundle({
     required this.totalSales,
     required this.totalProfit,
-    required this.drinksSales,
-    required this.drinksProfit,
+    required this.beansGrams,
     required this.beansSales,
     required this.beansProfit,
+    required this.turkishCups,
+    required this.turkishSales,
+    required this.turkishProfit,
   });
 }
 

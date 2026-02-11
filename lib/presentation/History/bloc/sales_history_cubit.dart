@@ -12,6 +12,7 @@ import '../models/sale_record.dart';
 import '../models/sales_day_group.dart';
 import '../models/credit_account.dart';
 import '../models/history_summary.dart';
+import '../models/history_partial_payment.dart';
 import '../utils/sale_utils.dart';
 import 'sales_history_state.dart';
 
@@ -27,6 +28,8 @@ class SalesHistoryCubit extends Cubit<SalesHistoryState> {
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _settledSub;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _createdDeferredSub;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _settledDeferredSub;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _paymentSub;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _deferredPaymentSub;
   StreamSubscription<int>? _creditCountSub;
   Timer? _realtimeDebounce;
   Timer? _summaryDebounce;
@@ -35,6 +38,8 @@ class SalesHistoryCubit extends Cubit<SalesHistoryState> {
   QuerySnapshot<Map<String, dynamic>>? _lastSettledSnap;
   QuerySnapshot<Map<String, dynamic>>? _lastCreatedDeferredSnap;
   QuerySnapshot<Map<String, dynamic>>? _lastSettledDeferredSnap;
+  QuerySnapshot<Map<String, dynamic>>? _lastPaymentSnap;
+  QuerySnapshot<Map<String, dynamic>>? _lastDeferredPaymentSnap;
 
   Future<void> initialize() async {
     _startCreditCountRealtime();
@@ -130,6 +135,34 @@ class SalesHistoryCubit extends Cubit<SalesHistoryState> {
     unawaited(_loadCreditAccounts());
   }
 
+  Future<void> updatePartialPayment({
+    required HistoryPartialPayment payment,
+    required double newAmount,
+  }) async {
+    await _repository.updateCreditPaymentEvent(
+      saleId: payment.saleId,
+      eventId: payment.eventId,
+      eventIndex: payment.eventIndex,
+      eventAt: payment.at,
+      oldAmount: payment.amount,
+      newAmount: newAmount,
+    );
+    await refreshCurrent();
+  }
+
+  Future<void> deletePartialPayment({
+    required HistoryPartialPayment payment,
+  }) async {
+    await _repository.deleteCreditPaymentEvent(
+      saleId: payment.saleId,
+      eventId: payment.eventId,
+      eventIndex: payment.eventIndex,
+      eventAt: payment.at,
+      amount: payment.amount,
+    );
+    await refreshCurrent();
+  }
+
   Future<void> deleteCreditCustomer(String customerName) async {
     await _repository.deleteCreditCustomer(customerName);
     unawaited(_loadCreditUnpaidCount());
@@ -189,10 +222,20 @@ class SalesHistoryCubit extends Cubit<SalesHistoryState> {
     _lastDoc = null;
 
     final page = await _repository.fetchPage(range: range, startAfter: null);
+    final paymentDocs = await _repository.fetchPaymentEventsForRange(
+      range: range,
+    );
 
     _lastDoc = page.lastDoc;
 
-    final records = page.docs.map(SaleRecord.new).toList();
+    final combined = <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
+    for (final doc in page.docs) {
+      combined[doc.id] = doc;
+    }
+    for (final doc in paymentDocs) {
+      combined[doc.id] = doc;
+    }
+    final records = combined.values.map(SaleRecord.new).toList();
 
     emit(
       state.copyWith(
@@ -211,11 +254,15 @@ class SalesHistoryCubit extends Cubit<SalesHistoryState> {
     _settledSub?.cancel();
     _createdDeferredSub?.cancel();
     _settledDeferredSub?.cancel();
+    _paymentSub?.cancel();
+    _deferredPaymentSub?.cancel();
     _summaryDebounce?.cancel();
     _lastCreatedSnap = null;
     _lastSettledSnap = null;
     _lastCreatedDeferredSnap = null;
     _lastSettledDeferredSnap = null;
+    _lastPaymentSnap = null;
+    _lastDeferredPaymentSnap = null;
 
     _createdSub = _repository
         .watchCreatedInRange(range, SalesHistoryRepository.pageSize)
@@ -244,6 +291,17 @@ class SalesHistoryCubit extends Cubit<SalesHistoryState> {
         .skip(1)
         .listen((snap) {
           _lastSettledDeferredSnap = snap;
+          _scheduleRealtimeMerge(range);
+        }, onError: (_) {});
+    _paymentSub = _repository.watchPaymentInRange(range).skip(1).listen((snap) {
+      _lastPaymentSnap = snap;
+      _scheduleRealtimeMerge(range);
+    }, onError: (_) {});
+    _deferredPaymentSub = _repository
+        .watchDeferredPaymentInRange(range)
+        .skip(1)
+        .listen((snap) {
+          _lastDeferredPaymentSnap = snap;
           _scheduleRealtimeMerge(range);
         }, onError: (_) {});
   }
@@ -293,6 +351,16 @@ class SalesHistoryCubit extends Cubit<SalesHistoryState> {
     }
     if (_lastSettledDeferredSnap != null) {
       for (final doc in _lastSettledDeferredSnap!.docs) {
+        combined[doc.id] = doc;
+      }
+    }
+    if (_lastPaymentSnap != null) {
+      for (final doc in _lastPaymentSnap!.docs) {
+        combined[doc.id] = doc;
+      }
+    }
+    if (_lastDeferredPaymentSnap != null) {
+      for (final doc in _lastDeferredPaymentSnap!.docs) {
         combined[doc.id] = doc;
       }
     }
@@ -432,11 +500,24 @@ class SalesHistoryCubit extends Cubit<SalesHistoryState> {
               final key = _dayKey(event.at);
               totals[key] = (totals[key] ?? 0) + event.amount;
             }
-          } else if (record.isPaid && record.settledAt != null) {
-            final settledAt = record.settledAt!;
-            if (inRange(settledAt)) {
-              final key = _dayKey(settledAt);
-              totals[key] = (totals[key] ?? 0) + record.totalPrice;
+          } else {
+            final fallbackAmount = parseDouble(
+              record.data['last_payment_amount'],
+            );
+            final fallbackAt = parseOptionalDate(
+              record.data['last_payment_at'],
+            );
+            if (fallbackAmount > 0 &&
+                fallbackAt != null &&
+                inRange(fallbackAt)) {
+              final key = _dayKey(fallbackAt);
+              totals[key] = (totals[key] ?? 0) + fallbackAmount;
+            } else if (record.isPaid && record.settledAt != null) {
+              final settledAt = record.settledAt!;
+              if (inRange(settledAt)) {
+                final key = _dayKey(settledAt);
+                totals[key] = (totals[key] ?? 0) + record.totalPrice;
+              }
             }
           }
           continue;
@@ -459,6 +540,7 @@ class SalesHistoryCubit extends Cubit<SalesHistoryState> {
     DateTimeRange range,
   ) {
     final filtered = _filterRecordsForRange(records, range);
+    final partialPayments = _collectPartialPayments(records, range);
 
     final Map<String, List<SaleRecord>> grouped = {};
     for (final record in filtered) {
@@ -467,13 +549,88 @@ class SalesHistoryCubit extends Cubit<SalesHistoryState> {
       grouped.putIfAbsent(key, () => <SaleRecord>[]).add(record);
     }
 
-    final dayKeys = grouped.keys.toList()..sort((a, b) => b.compareTo(a));
+    final Map<String, List<HistoryPartialPayment>> paymentsByDay = {};
+    for (final payment in partialPayments) {
+      final key = _dayKey(payment.at);
+      paymentsByDay
+          .putIfAbsent(key, () => <HistoryPartialPayment>[])
+          .add(payment);
+    }
+
+    final dayKeys = <String>{...grouped.keys, ...paymentsByDay.keys}.toList()
+      ..sort((a, b) => b.compareTo(a));
 
     return dayKeys.map((key) {
-      final entries = grouped[key]!;
-      final totalPaid = _sumPaidOnly(entries);
-      return SalesDayGroup(label: key, entries: entries, totalPaid: totalPaid);
+      final entries = grouped[key] ?? const <SaleRecord>[];
+      final dayPayments = paymentsByDay[key] ?? const <HistoryPartialPayment>[];
+      final totalPaid =
+          _sumPaidOnly(entries) +
+          dayPayments.fold<double>(0.0, (total, item) => total + item.amount);
+      return SalesDayGroup(
+        label: key,
+        entries: entries,
+        partialPayments: dayPayments,
+        totalPaid: totalPaid,
+      );
     }).toList();
+  }
+
+  List<HistoryPartialPayment> _collectPartialPayments(
+    List<SaleRecord> records,
+    DateTimeRange range,
+  ) {
+    final out = <HistoryPartialPayment>[];
+    bool inRange(DateTime value) =>
+        !value.isBefore(range.start) && value.isBefore(range.end);
+
+    for (final record in records) {
+      if (!record.isDeferred) continue;
+
+      final rawEvents = record.data['payment_events'];
+      if (rawEvents is List && rawEvents.isNotEmpty) {
+        for (var index = 0; index < rawEvents.length; index++) {
+          final entry = rawEvents[index];
+          if (entry is! Map) continue;
+          final map = entry.cast<String, dynamic>();
+          final amount = parseDouble(map['amount']);
+          final at = parseOptionalDate(map['at']);
+          if (amount <= 0 || at == null) continue;
+          if (!inRange(at)) continue;
+
+          final eventId = (map['id'] ?? '').toString().trim();
+          out.add(
+            HistoryPartialPayment(
+              saleId: record.id,
+              customerName: record.note,
+              amount: amount,
+              at: at,
+              eventId: eventId.isEmpty ? null : eventId,
+              eventIndex: index,
+              isFallback: false,
+            ),
+          );
+        }
+        continue;
+      }
+
+      final fallbackAmount = parseDouble(record.data['last_payment_amount']);
+      final fallbackAt = parseOptionalDate(record.data['last_payment_at']);
+      if (fallbackAmount > 0 && fallbackAt != null && inRange(fallbackAt)) {
+        out.add(
+          HistoryPartialPayment(
+            saleId: record.id,
+            customerName: record.note,
+            amount: fallbackAmount,
+            at: fallbackAt,
+            eventId: null,
+            eventIndex: null,
+            isFallback: true,
+          ),
+        );
+      }
+    }
+
+    return out;
   }
 
   List<CreditCustomerAccount> _buildCreditAccounts(List<SaleRecord> records) {
@@ -656,6 +813,8 @@ class SalesHistoryCubit extends Cubit<SalesHistoryState> {
     _settledSub?.cancel();
     _createdDeferredSub?.cancel();
     _settledDeferredSub?.cancel();
+    _paymentSub?.cancel();
+    _deferredPaymentSub?.cancel();
     _creditCountSub?.cancel();
     return super.close();
   }

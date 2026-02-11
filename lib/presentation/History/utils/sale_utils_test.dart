@@ -2,8 +2,8 @@
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:elfouad_admin/core/utils/app_strings.dart';
-import 'package:elfouad_admin/presentation/History/models/sale_component.dart';
-import 'package:elfouad_admin/presentation/History/utils/sale_utils.dart';
+import 'package:elfouad_admin/presentation/history/models/sale_component.dart';
+import 'package:elfouad_admin/presentation/history/utils/sale_utils.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

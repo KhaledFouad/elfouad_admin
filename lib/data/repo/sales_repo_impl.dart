@@ -6,5 +6,6 @@ class SalesRepoImpl implements SalesRepo {
   final FirestoreSalesDs ds;
   SalesRepoImpl(this.ds);
   @override
-  Future<List<Sale>> getSalesInRange(DateTime s, DateTime e) => ds.fetchRaw(s, e);
+  Future<List<Sale>> getSalesInRange(DateTime s, DateTime e) =>
+      ds.fetchRaw(s, e);
 }

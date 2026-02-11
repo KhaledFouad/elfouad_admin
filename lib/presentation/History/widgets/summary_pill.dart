@@ -28,10 +28,7 @@ class SummaryPill extends StatelessWidget {
         children: [
           Icon(icon, size: 16, color: Colors.brown.shade700),
           const SizedBox(width: 6),
-          Text(
-            '$label: ',
-            style: const TextStyle(fontWeight: FontWeight.w700),
-          ),
+          Text('$label: ', style: const TextStyle(fontWeight: FontWeight.w700)),
           if (isLoading)
             const SizedBox(
               width: 14,
@@ -39,10 +36,7 @@ class SummaryPill extends StatelessWidget {
               child: CircularProgressIndicator(strokeWidth: 2),
             )
           else
-            Text(
-              value,
-              style: const TextStyle(fontWeight: FontWeight.w700),
-            ),
+            Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
         ],
       ),
     );

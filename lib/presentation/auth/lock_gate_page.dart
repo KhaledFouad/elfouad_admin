@@ -2,13 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:elfouad_admin/presentation/expenses/feature.dart'
+    show ExpensesCubit;
 import 'package:elfouad_admin/presentation/home/app_shell.dart';
-import 'package:elfouad_admin/presentation/Expenses/bloc/expenses_cubit.dart';
 import 'package:elfouad_admin/presentation/grind/state/grind_providers.dart';
 import 'package:elfouad_admin/presentation/inventory/bloc/inventory_cubit.dart';
 import 'package:elfouad_admin/presentation/manage/bloc/drinks_cubit.dart';
 import 'package:elfouad_admin/presentation/manage/bloc/extras_cubit.dart';
 import 'package:elfouad_admin/presentation/manage/bloc/manage_tab_cubit.dart';
+import 'package:elfouad_admin/presentation/manage/bloc/tahwiga_cubit.dart';
 import 'package:elfouad_admin/presentation/recipes/bloc/recipes_cubit.dart';
 import 'package:elfouad_admin/presentation/stats/bloc/stats_cubit.dart';
 import 'package:elfouad_admin/presentation/home/nav_state.dart';
@@ -262,9 +264,10 @@ class _HomeDashboardRoot extends StatelessWidget {
         BlocProvider(create: (_) => InventoryCubit()),
         BlocProvider(create: (_) => DrinksCubit()),
         BlocProvider(create: (_) => ExtrasCubit()),
+        BlocProvider(create: (_) => TahwigaCubit()),
         BlocProvider(create: (_) => ManageTabCubit()..loadLastTab()),
         BlocProvider(create: (_) => GrindCubit()),
-        BlocProvider(create: (_) => StatsCubit()),
+        BlocProvider(lazy: false, create: (_) => StatsCubit()),
       ],
       child: const AppShell(),
     );

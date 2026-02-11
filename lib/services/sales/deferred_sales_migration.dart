@@ -1,8 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-Future<int> migrateDeferredSalesIfNeeded({
-  FirebaseFirestore? firestore,
-}) async {
+Future<int> migrateDeferredSalesIfNeeded({FirebaseFirestore? firestore}) async {
   final db = firestore ?? FirebaseFirestore.instance;
   final metaRef = db.collection('meta').doc('deferred_sales_migration');
 
@@ -12,8 +10,7 @@ Future<int> migrateDeferredSalesIfNeeded({
     if (done) return 0;
   } catch (_) {}
 
-  final combined =
-      <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
+  final combined = <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
 
   try {
     final deferredSnap = await db

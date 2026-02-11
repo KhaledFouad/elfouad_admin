@@ -27,9 +27,7 @@ double stockGramsFrom(Map<String, dynamic> data) {
   return 0.0;
 }
 
-InventoryRow inventoryRowFromDoc(
-  DocumentSnapshot<Map<String, dynamic>> doc,
-) {
+InventoryRow inventoryRowFromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
   final data = doc.data() ?? <String, dynamic>{};
   final sell = parseInventoryNumber(
     data['sellPricePerKg'] ?? data['sellPerKg'] ?? data['sell_price_per_kg'],

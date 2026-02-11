@@ -17,9 +17,7 @@ class PreviousMonthsTable extends StatelessWidget {
       scrollDirection: Axis.horizontal,
       child: DataTable(
         columns: [
-          DataColumn(
-            label: Text(AppStrings.monthLabel, style: headerStyle),
-          ),
+          DataColumn(label: Text(AppStrings.monthLabel, style: headerStyle)),
           DataColumn(
             label: Text(AppStrings.salesLabelDefinite, style: headerStyle),
           ),
@@ -29,12 +27,8 @@ class PreviousMonthsTable extends StatelessWidget {
           DataColumn(
             label: Text(AppStrings.cupsLabelShort, style: headerStyle),
           ),
-          DataColumn(
-            label: Text(AppStrings.gramsLabel, style: headerStyle),
-          ),
-          DataColumn(
-            label: Text(AppStrings.snacksLabel, style: headerStyle),
-          ),
+          DataColumn(label: Text(AppStrings.gramsLabel, style: headerStyle)),
+          DataColumn(label: Text(AppStrings.snacksLabel, style: headerStyle)),
         ],
         rows: months
             .map(

@@ -1,5 +1,5 @@
 import 'package:elfouad_admin/core/utils/app_strings.dart';
-import 'package:elfouad_admin/presentation/History/utils/sale_utils.dart';
+import 'package:elfouad_admin/presentation/history/utils/sale_utils.dart';
 import 'package:elfouad_admin/presentation/archive/bloc/archive_trash_state.dart';
 import 'package:elfouad_admin/presentation/archive/models/archive_entry.dart';
 

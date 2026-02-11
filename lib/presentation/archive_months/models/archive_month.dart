@@ -63,7 +63,8 @@ class ArchiveMonth {
     ]);
     if (explicit.isNotEmpty) return explicit;
 
-    final monthRaw = data['month'] ??
+    final monthRaw =
+        data['month'] ??
         data['month_key'] ??
         data['monthKey'] ??
         data['month_start'] ??
@@ -79,7 +80,8 @@ class ArchiveMonth {
   }
 
   DateTime? _extractMonthDate() {
-    final monthRaw = data['month'] ??
+    final monthRaw =
+        data['month'] ??
         data['month_key'] ??
         data['monthKey'] ??
         data['month_start'] ??

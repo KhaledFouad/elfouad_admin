@@ -15,9 +15,18 @@ class InventoryPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<InventoryCubit>().state;
-    final max = state.maxStock;
-    final list = state.listForTab;
+    final maxCoffeeStock = state.maxStock;
+    final coffeeList = state.listForTab;
+    final extrasList = state.extras;
+    final tahwigaList = state.tahwiga;
     final tab = state.tab;
+    final showingExtras = tab == InventoryTab.extras;
+    final showingTahwiga = tab == InventoryTab.tahwiga;
+    final hasRows = showingExtras
+        ? extrasList.isNotEmpty
+        : showingTahwiga
+        ? tahwigaList.isNotEmpty
+        : coffeeList.isNotEmpty;
     final breakpoints = ResponsiveBreakpoints.of(context);
     final isPhone = breakpoints.smallerThan(TABLET);
     final isWide = breakpoints.largerThan(TABLET);
@@ -116,6 +125,18 @@ class InventoryPage extends StatelessWidget {
                               InventoryTab.blends,
                               tab,
                             ),
+                            _chip(
+                              context,
+                              AppStrings.extrasLabel,
+                              InventoryTab.extras,
+                              tab,
+                            ),
+                            _chip(
+                              context,
+                              AppStrings.tahwigaLabel,
+                              InventoryTab.tahwiga,
+                              tab,
+                            ),
                           ],
                         ),
                         const SizedBox(height: 8),
@@ -129,7 +150,7 @@ class InventoryPage extends StatelessWidget {
                               child: Text(AppStrings.drinksNoStockNote),
                             ),
                           )
-                        else if (list.isEmpty)
+                        else if (!hasRows)
                           const Padding(
                             padding: EdgeInsets.symmetric(vertical: 24),
                             child: Center(child: Text(AppStrings.noItems)),
@@ -140,7 +161,7 @@ class InventoryPage extends StatelessWidget {
                     ),
                   ),
                 ),
-                if (list.isNotEmpty)
+                if (hasRows)
                   SliverPadding(
                     padding: EdgeInsets.fromLTRB(
                       horizontalPadding,
@@ -149,17 +170,45 @@ class InventoryPage extends StatelessWidget {
                       24,
                     ),
                     sliver: SliverList(
-                      delegate: SliverChildBuilderDelegate((context, index) {
-                        final r = list[index];
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: InventoryTile.coffee(
-                            key: ValueKey(r.id),
-                            row: r,
-                            maxStockForBar: max,
-                          ),
-                        );
-                      }, childCount: list.length),
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) {
+                          if (showingExtras) {
+                            final row = extrasList[index];
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: InventoryTile.extra(
+                                key: ValueKey('extra_${row.id}'),
+                                row: row,
+                              ),
+                            );
+                          }
+                          if (showingTahwiga) {
+                            final row = tahwigaList[index];
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: InventoryTile.extra(
+                                key: ValueKey('tahwiga_${row.id}'),
+                                row: row,
+                                showStock: false,
+                              ),
+                            );
+                          }
+                          final row = coffeeList[index];
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: InventoryTile.coffee(
+                              key: ValueKey(row.id),
+                              row: row,
+                              maxStockForBar: maxCoffeeStock,
+                            ),
+                          );
+                        },
+                        childCount: showingExtras
+                            ? extrasList.length
+                            : showingTahwiga
+                            ? tahwigaList.length
+                            : coffeeList.length,
+                      ),
                     ),
                   ),
               ],

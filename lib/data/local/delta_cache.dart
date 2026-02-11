@@ -1,4 +1,3 @@
-
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -16,7 +15,10 @@ class DeltaCache {
     return list.cast<Map>().map((e) => e.cast<String, dynamic>()).toList();
   }
 
-  static Future<void> write(String collection, List<Map<String, dynamic>> docs) async {
+  static Future<void> write(
+    String collection,
+    List<Map<String, dynamic>> docs,
+  ) async {
     final sp = await SharedPreferences.getInstance();
     await sp.setString(_key(collection), jsonEncode(docs));
   }

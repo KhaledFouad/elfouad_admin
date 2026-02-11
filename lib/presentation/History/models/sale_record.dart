@@ -5,9 +5,7 @@ import 'sale_component.dart';
 import 'payment_event.dart';
 
 class SaleRecord {
-  SaleRecord(this.snapshot)
-      : data = snapshot.data(),
-        id = snapshot.id;
+  SaleRecord(this.snapshot) : data = snapshot.data(), id = snapshot.id;
 
   final QueryDocumentSnapshot<Map<String, dynamic>> snapshot;
   final Map<String, dynamic> data;
@@ -33,14 +31,13 @@ class SaleRecord {
   String get type => (data['type'] ?? detectSaleType(data)).toString();
 
   DateTime get effectiveTime => computeEffectiveTime(
-        createdAt: createdAt,
-        settledAt: settledAt,
-        isDeferred: isDeferred,
-        isPaid: isPaid,
-      );
+    createdAt: createdAt,
+    settledAt: settledAt,
+    isDeferred: isDeferred,
+    isPaid: isPaid,
+  );
 
-  bool get usesSettledTime =>
-      !isSameMinute(effectiveTime, createdAt);
+  bool get usesSettledTime => !isSameMinute(effectiveTime, createdAt);
 
   List<SaleComponent> get components => extractComponents(data, type);
 
@@ -57,8 +54,9 @@ class SaleRecord {
 
   String get titleLine => buildTitleLine(data, type);
 
-  String get displayTime =>
-      (isDeferred && isPaid) ? formatTime(createdAt) : formatTime(effectiveTime);
+  String get displayTime => (isDeferred && isPaid)
+      ? formatTime(createdAt)
+      : formatTime(effectiveTime);
 
   String get originalDateTimeLabel => formatDateTime(createdAt);
 

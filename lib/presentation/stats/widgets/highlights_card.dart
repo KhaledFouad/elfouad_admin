@@ -121,10 +121,7 @@ class StatsHighlightsCard extends StatelessWidget {
       _buildTile(
         icon: Icons.scale,
         title: AppStrings.averageBeansGramsPerDayTitle,
-        value: _formatNumber(
-          highlights.averageBeansGramsPerDay,
-          decimals: 0,
-        ),
+        value: _formatNumber(highlights.averageBeansGramsPerDay, decimals: 0),
         subtitle: AppStrings.gramsKeyword,
       ),
     );

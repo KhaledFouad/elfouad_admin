@@ -11,11 +11,7 @@ class ExtrasState {
     required this.error,
   });
 
-  ExtrasState copyWith({
-    List<ExtraRow>? items,
-    bool? loading,
-    Object? error,
-  }) {
+  ExtrasState copyWith({List<ExtraRow>? items, bool? loading, Object? error}) {
     return ExtrasState(
       items: items ?? this.items,
       loading: loading ?? this.loading,

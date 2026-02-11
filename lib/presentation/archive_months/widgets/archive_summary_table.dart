@@ -5,11 +5,7 @@ import 'package:elfouad_admin/core/utils/app_strings.dart';
 import '../models/archive_month.dart';
 
 class ArchiveSummaryTable extends StatelessWidget {
-  const ArchiveSummaryTable({
-    super.key,
-    required this.months,
-    this.onSelect,
-  });
+  const ArchiveSummaryTable({super.key, required this.months, this.onSelect});
 
   final List<ArchiveMonth> months;
   final ValueChanged<ArchiveMonth>? onSelect;
@@ -49,10 +45,16 @@ class ArchiveSummaryTable extends StatelessWidget {
         dataRowMaxHeight: 48,
         columns: [
           DataColumn(label: Text(AppStrings.monthLabel, style: headerStyle)),
-          DataColumn(label: Text(AppStrings.salesLabelDefinite, style: headerStyle)),
-          DataColumn(label: Text(AppStrings.profitLabelDefinite, style: headerStyle)),
+          DataColumn(
+            label: Text(AppStrings.salesLabelDefinite, style: headerStyle),
+          ),
+          DataColumn(
+            label: Text(AppStrings.profitLabelDefinite, style: headerStyle),
+          ),
           DataColumn(label: Text(AppStrings.gramsLabel, style: headerStyle)),
-          DataColumn(label: Text(AppStrings.cupsLabelShort, style: headerStyle)),
+          DataColumn(
+            label: Text(AppStrings.cupsLabelShort, style: headerStyle),
+          ),
           DataColumn(label: Text(AppStrings.snacksLabel, style: headerStyle)),
         ],
         rows: months.asMap().entries.map((entry) {
