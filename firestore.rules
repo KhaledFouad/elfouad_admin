@@ -1,0 +1,80 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function ownDevice(deviceId) {
+      return signedIn() && request.auth.uid == deviceId;
+    }
+
+    function deviceEnabled() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/devices/$(request.auth.uid))
+        && get(/databases/$(database)/documents/devices/$(request.auth.uid)).data.enabled == true;
+    }
+
+    match /devices/{deviceId} {
+      // Prevent enumerating devices from the app.
+      allow list: if false;
+
+      // The device can read only its own status doc.
+      allow get: if ownDevice(deviceId);
+
+      // Create own doc only, and enabled must start as true.
+      allow create: if ownDevice(deviceId)
+        && request.resource.data.enabled == true;
+
+      // Device can update heartbeat/info only (never enabled).
+      allow update: if ownDevice(deviceId)
+        && request.resource.data.enabled == resource.data.enabled
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          'lastSeen',
+          'platform',
+          'model',
+          'appVersion',
+        ]);
+
+      allow delete: if false;
+    }
+
+    // Force-update policy doc: readable by signed-in clients, never writable from app.
+    match /meta/app_policy {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    // Other meta docs are regular business data.
+    match /meta/{docId} {
+      allow read, write: if deviceEnabled() && docId != 'app_policy';
+    }
+
+    // Business collections: only enabled devices can read/write.
+    match /archive/{doc=**} { allow read, write: if deviceEnabled(); }
+    match /archive_bin/{doc=**} { allow read, write: if deviceEnabled(); }
+    match /archive_daily/{doc=**} { allow read, write: if deviceEnabled(); }
+    match /archive_months/{doc=**} { allow read, write: if deviceEnabled(); }
+    match /blends/{doc=**} { allow read, write: if deviceEnabled(); }
+    match /counters/{doc=**} { allow read, write: if deviceEnabled(); }
+    match /custom_blends/{doc=**} { allow read, write: if deviceEnabled(); }
+    match /deferred_sales/{doc=**} { allow read, write: if deviceEnabled(); }
+    match /drinks/{doc=**} { allow read, write: if deviceEnabled(); }
+    match /expenses/{doc=**} { allow read, write: if deviceEnabled(); }
+    match /extras/{doc=**} { allow read, write: if deviceEnabled(); }
+    match /inventory_logs/{doc=**} { allow read, write: if deviceEnabled(); }
+    match /productions/{doc=**} { allow read, write: if deviceEnabled(); }
+    match /recipe_preps/{doc=**} { allow read, write: if deviceEnabled(); }
+    match /recipes/{doc=**} { allow read, write: if deviceEnabled(); }
+    match /sales/{doc=**} { allow read, write: if deviceEnabled(); }
+    match /settings/{doc=**} { allow read, write: if deviceEnabled(); }
+    match /singles/{doc=**} { allow read, write: if deviceEnabled(); }
+    match /stocktakes/{doc=**} { allow read, write: if deviceEnabled(); }
+    match /tahwiga_options/{doc=**} { allow read, write: if deviceEnabled(); }
+
+    // Deny everything else by default.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

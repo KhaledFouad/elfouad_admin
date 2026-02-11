@@ -16,11 +16,15 @@ import 'package:elfouad_admin/services/archive/monthly_archive_stats.dart'
     show syncMonthlyArchiveForMonth;
 import 'package:elfouad_admin/services/sales/deferred_sales_migration.dart'
     show migrateDeferredSalesIfNeeded;
+import 'package:elfouad_admin/services/app/version_gate_service.dart';
+import 'package:elfouad_admin/services/device/device_control_service.dart';
 import 'package:elfouad_admin/core/widgets/app_background.dart';
 import 'package:flutter/foundation.dart' show kReleaseMode, kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show SystemNavigator;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 import 'services/firebase_options.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -35,10 +39,14 @@ const _maintenanceLastClosedMonthKey = 'maintenance_last_closed_month_key';
 const _maintenanceDailySchemaVersionKey = 'maintenance_daily_schema_version';
 const _maintenanceRepair20260211DecemberMissingDoneKey =
     'maintenance_repair_2026_02_11_december_missing_v2_done';
+
 const _dailyArchiveSchemaVersion = 10;
 
 Future<void> _initFirebase() async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  if (FirebaseAuth.instance.currentUser == null) {
+    await FirebaseAuth.instance.signInAnonymously();
+  }
   await configureFirestore();
 }
 
@@ -386,22 +394,39 @@ class _BootstrapGate extends StatefulWidget {
 }
 
 class _BootstrapGateState extends State<_BootstrapGate> {
-  late final Future<void> _initFuture;
+  late final Future<_BootstrapDecision> _bootFuture;
+  late final DeviceControlService _deviceControlService;
   Widget? _app;
 
   @override
   void initState() {
     super.initState();
-    _initFuture = widget.initFuture;
-    _initFuture.then((_) => unawaited(_scheduleMaintenance()));
+    _deviceControlService = DeviceControlService();
+    _bootFuture = _boot();
   }
 
   Widget _buildApp() => const LockGatePage();
 
+  Future<_BootstrapDecision> _boot() async {
+    await widget.initFuture;
+    final device = await _deviceControlService.bootstrap();
+    final versionGate = await checkAppVersionGate();
+    if (!versionGate.blocked && !device.blocked) {
+      unawaited(_scheduleMaintenance());
+    }
+    return _BootstrapDecision(versionGate: versionGate, deviceBlocked: device);
+  }
+
+  @override
+  void dispose() {
+    _deviceControlService.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<void>(
-      future: _initFuture,
+    return FutureBuilder<_BootstrapDecision>(
+      future: _bootFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
           return const _SplashScreen();
@@ -419,10 +444,37 @@ class _BootstrapGateState extends State<_BootstrapGate> {
             ),
           );
         }
-        return _app ??= _buildApp();
+        final decision = snapshot.data;
+        if (decision != null && decision.versionGate.blocked) {
+          return _ForceUpdateScreen(result: decision.versionGate);
+        }
+        if (decision != null && decision.deviceBlocked.blocked) {
+          return _DeviceDisabledScreen(uid: decision.deviceBlocked.uid);
+        }
+        return ValueListenableBuilder<bool>(
+          valueListenable: _deviceControlService.blockedListenable,
+          builder: (context, blocked, _) {
+            if (blocked) {
+              return _DeviceDisabledScreen(
+                uid: _deviceControlService.uid ?? '',
+              );
+            }
+            return _app ??= _buildApp();
+          },
+        );
       },
     );
   }
+}
+
+class _BootstrapDecision {
+  const _BootstrapDecision({
+    required this.versionGate,
+    required this.deviceBlocked,
+  });
+
+  final AppVersionGateResult versionGate;
+  final DeviceControlBootstrapResult deviceBlocked;
 }
 
 class _RouteTracker extends NavigatorObserver {
@@ -457,5 +509,156 @@ class _SplashScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Scaffold(body: Center(child: CircularProgressIndicator()));
+  }
+}
+
+class _ForceUpdateScreen extends StatelessWidget {
+  const _ForceUpdateScreen({required this.result});
+
+  final AppVersionGateResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    final message = result.message.trim().isEmpty
+        ? 'هذه النسخة قديمة وتم إيقافها. رجاءً حدّث التطبيق إلى أحدث نسخة.'
+        : result.message.trim();
+
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 460),
+              child: Card(
+                elevation: 3,
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Icon(
+                        Icons.system_update_alt_rounded,
+                        size: 48,
+                        color: Color(0xFF5D4037),
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'يتطلب تحديث التطبيق',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        message,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 15, height: 1.4),
+                      ),
+                      const SizedBox(height: 14),
+                      Text(
+                        'النسخة الحالية: ${result.currentBuild}',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      Text(
+                        'النسخة المطلوبة: ${result.requiredBuild}',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 18),
+                      FilledButton(
+                        onPressed: () {
+                          SystemNavigator.pop();
+                        },
+                        child: const Text('إغلاق التطبيق'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DeviceDisabledScreen extends StatelessWidget {
+  const _DeviceDisabledScreen({required this.uid});
+
+  final String uid;
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 460),
+              child: Card(
+                elevation: 3,
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Icon(
+                        Icons.block_rounded,
+                        size: 48,
+                        color: Color(0xFFB71C1C),
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'تم إيقاف هذا الجهاز',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      const Text(
+                        'تم تعطيل صلاحية هذا الجهاز من لوحة التحكم.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 15, height: 1.4),
+                      ),
+                      if (uid.trim().isNotEmpty) ...[
+                        const SizedBox(height: 14),
+                        Text(
+                          'Device UID: $uid',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.black54,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 18),
+                      FilledButton(
+                        onPressed: () {
+                          SystemNavigator.pop();
+                        },
+                        child: const Text('إغلاق التطبيق'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
