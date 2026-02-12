@@ -177,71 +177,75 @@ class _LockGatePageState extends State<LockGatePage>
 
   @override
   Widget build(BuildContext context) {
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.lock, size: 56, color: Colors.brown),
-                const SizedBox(height: 12),
-                const Text(
-                  'التطبيق مقفل',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
-                ),
-                const SizedBox(height: 8),
-                if (_webMode)
-                  Column(
-                    children: [
-                      const Text(
-                        'اكتب كلمة المرور لفتح الموقع.',
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: _webPasswordController,
-                        obscureText: true,
-                        textInputAction: TextInputAction.done,
-                        decoration: InputDecoration(
-                          labelText: 'كلمة المرور',
-                          errorText: _webError,
-                          border: const OutlineInputBorder(),
-                        ),
-                        onSubmitted: (_) => _checkWebPassword(),
-                      ),
-                      const SizedBox(height: 12),
-                      FilledButton.icon(
-                        onPressed: _checkWebPassword,
-                        icon: const Icon(Icons.lock_open),
-                        label: const Text('دخول'),
-                      ),
-                    ],
-                  )
-                else
-                  Column(
-                    children: [
-                      Text(
-                        _message ??
-                            (_loading
-                                ? 'جاري التحقق من بصمة الجهاز...'
-                                : 'يرجى التحقق لفتح التطبيق.'),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 16),
-                      if (_loading)
-                        const CircularProgressIndicator()
-                      else
-                        FilledButton.icon(
-                          onPressed: _authenticate,
-                          icon: const Icon(Icons.refresh),
-                          label: const Text('إعادة المحاولة'),
-                        ),
-                    ],
+    return PopScope(
+      // Prevent back-button bypass when lock screen is pushed above app content.
+      canPop: widget.replaceOnSuccess,
+      child: Directionality(
+        textDirection: TextDirection.rtl,
+        child: Scaffold(
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.lock, size: 56, color: Colors.brown),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'التطبيق مقفل',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
                   ),
-              ],
+                  const SizedBox(height: 8),
+                  if (_webMode)
+                    Column(
+                      children: [
+                        const Text(
+                          'اكتب كلمة المرور لفتح الموقع.',
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: _webPasswordController,
+                          obscureText: true,
+                          textInputAction: TextInputAction.done,
+                          decoration: InputDecoration(
+                            labelText: 'كلمة المرور',
+                            errorText: _webError,
+                            border: const OutlineInputBorder(),
+                          ),
+                          onSubmitted: (_) => _checkWebPassword(),
+                        ),
+                        const SizedBox(height: 12),
+                        FilledButton.icon(
+                          onPressed: _checkWebPassword,
+                          icon: const Icon(Icons.lock_open),
+                          label: const Text('دخول'),
+                        ),
+                      ],
+                    )
+                  else
+                    Column(
+                      children: [
+                        Text(
+                          _message ??
+                              (_loading
+                                  ? 'جاري التحقق من بصمة الجهاز...'
+                                  : 'يرجى التحقق لفتح التطبيق.'),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 16),
+                        if (_loading)
+                          const CircularProgressIndicator()
+                        else
+                          FilledButton.icon(
+                            onPressed: _authenticate,
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('إعادة المحاولة'),
+                          ),
+                      ],
+                    ),
+                ],
+              ),
             ),
           ),
         ),

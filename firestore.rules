@@ -69,6 +69,8 @@ service cloud.firestore {
     match /sales/{doc=**} { allow read, write: if deviceEnabled(); }
     match /settings/{doc=**} { allow read, write: if deviceEnabled(); }
     match /singles/{doc=**} { allow read, write: if deviceEnabled(); }
+    match /products/{doc=**} { allow read, write: if deviceEnabled(); }
+    match /stock_items/{doc=**} { allow read, write: if deviceEnabled(); }
     match /stocktakes/{doc=**} { allow read, write: if deviceEnabled(); }
     match /tahwiga_options/{doc=**} { allow read, write: if deviceEnabled(); }
 

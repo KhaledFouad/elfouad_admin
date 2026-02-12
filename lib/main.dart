@@ -395,13 +395,12 @@ class _BootstrapGate extends StatefulWidget {
 
 class _BootstrapGateState extends State<_BootstrapGate> {
   late final Future<_BootstrapDecision> _bootFuture;
-  late final DeviceControlService _deviceControlService;
+  DeviceControlService? _deviceControlService;
   Widget? _app;
 
   @override
   void initState() {
     super.initState();
-    _deviceControlService = DeviceControlService();
     _bootFuture = _boot();
   }
 
@@ -409,7 +408,11 @@ class _BootstrapGateState extends State<_BootstrapGate> {
 
   Future<_BootstrapDecision> _boot() async {
     await widget.initFuture;
-    final device = await _deviceControlService.bootstrap();
+    _deviceControlService ??= DeviceControlService(
+      auth: FirebaseAuth.instance,
+      firestore: FirebaseFirestore.instance,
+    );
+    final device = await _deviceControlService!.bootstrap();
     final versionGate = await checkAppVersionGate();
     if (!versionGate.blocked && !device.blocked) {
       unawaited(_scheduleMaintenance());
@@ -419,7 +422,7 @@ class _BootstrapGateState extends State<_BootstrapGate> {
 
   @override
   void dispose() {
-    _deviceControlService.dispose();
+    _deviceControlService?.dispose();
     super.dispose();
   }
 
@@ -451,12 +454,16 @@ class _BootstrapGateState extends State<_BootstrapGate> {
         if (decision != null && decision.deviceBlocked.blocked) {
           return _DeviceDisabledScreen(uid: decision.deviceBlocked.uid);
         }
+        final service = _deviceControlService;
+        if (service == null) {
+          return const _SplashScreen();
+        }
         return ValueListenableBuilder<bool>(
-          valueListenable: _deviceControlService.blockedListenable,
+          valueListenable: service.blockedListenable,
           builder: (context, blocked, _) {
             if (blocked) {
               return _DeviceDisabledScreen(
-                uid: _deviceControlService.uid ?? '',
+                uid: service.uid ?? '',
               );
             }
             return _app ??= _buildApp();
