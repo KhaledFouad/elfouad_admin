@@ -123,7 +123,7 @@ Future<void> backfillDailyArchiveForMonth({
   final rawExpenses = await fetchStatsExpenses(
     startUtc: range.startUtc,
     endUtc: range.endUtc,
-    cacheFirst: true,
+    cacheFirst: false,
   );
   final expenses = filterStatsExpenses(
     rawExpenses,
@@ -241,7 +241,7 @@ Future<void> _syncOneDay(FirebaseFirestore db, DateTime dayStartLocal) async {
   final rawExpenses = await fetchStatsExpenses(
     startUtc: startUtc,
     endUtc: endUtc,
-    cacheFirst: true,
+    cacheFirst: false,
   );
   final expenses = filterStatsExpenses(
     rawExpenses,
@@ -351,7 +351,7 @@ Future<Map<String, Map<String, dynamic>>> _fetchArchiveSalesForMonth(
   }
 
   if (includeLiveSales) {
-    final liveRaw = await fetchSalesRawForMonth(month, cacheFirst: true);
+    final liveRaw = await fetchSalesRawForMonth(month, cacheFirst: false);
     for (final sale in liveRaw) {
       final id = _pickSaleId(sale, fallback: (sale['id'] ?? '').toString());
       if (id.isEmpty) continue;
@@ -680,10 +680,13 @@ Future<QuerySnapshot<Map<String, dynamic>>> _getQuerySnapshot(
   Query<Map<String, dynamic>> query,
 ) async {
   try {
-    final cached = await query.get(const GetOptions(source: Source.cache));
-    if (cached.docs.isNotEmpty) return cached;
+    // Daily archive writes must prefer fresh server reads.
+    return await query.get(const GetOptions(source: Source.server));
   } catch (_) {}
-  return query.get();
+  try {
+    return await query.get(const GetOptions(source: Source.cache));
+  } catch (_) {}
+  return query.get(const GetOptions(source: Source.serverAndCache));
 }
 
 DateTime? _parseDayKey(String? value) {

@@ -65,10 +65,52 @@ function toCount(value) {
   return 0;
 }
 
+function inRangeMs(tsMs, startMs, endMs) {
+  return tsMs != null && tsMs >= startMs && tsMs < endMs;
+}
+
+function paymentEventsList(sale) {
+  if (!Array.isArray(sale.payment_events)) return [];
+  return sale.payment_events.filter((event) => event && typeof event === 'object');
+}
+
+function deferredPaidAmountInRange(sale, startMs, endMs) {
+  const events = paymentEventsList(sale);
+  if (events.length > 0) {
+    let sum = 0;
+    for (const event of events) {
+      const amount = num(event.amount);
+      if (amount <= 0) continue;
+      const atMs = toMillis(event.at ?? event.paid_at ?? event.created_at);
+      if (inRangeMs(atMs, startMs, endMs)) {
+        sum += amount;
+      }
+    }
+    return sum;
+  }
+
+  const fallbackAmount = num(sale.last_payment_amount);
+  if (fallbackAmount <= 0) return 0;
+  const fallbackAtMs = toMillis(sale.last_payment_at);
+  return inRangeMs(fallbackAtMs, startMs, endMs) ? fallbackAmount : 0;
+}
+
+function hasDeferredPaymentTracking(sale) {
+  if (sale.is_deferred !== true) return false;
+  if (paymentEventsList(sale).length > 0) return true;
+  return num(sale.last_payment_amount) > 0 && toMillis(sale.last_payment_at) != null;
+}
+
 async function fetchSalesForRange(startUtc, endUtc) {
   const start = admin.firestore.Timestamp.fromDate(startUtc.toJSDate());
   const end = admin.firestore.Timestamp.fromDate(endUtc.toJSDate());
-  const fields = ['created_at', 'original_created_at', 'settled_at', 'updated_at'];
+  const fields = [
+    'created_at',
+    'original_created_at',
+    'settled_at',
+    'updated_at',
+    'last_payment_at',
+  ];
   const combined = new Map();
   const collections = ['sales', 'deferred_sales'];
   for (const coll of collections) {
@@ -134,9 +176,12 @@ async function computeKpisForDay(dayStartLocal) {
     const createdMs = toMillis(sale.created_at);
     const settledMs = toMillis(sale.settled_at);
     const updatedMs = toMillis(sale.updated_at);
+    const lastPaymentMs = toMillis(sale.last_payment_at);
 
     let financialMs = createdMs ?? productionMs;
-    if (paid) {
+    if (isDeferred && lastPaymentMs != null) {
+      financialMs = lastPaymentMs;
+    } else if (paid) {
       if (settledMs != null) {
         financialMs = settledMs;
       } else if (updatedMs != null) {
@@ -144,10 +189,21 @@ async function computeKpisForDay(dayStartLocal) {
       }
     }
 
-    const prodInRange = productionMs >= startMs && productionMs < endMs;
-    const finInRange = financialMs >= startMs && financialMs < endMs;
+    const prodInRange = inRangeMs(productionMs, startMs, endMs);
+    const finInRange = inRangeMs(financialMs, startMs, endMs);
 
-    if (finInRange && (!isDeferred || paid)) {
+    let moneyFactor = 0;
+    if (isDeferred && hasDeferredPaymentTracking(sale)) {
+      const paidAmount = deferredPaidAmountInRange(sale, startMs, endMs);
+      const basePrice = num(sale.parent_total_price) || num(sale.total_price);
+      if (paidAmount > 0 && basePrice > 0) {
+        moneyFactor = Math.max(0, Math.min(1, paidAmount / basePrice));
+      }
+    } else {
+      moneyFactor = finInRange && (!isDeferred || paid) ? 1 : 0;
+    }
+
+    if (moneyFactor > 0) {
       const isComplimentary = sale.is_complimentary === true;
       const totalPrice = isComplimentary ? 0 : num(sale.total_price);
       const totalCost = num(sale.total_cost);
@@ -155,12 +211,13 @@ async function computeKpisForDay(dayStartLocal) {
       if (profitTotal === 0 && (totalPrice !== 0 || totalCost !== 0)) {
         profitTotal = totalPrice - totalCost;
       }
-      sales += totalPrice;
-      cost += totalCost;
-      profit += profitTotal;
+      sales += totalPrice * moneyFactor;
+      cost += totalCost * moneyFactor;
+      profit += profitTotal * moneyFactor;
     }
 
-    if (prodInRange) {
+    const includeProduction = prodInRange && !(isDeferred && !paid);
+    if (includeProduction) {
       const type = (sale.type ?? '').toString();
       if (type === 'drink') {
         const qty = num(sale.quantity);
@@ -217,9 +274,12 @@ async function writeDailyArchive(dayStartLocal) {
       cost: kpis.cost,
       profit: kpis.profit,
       grams: kpis.grams,
+      cups: kpis.drinks,
+      units: kpis.snacks,
       drinks: kpis.drinks,
       snacks: kpis.snacks,
       expenses: kpis.expenses,
+      updated_at: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     },
     { merge: true },

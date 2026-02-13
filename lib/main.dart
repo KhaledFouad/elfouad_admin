@@ -11,7 +11,7 @@ import 'package:elfouad_admin/services/archive/auto_archiver.dart'
         runAutoArchiveIfNeeded,
         runDailyArchiveForClosedDayIfNeeded;
 import 'package:elfouad_admin/services/archive/daily_archive_stats.dart'
-    show backfillDailyArchiveForMonth;
+    show backfillDailyArchiveForMonth, syncDailyArchiveForDay;
 import 'package:elfouad_admin/services/archive/monthly_archive_stats.dart'
     show syncMonthlyArchiveForMonth;
 import 'package:elfouad_admin/services/sales/deferred_sales_migration.dart'
@@ -39,6 +39,8 @@ const _maintenanceLastClosedMonthKey = 'maintenance_last_closed_month_key';
 const _maintenanceDailySchemaVersionKey = 'maintenance_daily_schema_version';
 const _maintenanceRepair20260211DecemberMissingDoneKey =
     'maintenance_repair_2026_02_11_december_missing_v2_done';
+const _maintenanceRepair20260211DailyStatsDoneKey =
+    'maintenance_repair_2026_02_13_daily_2026_02_11_v1_done';
 
 const _dailyArchiveSchemaVersion = 10;
 
@@ -50,12 +52,23 @@ Future<void> _initFirebase() async {
   await configureFirestore();
 }
 
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  _firebaseInit = _initFirebase();
+  runApp(MyApp(initFuture: _firebaseInit));
+}
+
 Future<void> _scheduleMaintenance() async {
   await Future<void>.delayed(const Duration(seconds: 8));
   unawaited(migrateDeferredSalesIfNeeded());
 
   final prefs = await SharedPreferences.getInstance();
   final now = DateTime.now();
+  await _ensureFebruary11DailyArchiveRebuildIfNeeded(
+    prefs: prefs,
+    nowLocal: now,
+  );
+
   final currentOpStart = DateTime(now.year, now.month, now.day, kOpShiftHours);
   final effectiveOpStart = now.isBefore(currentOpStart)
       ? currentOpStart.subtract(const Duration(days: 1))
@@ -164,13 +177,28 @@ Future<void> _backfillDecemberMissingDays(DateTime nowLocal) async {
   await syncMonthlyArchiveForMonth(month: december, force: true);
 }
 
-late final Future<void> _firebaseInit;
+Future<void> _ensureFebruary11DailyArchiveRebuildIfNeeded({
+  required SharedPreferences prefs,
+  required DateTime nowLocal,
+}) async {
+  final alreadyDone =
+      prefs.getBool(_maintenanceRepair20260211DailyStatsDoneKey) ?? false;
+  if (alreadyDone) return;
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  _firebaseInit = _initFirebase();
-  runApp(MyApp(initFuture: _firebaseInit));
+  final targetDayStart = DateTime(2026, 2, 11, kOpShiftHours);
+  final closedAt = targetDayStart.add(const Duration(days: 1));
+  if (nowLocal.isBefore(closedAt)) return;
+
+  try {
+    await syncDailyArchiveForDay(dayLocal: targetDayStart);
+    await syncMonthlyArchiveForMonth(month: DateTime(2026, 2, 1), force: true);
+    await prefs.setBool(_maintenanceRepair20260211DailyStatsDoneKey, true);
+  } catch (_) {
+    // Will retry next launch.
+  }
 }
+
+late final Future<void> _firebaseInit;
 
 ThemeData _lightTheme() {
   final primary = const Color(_primaryHex);
