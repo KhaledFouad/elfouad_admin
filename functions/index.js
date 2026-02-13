@@ -287,13 +287,11 @@ async function writeDailyArchive(dayStartLocal) {
 }
 
 exports.syncDailyArchiveKpis = functions.pubsub
-  .schedule('every 15 minutes')
+  .schedule('0 4 * * *')
   .timeZone(TZ)
   .onRun(async () => {
     const nowLocal = DateTime.now().setZone(TZ);
-    const todayStart = opStartLocal(nowLocal);
-    const yesterdayStart = todayStart.minus({ days: 1 });
+    const closedDayStart = opStartLocal(nowLocal).minus({ days: 1 });
 
-    await writeDailyArchive(todayStart);
-    await writeDailyArchive(yesterdayStart);
+    await writeDailyArchive(closedDayStart);
   });
