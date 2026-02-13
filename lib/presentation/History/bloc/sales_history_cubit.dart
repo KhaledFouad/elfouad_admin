@@ -588,6 +588,10 @@ class SalesHistoryCubit extends Cubit<SalesHistoryState> {
 
       final rawEvents = record.data['payment_events'];
       if (rawEvents is List && rawEvents.isNotEmpty) {
+        final settledEventIndex = _resolveSettledEventIndex(
+          record: record,
+          rawEvents: rawEvents,
+        );
         for (var index = 0; index < rawEvents.length; index++) {
           final entry = rawEvents[index];
           if (entry is! Map) continue;
@@ -595,6 +599,11 @@ class SalesHistoryCubit extends Cubit<SalesHistoryState> {
           final amount = parseDouble(map['amount']);
           final at = parseOptionalDate(map['at']);
           if (amount <= 0 || at == null) continue;
+          if (settledEventIndex != null && settledEventIndex == index) {
+            // The closing payment is rendered as a settled sale tile, not as a
+            // partial-payment tile.
+            continue;
+          }
           if (!inRange(at)) continue;
 
           final eventId = (map['id'] ?? '').toString().trim();
@@ -615,6 +624,9 @@ class SalesHistoryCubit extends Cubit<SalesHistoryState> {
 
       final fallbackAmount = parseDouble(record.data['last_payment_amount']);
       final fallbackAt = parseOptionalDate(record.data['last_payment_at']);
+      if (record.isPaid) {
+        continue;
+      }
       if (fallbackAmount > 0 && fallbackAt != null && inRange(fallbackAt)) {
         out.add(
           HistoryPartialPayment(
@@ -631,6 +643,54 @@ class SalesHistoryCubit extends Cubit<SalesHistoryState> {
     }
 
     return out;
+  }
+
+  int? _resolveSettledEventIndex({
+    required SaleRecord record,
+    required List<dynamic> rawEvents,
+  }) {
+    if (!record.isPaid) {
+      return null;
+    }
+
+    final parsed = <_PaymentEventCandidate>[];
+    for (var index = 0; index < rawEvents.length; index++) {
+      final entry = rawEvents[index];
+      if (entry is! Map) continue;
+      final map = entry.cast<String, dynamic>();
+      final amount = parseDouble(map['amount']);
+      final at = parseOptionalDate(map['at']);
+      if (amount <= 0 || at == null) continue;
+      parsed.add(
+        _PaymentEventCandidate(rawIndex: index, amount: amount, at: at),
+      );
+    }
+
+    if (parsed.isEmpty) {
+      return null;
+    }
+
+    parsed.sort((a, b) {
+      final byTime = a.at.compareTo(b.at);
+      if (byTime != 0) return byTime;
+      return a.rawIndex.compareTo(b.rawIndex);
+    });
+
+    final target = record.totalPrice;
+    if (target <= 0) {
+      return parsed.last.rawIndex;
+    }
+
+    const epsilon = 0.000001;
+    var paidSoFar = 0.0;
+    for (final event in parsed) {
+      paidSoFar += event.amount;
+      if (paidSoFar >= target - epsilon) {
+        return event.rawIndex;
+      }
+    }
+
+    return parsed.last.rawIndex;
   }
 
   List<CreditCustomerAccount> _buildCreditAccounts(List<SaleRecord> records) {
@@ -818,4 +878,16 @@ class SalesHistoryCubit extends Cubit<SalesHistoryState> {
     _creditCountSub?.cancel();
     return super.close();
   }
+}
+
+class _PaymentEventCandidate {
+  const _PaymentEventCandidate({
+    required this.rawIndex,
+    required this.amount,
+    required this.at,
+  });
+
+  final int rawIndex;
+  final double amount;
+  final DateTime at;
 }

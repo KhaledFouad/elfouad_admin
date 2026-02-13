@@ -65,7 +65,7 @@ class ArchiveMonthsCubit extends Cubit<ArchiveMonthsState> {
       cached: cached,
       lastUpdated: lastUpdated,
     );
-    final hasGaps = await _hasKnownClosedMonthGaps(cached, cacheFirst: true);
+    final hasGaps = await _hasKnownClosedMonthGaps(cached, cacheFirst: false);
     if (!staleOrMissingLatest && !hasGaps) return;
     await _fetchRemote(cached: cached, force: false);
   }
@@ -119,16 +119,16 @@ class ArchiveMonthsCubit extends Cubit<ArchiveMonthsState> {
             );
         final hasGaps = await _hasKnownClosedMonthGaps(
           cached,
-          cacheFirst: true,
+          cacheFirst: false,
         );
 
         if (!cacheHasLatestClosed || hasGaps) {
-          months = await _fetchAllClosedMonthsFromDaily(cacheFirst: true);
+          months = await _fetchAllClosedMonthsFromDaily(cacheFirst: false);
         } else {
-          months = await _refreshRecentClosedMonths(cached, cacheFirst: true);
+          months = await _refreshRecentClosedMonths(cached, cacheFirst: false);
         }
       } else {
-        months = await _fetchAllClosedMonthsFromDaily(cacheFirst: !force);
+        months = await _fetchAllClosedMonthsFromDaily(cacheFirst: false);
       }
 
       if (months.isNotEmpty) {

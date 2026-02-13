@@ -7,8 +7,8 @@ import 'package:elfouad_admin/services/auth/auth_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:elfouad_admin/services/archive/auto_archiver.dart'
     show
+        DailyArchiveRunResult,
         runAutoArchiveIfNeeded,
-        isCurrentDeviceAutoArchiveOwner,
         runDailyArchiveForClosedDayIfNeeded;
 import 'package:elfouad_admin/services/archive/daily_archive_stats.dart'
     show backfillDailyArchiveForMonth;
@@ -70,35 +70,20 @@ Future<void> _scheduleMaintenance() async {
       storedSchemaVersion < _dailyArchiveSchemaVersion;
   if (!shouldRunDailyMaintenance) return;
 
-  bool isOwner = false;
-  if (kReleaseMode) {
-    try {
-      isOwner = await isCurrentDeviceAutoArchiveOwner(prefs: prefs);
-    } catch (_) {
-      isOwner = false;
-    }
-  }
-
   await _ensureDecemberArchiveDailyCompleteIfNeeded(
     prefs: prefs,
     nowLocal: now,
   );
 
-  if (kReleaseMode && !isOwner) {
-    await prefs.setString(_maintenanceLastClosedDayKey, closedDayKey);
-    await prefs.setInt(
-      _maintenanceDailySchemaVersionKey,
-      _dailyArchiveSchemaVersion,
-    );
-    return;
-  }
-
   try {
-    await runDailyArchiveForClosedDayIfNeeded(
+    final dailyResult = await runDailyArchiveForClosedDayIfNeeded(
       closedDayStartLocal: closedDayStart,
       prefs: prefs,
     );
-    await prefs.setString(_maintenanceLastClosedDayKey, closedDayKey);
+    if (dailyResult == DailyArchiveRunResult.synced ||
+        dailyResult == DailyArchiveRunResult.alreadySynced) {
+      await prefs.setString(_maintenanceLastClosedDayKey, closedDayKey);
+    }
   } catch (_) {}
 
   await _syncClosedMonthArchiveIfNeeded(prefs: prefs, nowLocal: now);
@@ -462,9 +447,7 @@ class _BootstrapGateState extends State<_BootstrapGate> {
           valueListenable: service.blockedListenable,
           builder: (context, blocked, _) {
             if (blocked) {
-              return _DeviceDisabledScreen(
-                uid: service.uid ?? '',
-              );
+              return _DeviceDisabledScreen(uid: service.uid ?? '');
             }
             return _app ??= _buildApp();
           },

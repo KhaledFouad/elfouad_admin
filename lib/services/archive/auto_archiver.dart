@@ -20,21 +20,19 @@ const String _dailyArchiveRunningField = 'daily_archive_running';
 const String _dailyArchiveRunningUntilField = 'daily_archive_running_until';
 const String _dailyArchiveLastDayKeyField = 'daily_archive_last_day_key';
 
+enum DailyArchiveRunResult { synced, alreadySynced, skippedLocked }
+
+enum _DailyArchiveLockResult { acquired, alreadySynced, lockedByAnotherDevice }
+
 /// Runs daily archive for a specific already-closed operational day (4AM-based),
-/// exactly once globally across devices, and only from owner device.
-Future<bool> runDailyArchiveForClosedDayIfNeeded({
+/// exactly once globally across devices.
+Future<DailyArchiveRunResult> runDailyArchiveForClosedDayIfNeeded({
   required DateTime closedDayStartLocal,
   FirebaseFirestore? firestore,
   SharedPreferences? prefs,
 }) async {
   final db = firestore ?? FirebaseFirestore.instance;
   final localPrefs = prefs ?? await SharedPreferences.getInstance();
-
-  final isOwner = await isCurrentDeviceAutoArchiveOwner(
-    firestore: db,
-    prefs: localPrefs,
-  );
-  if (!isOwner) return false;
 
   final dayKey = opDayKeyFromLocal(closedDayStartLocal);
   final deviceId = await getOrCreateAutoArchiveDeviceId(prefs: localPrefs);
@@ -44,20 +42,17 @@ Future<bool> runDailyArchiveForClosedDayIfNeeded({
       .collection(_autoArchiveMetaCollection)
       .doc(_autoArchiveMetaDocId);
 
-  final lockOk = await db.runTransaction((tx) async {
+  final lockResult = await db.runTransaction<_DailyArchiveLockResult>((
+    tx,
+  ) async {
     final snap = await tx.get(metaRef);
     final data = snap.data();
-
-    final ownerId = (data?[_autoArchiveOwnerField] ?? '').toString().trim();
-    if (ownerId.isNotEmpty && ownerId != deviceId) {
-      return false;
-    }
 
     final lastDay = (data?[_dailyArchiveLastDayKeyField] ?? '')
         .toString()
         .trim();
     if (lastDay == dayKey) {
-      return false;
+      return _DailyArchiveLockResult.alreadySynced;
     }
 
     final running = data?[_dailyArchiveRunningField] == true;
@@ -65,21 +60,25 @@ Future<bool> runDailyArchiveForClosedDayIfNeeded({
     if (running &&
         runningUntil is Timestamp &&
         runningUntil.toDate().isAfter(now)) {
-      return false;
+      return _DailyArchiveLockResult.lockedByAnotherDevice;
     }
 
     tx.set(metaRef, {
-      if (ownerId.isEmpty) _autoArchiveOwnerField: deviceId,
-      if (ownerId.isEmpty) 'owner_claimed_at': FieldValue.serverTimestamp(),
       _dailyArchiveRunningField: true,
       _dailyArchiveRunningUntilField: Timestamp.fromDate(lockUntil),
       'daily_archive_running_by': deviceId,
       'daily_archive_target_day': dayKey,
+      'daily_archive_attempted_at': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
-    return true;
+    return _DailyArchiveLockResult.acquired;
   });
 
-  if (!lockOk) return false;
+  if (lockResult == _DailyArchiveLockResult.alreadySynced) {
+    return DailyArchiveRunResult.alreadySynced;
+  }
+  if (lockResult == _DailyArchiveLockResult.lockedByAnotherDevice) {
+    return DailyArchiveRunResult.skippedLocked;
+  }
 
   try {
     await syncDailyArchiveForDay(firestore: db, dayLocal: closedDayStartLocal);
@@ -87,14 +86,21 @@ Future<bool> runDailyArchiveForClosedDayIfNeeded({
     await metaRef.set({
       _dailyArchiveLastDayKeyField: dayKey,
       'daily_archive_last_synced_at': FieldValue.serverTimestamp(),
+      'daily_archive_last_synced_by': deviceId,
+      'daily_archive_last_status': 'success',
       _dailyArchiveRunningField: false,
       _dailyArchiveRunningUntilField: FieldValue.delete(),
       'daily_archive_running_by': FieldValue.delete(),
       'daily_archive_target_day': FieldValue.delete(),
     }, SetOptions(merge: true));
-    return true;
-  } catch (_) {
+    return DailyArchiveRunResult.synced;
+  } catch (e) {
     await metaRef.set({
+      'daily_archive_last_failed_at': FieldValue.serverTimestamp(),
+      'daily_archive_last_failed_day': dayKey,
+      'daily_archive_last_failed_by': deviceId,
+      'daily_archive_last_status': 'failed',
+      'daily_archive_last_error': e.toString(),
       _dailyArchiveRunningField: false,
       _dailyArchiveRunningUntilField: FieldValue.delete(),
       'daily_archive_running_by': FieldValue.delete(),
