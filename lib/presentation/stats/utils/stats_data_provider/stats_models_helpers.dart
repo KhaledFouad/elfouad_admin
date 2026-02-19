@@ -18,6 +18,18 @@ bool _readBool(dynamic v) {
   return false;
 }
 
+bool _boolish(dynamic v, {required bool fallback}) {
+  if (v == null) return fallback;
+  if (v is bool) return v;
+  if (v is num) return v != 0;
+  if (v is String) {
+    final raw = v.trim().toLowerCase();
+    if (raw == 'true' || raw == '1') return true;
+    if (raw == 'false' || raw == '0') return false;
+  }
+  return fallback;
+}
+
 Map<String, dynamic> _metaOf(Map<String, dynamic> m) {
   final v = m['meta'];
   if (v is Map) return v.cast<String, dynamic>();
@@ -309,6 +321,21 @@ Map<String, dynamic> _applyTotalsFallback(
   return out;
 }
 
+const List<String> _parentFinancialKeys = [
+  'is_deferred',
+  'is_credit',
+  'paid',
+  'due_amount',
+  'payment_events',
+  'last_payment_amount',
+  'last_payment_at',
+  'settled_at',
+  'updated_at',
+  'created_at',
+  'original_created_at',
+  'is_complimentary',
+];
+
 List<Map<String, dynamic>> _expandCartSales(List<Map<String, dynamic>> data) {
   final out = <Map<String, dynamic>>[];
   for (final m in data) {
@@ -351,6 +378,11 @@ List<Map<String, dynamic>> _expandCartSales(List<Map<String, dynamic>> data) {
       );
       final merged = Map<String, dynamic>.from(fixed);
       merged.addAll(line);
+      for (final key in _parentFinancialKeys) {
+        if (fixed.containsKey(key)) {
+          merged[key] = fixed[key];
+        }
+      }
       merged['is_spiced'] = _isSpicedFrom(merged);
       merged['type'] = lineType;
       if (saleId.isNotEmpty) merged['sale_id'] = saleId;
@@ -425,8 +457,8 @@ DateTime _financialUtc(Map<String, dynamic> m) {
   final lastPaymentRaw = m['last_payment_at'];
   final lastPayment = lastPaymentRaw == null ? null : _asUtc(lastPaymentRaw);
 
-  final isDeferred = (m['is_deferred'] ?? false) == true;
-  final paid = (m['paid'] ?? (!isDeferred)) == true;
+  final isDeferred = _boolish(m['is_deferred'], fallback: false);
+  final paid = _boolish(m['paid'], fallback: !isDeferred);
 
   if (isDeferred &&
       lastPayment != null &&
@@ -510,7 +542,7 @@ double _deferredPaidAmountInRange(
 }
 
 bool _hasDeferredPaymentTracking(Map<String, dynamic> m) {
-  if ((m['is_deferred'] ?? false) != true) return false;
+  if (!_boolish(m['is_deferred'], fallback: false)) return false;
   if (_paymentEvents(m).isNotEmpty) return true;
   if (_d(m['last_payment_amount']) <= 0) return false;
   return m['last_payment_at'] != null;
@@ -527,8 +559,8 @@ double _financialFactorForRange(
   DateTime startUtc,
   DateTime endUtc,
 ) {
-  final isDeferred = (m['is_deferred'] ?? false) == true;
-  final paid = (m['paid'] ?? (!isDeferred)) == true;
+  final isDeferred = _boolish(m['is_deferred'], fallback: false);
+  final paid = _boolish(m['paid'], fallback: !isDeferred);
 
   if (isDeferred && _hasDeferredPaymentTracking(m)) {
     final paidAmount = _deferredPaidAmountInRange(m, startUtc, endUtc);
@@ -545,8 +577,8 @@ double _financialFactorForRange(
 }
 
 bool _isUnpaidDeferred(Map<String, dynamic> m) {
-  final isDeferred = (m['is_deferred'] ?? false) == true;
-  final paid = (m['paid'] ?? (!isDeferred)) == true;
+  final isDeferred = _boolish(m['is_deferred'], fallback: false);
+  final paid = _boolish(m['paid'], fallback: !isDeferred);
   return isDeferred && !paid;
 }
 

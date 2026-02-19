@@ -68,7 +68,13 @@ class StatsCubit extends Cubit<StatsState> {
       if (!force && _monthCache.containsKey(key)) {
         days = _monthCache[key] ?? const [];
       } else {
-        days = await _fetchArchiveDailyForMonth(month, cacheFirst: !force);
+        final nowMonth = defaultStatsMonth();
+        final isCurrentMonth =
+            month.year == nowMonth.year && month.month == nowMonth.month;
+        days = await _fetchArchiveDailyForMonth(
+          month,
+          cacheFirst: !force && !isCurrentMonth,
+        );
         _monthCache[key] = days;
       }
 

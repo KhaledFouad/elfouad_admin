@@ -2,12 +2,13 @@ import 'dart:async' show unawaited;
 import 'package:elfouad_admin/core/utils/firestore_tuning.dart';
 import 'package:elfouad_admin/presentation/auth/lock_gate_page.dart';
 import 'package:elfouad_admin/presentation/stats/utils/op_day.dart'
-    show opDayKeyFromLocal, kOpShiftHours;
+    show opDayKeyFromLocal, opStartLocal, kOpShiftHours;
 import 'package:elfouad_admin/services/auth/auth_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:elfouad_admin/services/archive/auto_archiver.dart'
     show
         DailyArchiveRunResult,
+        kEnableSalesAutoArchiver,
         runAutoArchiveIfNeeded,
         runDailyArchiveForClosedDayIfNeeded;
 import 'package:elfouad_admin/services/archive/daily_archive_stats.dart'
@@ -36,11 +37,17 @@ const _accentHex = 0xFFC49A6C;
 const _maintenanceLastClosedDayKey = 'maintenance_last_closed_day_key';
 const _maintenanceLastArchiveMonthKey = 'maintenance_last_archive_month_key';
 const _maintenanceLastClosedMonthKey = 'maintenance_last_closed_month_key';
+const _maintenanceLastOpenMonthRefreshDayKey =
+    'maintenance_last_open_month_refresh_day_key';
 const _maintenanceDailySchemaVersionKey = 'maintenance_daily_schema_version';
 const _maintenanceRepair20260211DecemberMissingDoneKey =
     'maintenance_repair_2026_02_11_december_missing_v2_done';
 const _maintenanceRepair20260211DailyStatsDoneKey =
     'maintenance_repair_2026_02_13_daily_2026_02_11_v1_done';
+const _maintenanceRepair20260210SalesRestoreDoneKey =
+    'maintenance_repair_2026_02_19_restore_sales_2026_02_10_v1_done';
+const _maintenanceRepair20260219DeferredStatsRebuildDoneKey =
+    'maintenance_repair_2026_02_19_daily_stats_deferred_fix_v4_done';
 
 const _dailyArchiveSchemaVersion = 10;
 
@@ -64,10 +71,19 @@ Future<void> _scheduleMaintenance() async {
 
   final prefs = await SharedPreferences.getInstance();
   final now = DateTime.now();
+  await _restoreFebruary10AccidentallyArchivedSalesIfNeeded(
+    prefs: prefs,
+    nowLocal: now,
+  );
   await _ensureFebruary11DailyArchiveRebuildIfNeeded(
     prefs: prefs,
     nowLocal: now,
   );
+  await _rebuildFebruary2026ArchiveDailyForDeferredFixIfNeeded(
+    prefs: prefs,
+    nowLocal: now,
+  );
+  await _refreshOpenMonthDailyArchiveIfNeeded(prefs: prefs, nowLocal: now);
 
   final currentOpStart = DateTime(now.year, now.month, now.day, kOpShiftHours);
   final effectiveOpStart = now.isBefore(currentOpStart)
@@ -106,7 +122,7 @@ Future<void> _scheduleMaintenance() async {
     _dailyArchiveSchemaVersion,
   );
 
-  if (!kReleaseMode) {
+  if (!kReleaseMode || !kEnableSalesAutoArchiver) {
     return;
   }
 
@@ -196,6 +212,261 @@ Future<void> _ensureFebruary11DailyArchiveRebuildIfNeeded({
   } catch (_) {
     // Will retry next launch.
   }
+}
+
+Future<void> _restoreFebruary10AccidentallyArchivedSalesIfNeeded({
+  required SharedPreferences prefs,
+  required DateTime nowLocal,
+}) async {
+  final alreadyDone =
+      prefs.getBool(_maintenanceRepair20260210SalesRestoreDoneKey) ?? false;
+  if (alreadyDone) return;
+
+  final targetDayStart = DateTime(2026, 2, 10, kOpShiftHours);
+  final closedAt = targetDayStart.add(const Duration(days: 1));
+  if (nowLocal.isBefore(closedAt)) return;
+
+  final db = FirebaseFirestore.instance;
+  final targetDayKey = opDayKeyFromLocal(targetDayStart);
+  int restored = 0;
+
+  try {
+    restored += await _restoreSalesFromArchiveBinForDay(
+      db: db,
+      dayKey: targetDayKey,
+    );
+    if (restored == 0) {
+      restored += await _restoreSalesFromArchiveMonthForDay(
+        db: db,
+        dayStartLocal: targetDayStart,
+      );
+    }
+
+    if (restored > 0) {
+      await syncDailyArchiveForDay(dayLocal: targetDayStart);
+      await syncMonthlyArchiveForMonth(
+        month: DateTime(2026, 2, 1),
+        force: true,
+      );
+    }
+
+    await prefs.setBool(_maintenanceRepair20260210SalesRestoreDoneKey, true);
+  } catch (_) {
+    // Will retry next launch.
+  }
+}
+
+Future<void> _rebuildFebruary2026ArchiveDailyForDeferredFixIfNeeded({
+  required SharedPreferences prefs,
+  required DateTime nowLocal,
+}) async {
+  final alreadyDone =
+      prefs.getBool(_maintenanceRepair20260219DeferredStatsRebuildDoneKey) ??
+      false;
+  if (alreadyDone) return;
+
+  final targetMonth = DateTime(2026, 2, 1);
+  final targetMonthStart = DateTime(2026, 2, 1, kOpShiftHours);
+  if (nowLocal.isBefore(targetMonthStart)) return;
+
+  try {
+    await backfillDailyArchiveForMonth(
+      month: targetMonth,
+      includeLiveSales: true,
+      refreshExisting: true,
+      writeEmptyDays: true,
+    );
+    await syncMonthlyArchiveForMonth(month: targetMonth, force: true);
+    await prefs.setBool(
+      _maintenanceRepair20260219DeferredStatsRebuildDoneKey,
+      true,
+    );
+  } catch (_) {
+    // Will retry next launch.
+  }
+}
+
+Future<void> _refreshOpenMonthDailyArchiveIfNeeded({
+  required SharedPreferences prefs,
+  required DateTime nowLocal,
+}) async {
+  final todayOpStart = opStartLocal(nowLocal);
+  final todayKey = opDayKeyFromLocal(todayOpStart);
+  final openMonth = _effectiveMaintenanceMonth(nowLocal);
+  final lastRunDay = prefs.getString(_maintenanceLastOpenMonthRefreshDayKey);
+  final forceBecauseMissing = await _isOpenMonthArchiveDailyIncomplete(
+    month: openMonth,
+    todayOpStartLocal: todayOpStart,
+  );
+  if (lastRunDay == todayKey && !forceBecauseMissing) return;
+
+  try {
+    await backfillDailyArchiveForMonth(
+      month: openMonth,
+      includeLiveSales: true,
+      refreshExisting: true,
+      writeEmptyDays: true,
+    );
+    await syncMonthlyArchiveForMonth(month: openMonth, force: true);
+    await prefs.setString(_maintenanceLastOpenMonthRefreshDayKey, todayKey);
+  } catch (_) {
+    // Will retry next launch.
+  }
+}
+
+Future<bool> _isOpenMonthArchiveDailyIncomplete({
+  required DateTime month,
+  required DateTime todayOpStartLocal,
+}) async {
+  final year = month.year.toString();
+  final monthKey = month.month.toString().padLeft(2, '0');
+  final todayKey = opDayKeyFromLocal(todayOpStartLocal);
+
+  try {
+    final snap = await FirebaseFirestore.instance
+        .collection('archive_daily')
+        .doc(year)
+        .collection(monthKey)
+        .get();
+
+    if (snap.docs.isEmpty) return true;
+
+    final availableKeys = snap.docs
+        .map((d) => d.id)
+        .where((k) => k.compareTo(todayKey) <= 0)
+        .toSet();
+    if (!availableKeys.contains(todayKey)) return true;
+
+    final expectedDaysSoFar = todayOpStartLocal.day;
+    if (availableKeys.length < expectedDaysSoFar) return true;
+
+    return false;
+  } catch (_) {
+    // If we cannot verify completeness, prefer refreshing.
+    return true;
+  }
+}
+
+Future<int> _restoreSalesFromArchiveBinForDay({
+  required FirebaseFirestore db,
+  required String dayKey,
+}) async {
+  int restored = 0;
+  DocumentSnapshot<Map<String, dynamic>>? last;
+
+  while (true) {
+    Query<Map<String, dynamic>> query = db
+        .collection('archive_bin')
+        .where('day_key', isEqualTo: dayKey)
+        .limit(250);
+    if (last != null) {
+      query = query.startAfterDocument(last);
+    }
+
+    final snap = await query.get();
+    if (snap.docs.isEmpty) break;
+
+    WriteBatch batch = db.batch();
+    int ops = 0;
+
+    for (final doc in snap.docs) {
+      final entry = doc.data();
+      if ((entry['kind'] ?? '').toString() != 'sale') continue;
+      if ((entry['reason'] ?? '').toString() != 'auto_archive_old_sales') {
+        continue;
+      }
+
+      final originalPath = (entry['original_path'] ?? '').toString().trim();
+      final raw = entry['data'];
+      if (originalPath.isEmpty || raw is! Map) continue;
+
+      final payload = Map<String, dynamic>.from(raw.cast<String, dynamic>());
+      batch.set(db.doc(originalPath), payload, SetOptions(merge: true));
+      batch.delete(doc.reference);
+      ops += 2;
+      restored += 1;
+
+      if (ops >= 440) {
+        await batch.commit();
+        batch = db.batch();
+        ops = 0;
+      }
+    }
+
+    if (ops > 0) {
+      await batch.commit();
+    }
+
+    last = snap.docs.last;
+  }
+
+  return restored;
+}
+
+Future<int> _restoreSalesFromArchiveMonthForDay({
+  required FirebaseFirestore db,
+  required DateTime dayStartLocal,
+}) async {
+  final year = dayStartLocal.year.toString();
+  final monthKey = dayStartLocal.month.toString().padLeft(2, '0');
+  final dayKey = opDayKeyFromLocal(dayStartLocal);
+
+  final snap = await db
+      .collection('archive')
+      .doc(year)
+      .collection(monthKey)
+      .get();
+  if (snap.docs.isEmpty) return 0;
+
+  WriteBatch batch = db.batch();
+  int ops = 0;
+  int restored = 0;
+
+  for (final doc in snap.docs) {
+    final data = doc.data();
+    final createdAt = _restoreParseDate(
+      data['original_created_at'] ?? data['created_at'],
+    );
+    if (createdAt == null) continue;
+    if (opDayKeyFromLocal(createdAt.toLocal()) != dayKey) continue;
+
+    final rawId = (data['id'] ?? data['sale_id'] ?? doc.id).toString().trim();
+    if (rawId.isEmpty) continue;
+
+    batch.set(
+      db.collection('sales').doc(rawId),
+      Map<String, dynamic>.from(data),
+      SetOptions(merge: true),
+    );
+    ops += 1;
+    restored += 1;
+
+    if (ops >= 440) {
+      await batch.commit();
+      batch = db.batch();
+      ops = 0;
+    }
+  }
+
+  if (ops > 0) {
+    await batch.commit();
+  }
+
+  return restored;
+}
+
+DateTime? _restoreParseDate(dynamic value) {
+  if (value is Timestamp) return value.toDate();
+  if (value is DateTime) return value;
+  if (value is num) {
+    final raw = value.toInt();
+    final ms = raw < 10000000000 ? raw * 1000 : raw;
+    return DateTime.fromMillisecondsSinceEpoch(ms, isUtc: true);
+  }
+  if (value is String) {
+    return DateTime.tryParse(value);
+  }
+  return null;
 }
 
 late final Future<void> _firebaseInit;

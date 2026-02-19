@@ -1,7 +1,9 @@
 {
     "name": "ELfouad Admin",
     "short_name": "ELfouad Admin",
-    "start_url": ".",
+    "start_url": "/",
+    "scope": "/",
+    "id": "/",
     "display": "standalone",
     "background_color": "#FFFFFF",
     "theme_color": "#FFFFFF",

@@ -137,32 +137,53 @@ extension _SalesHistoryQueries on SalesHistoryRepository {
 
   Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
   _fetchPaymentEventsForRange({required DateTimeRange range}) async {
-    final combined = <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
-    final deferredSnap = await _firestore
-        .collection(SalesHistoryRepository._deferredCollection)
-        .where(
-          'last_payment_at',
-          isGreaterThanOrEqualTo: Timestamp.fromDate(range.start),
-        )
-        .where('last_payment_at', isLessThan: Timestamp.fromDate(range.end))
-        .get();
-    for (final doc in deferredSnap.docs) {
-      combined[doc.id] = doc;
+    final docs = await _fetchCreditSales();
+    final out = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+
+    bool inRange(DateTime value) =>
+        !value.isBefore(range.start) && value.isBefore(range.end);
+
+    DateTime? asDate(dynamic value) {
+      if (value == null) return null;
+      if (value is Timestamp) return value.toDate();
+      if (value is DateTime) return value;
+      if (value is num) {
+        final raw = value.toInt();
+        final ms = raw < 10000000000 ? raw * 1000 : raw;
+        return DateTime.fromMillisecondsSinceEpoch(ms, isUtc: true).toLocal();
+      }
+      if (value is String) return DateTime.tryParse(value);
+      return null;
     }
 
-    final salesSnap = await _firestore
-        .collection(SalesHistoryRepository._salesCollection)
-        .where(
-          'last_payment_at',
-          isGreaterThanOrEqualTo: Timestamp.fromDate(range.start),
-        )
-        .where('last_payment_at', isLessThan: Timestamp.fromDate(range.end))
-        .get();
-    for (final doc in salesSnap.docs) {
-      combined.putIfAbsent(doc.id, () => doc);
+    bool hasPaymentInRange(Map<String, dynamic> data) {
+      final rawEvents = data['payment_events'];
+      if (rawEvents is List && rawEvents.isNotEmpty) {
+        for (final raw in rawEvents) {
+          if (raw is! Map) continue;
+          final event = raw.cast<String, dynamic>();
+          final amount = _parseDouble(event['amount']);
+          if (amount <= 0) continue;
+          final at = asDate(event['at'] ?? event['paid_at'] ?? event['created_at']);
+          if (at != null && inRange(at)) {
+            return true;
+          }
+        }
+      }
+
+      final lastAmount = _parseDouble(data['last_payment_amount']);
+      if (lastAmount <= 0) return false;
+      final lastAt = asDate(data['last_payment_at']);
+      return lastAt != null && inRange(lastAt);
     }
 
-    return combined.values.toList();
+    for (final doc in docs) {
+      final data = doc.data();
+      if (!hasPaymentInRange(data)) continue;
+      out.add(doc);
+    }
+
+    return out;
   }
 
   Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>>

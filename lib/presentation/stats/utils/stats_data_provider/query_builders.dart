@@ -36,7 +36,7 @@ Future<List<Map<String, dynamic>>> _fetchSalesRawForMonth(
     for (final d in snap.docs) {
       final data = d.data();
       if (collection == 'deferred_sales' &&
-          (data['is_deferred'] ?? false) != true) {
+          !_boolish(data['is_deferred'], fallback: false)) {
         data['is_deferred'] = true;
       }
       data['id'] = d.id;

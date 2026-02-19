@@ -19,6 +19,12 @@ const String _autoArchiveOwnerField = 'owner_device_id';
 const String _dailyArchiveRunningField = 'daily_archive_running';
 const String _dailyArchiveRunningUntilField = 'daily_archive_running_until';
 const String _dailyArchiveLastDayKeyField = 'daily_archive_last_day_key';
+// Keep sales archive bin restricted to user-triggered deletes.
+const bool kEnableSalesAutoArchiver = false;
+// Numeric timestamp guards:
+// - seconds are ~10 digits
+// - milliseconds are ~13 digits
+const int _epochMillisLowerBound = 100000000000;
 
 enum DailyArchiveRunResult { synced, alreadySynced, skippedLocked }
 
@@ -166,6 +172,11 @@ Future<void> runAutoArchiveIfNeeded({
   int batchSize = 300, // حجم الدُفعة
   Duration pause = const Duration(milliseconds: 120),
 }) async {
+  if (!kEnableSalesAutoArchiver) {
+    developer.log('Auto-archiver skipped: disabled by configuration.');
+    return;
+  }
+
   final db = FirebaseFirestore.instance;
   final metaRef = db
       .collection(_autoArchiveMetaCollection)
@@ -278,6 +289,11 @@ Future<int> runAutoArchiveNow({
   int batchSize = 300,
   Duration pause = const Duration(milliseconds: 120),
 }) async {
+  if (!kEnableSalesAutoArchiver) {
+    developer.log('Manual auto-archive skipped: disabled by configuration.');
+    return 0;
+  }
+
   final db = FirebaseFirestore.instance;
   final metaRef = db
       .collection(_autoArchiveMetaCollection)
@@ -392,6 +408,7 @@ Future<int> _archiveOldSales({
   moved += await _archiveByFieldCutoff(
     field: 'created_at',
     cutoffValue: cutoffMs,
+    lowerBoundValue: _epochMillisLowerBound,
     batchSize: batchSize,
     pause: pause,
     archivedBy: archivedBy,
@@ -423,6 +440,7 @@ Future<int> _archiveOldSales({
   moved += await _archiveByFieldCutoff(
     field: 'original_created_at',
     cutoffValue: cutoffMs,
+    lowerBoundValue: _epochMillisLowerBound,
     batchSize: batchSize,
     pause: pause,
     archivedBy: archivedBy,
@@ -444,6 +462,7 @@ Future<int> _archiveOldSales({
 Future<int> _archiveByFieldCutoff({
   required String field,
   required dynamic cutoffValue,
+  dynamic lowerBoundValue,
   required int batchSize,
   required Duration pause,
   String? archivedBy,
@@ -455,7 +474,8 @@ Future<int> _archiveByFieldCutoff({
 
   while (true) {
     // ⚠️ بدون where(is_deferred, ...) لتفادي طلب Composite Index
-    final lowerBound = _lowerBoundFor(cutoffValue);
+    final lowerBound = lowerBoundValue ?? _lowerBoundFor(cutoffValue);
+    if (lowerBound == null) break;
     Query<Map<String, dynamic>> q = db
         .collection('sales')
         .where(field, isGreaterThanOrEqualTo: lowerBound)
@@ -497,8 +517,8 @@ Future<int> _archiveByFieldCutoff({
       }
 
       // تخطّي الأجل بالكامل
-      final isDef = (data['is_deferred'] ?? false) == true;
-      final isCredit = (data['is_credit'] ?? false) == true;
+      final isDef = _boolish(data['is_deferred'], fallback: false);
+      final isCredit = _boolish(data['is_credit'], fallback: false);
       if (isDef || isCredit) continue;
 
       final archiveMonthRef = _archiveMonthRefForSale(
@@ -571,7 +591,7 @@ Future<bool> _hasAnyOldSales(DateTime cutoffUtc) async {
         .orderBy('created_at'),
     db
         .collection('sales')
-        .where('created_at', isGreaterThanOrEqualTo: _lowerBoundFor(cutoffMs))
+        .where('created_at', isGreaterThanOrEqualTo: _epochMillisLowerBound)
         .where('created_at', isLessThan: cutoffMs)
         .orderBy('created_at'),
     db
@@ -599,7 +619,7 @@ Future<bool> _hasAnyOldSales(DateTime cutoffUtc) async {
         .collection('sales')
         .where(
           'original_created_at',
-          isGreaterThanOrEqualTo: _lowerBoundFor(cutoffMs),
+          isGreaterThanOrEqualTo: _epochMillisLowerBound,
         )
         .where('original_created_at', isLessThan: cutoffMs)
         .orderBy('original_created_at'),
@@ -633,6 +653,18 @@ dynamic _lowerBoundFor(dynamic cutoffValue) {
     return 0;
   }
   return null;
+}
+
+bool _boolish(dynamic v, {required bool fallback}) {
+  if (v == null) return fallback;
+  if (v is bool) return v;
+  if (v is num) return v != 0;
+  if (v is String) {
+    final raw = v.trim().toLowerCase();
+    if (raw == 'true' || raw == '1') return true;
+    if (raw == 'false' || raw == '0') return false;
+  }
+  return fallback;
 }
 
 DocumentReference<Map<String, dynamic>>? _archiveMonthRefForSale(

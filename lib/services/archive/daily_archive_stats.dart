@@ -88,11 +88,23 @@ Future<void> backfillDailyArchiveForMonth({
   bool includeLiveSales = true,
   bool refreshExisting = false,
   bool writeEmptyDays = false,
+  bool includeFutureDays = false,
 }) async {
   final db = firestore ?? FirebaseFirestore.instance;
   final year = month.year;
   final monthKey = month.month.toString().padLeft(2, '0');
   final daysInMonth = DateUtils.getDaysInMonth(year, month.month);
+  final nowOpStartLocal = opStartLocal(DateTime.now());
+  final targetMonthStart = DateTime(year, month.month, 1);
+  final currentMonthStart = DateTime(
+    nowOpStartLocal.year,
+    nowOpStartLocal.month,
+    1,
+  );
+  final isCurrentMonth =
+      targetMonthStart.year == currentMonthStart.year &&
+      targetMonthStart.month == currentMonthStart.month;
+  final maxAllowedDayKey = opDayKeyFromLocal(nowOpStartLocal);
 
   final dailyRef = db
       .collection('archive_daily')
@@ -107,6 +119,26 @@ Future<void> backfillDailyArchiveForMonth({
   }
 
   final existing = dailySnap.docs.map((d) => d.id).toSet();
+
+  if (!includeFutureDays && isCurrentMonth && dailySnap.docs.isNotEmpty) {
+    WriteBatch pruneBatch = db.batch();
+    int pruneOps = 0;
+    for (final doc in dailySnap.docs) {
+      if (doc.id.compareTo(maxAllowedDayKey) <= 0) continue;
+      pruneBatch.delete(doc.reference);
+      existing.remove(doc.id);
+      pruneOps += 1;
+      if (pruneOps >= 450) {
+        await pruneBatch.commit();
+        pruneBatch = db.batch();
+        pruneOps = 0;
+      }
+    }
+    if (pruneOps > 0) {
+      await pruneBatch.commit();
+    }
+  }
+
   if (!refreshExisting && existing.length >= daysInMonth) return;
 
   final rawById = await _fetchArchiveSalesForMonth(
@@ -136,6 +168,9 @@ Future<void> backfillDailyArchiveForMonth({
 
   for (var day = 1; day <= daysInMonth; day++) {
     final dayStartLocal = DateTime(year, month.month, day, kOpShiftHours);
+    if (!includeFutureDays && dayStartLocal.isAfter(nowOpStartLocal)) {
+      continue;
+    }
     final dayKey = opDayKeyFromLocal(dayStartLocal);
     if (!refreshExisting && existing.contains(dayKey)) continue;
 
@@ -324,6 +359,28 @@ Future<Map<String, Map<String, dynamic>>> _fetchArchiveSalesForMonth(
   DateTime month, {
   required bool includeLiveSales,
 }) async {
+  final targetMonth = DateTime(month.year, month.month, 1);
+  final nowOpStartLocal = opStartLocal(DateTime.now());
+  final effectiveCurrentMonth = DateTime(
+    nowOpStartLocal.year,
+    nowOpStartLocal.month,
+    1,
+  );
+  final isCurrentOpenMonth =
+      targetMonth.year == effectiveCurrentMonth.year &&
+      targetMonth.month == effectiveCurrentMonth.month;
+
+  if (includeLiveSales && isCurrentOpenMonth) {
+    final liveOnly = <String, Map<String, dynamic>>{};
+    final liveRaw = await fetchSalesRawForMonth(month, cacheFirst: false);
+    for (final sale in liveRaw) {
+      final id = _pickSaleId(sale, fallback: (sale['id'] ?? '').toString());
+      if (id.isEmpty) continue;
+      liveOnly[id] = sale;
+    }
+    return liveOnly;
+  }
+
   final year = month.year;
   final monthKey = month.month.toString().padLeft(2, '0');
   final out = <String, Map<String, dynamic>>{};
@@ -347,7 +404,7 @@ Future<Map<String, Map<String, dynamic>>> _fetchArchiveSalesForMonth(
   for (final entry in fromBin) {
     final id = _pickSaleId(entry, fallback: '');
     if (id.isEmpty) continue;
-    out.putIfAbsent(id, () => entry);
+    out[id] = entry;
   }
 
   if (includeLiveSales) {
@@ -355,7 +412,8 @@ Future<Map<String, Map<String, dynamic>>> _fetchArchiveSalesForMonth(
     for (final sale in liveRaw) {
       final id = _pickSaleId(sale, fallback: (sale['id'] ?? '').toString());
       if (id.isEmpty) continue;
-      out.putIfAbsent(id, () => sale);
+      // Live collection is the source of truth for current-month mutations.
+      out[id] = sale;
     }
   }
 
@@ -390,6 +448,10 @@ Future<List<Map<String, dynamic>>> _fetchArchiveBinForMonth(
     for (final doc in snap.docs) {
       final entry = doc.data();
       if ((entry['kind'] ?? '').toString() != 'sale') continue;
+      if ((entry['reason'] ?? '').toString() != 'auto_archive_old_sales') {
+        // Exclude user-deleted sales from stats rebuild.
+        continue;
+      }
       final dataRaw = entry['data'];
       if (dataRaw is! Map) continue;
       final data = dataRaw.cast<String, dynamic>();
@@ -412,6 +474,18 @@ String _pickSaleId(Map<String, dynamic> data, {required String fallback}) {
       .toString()
       .trim();
   if (id.isNotEmpty) return id;
+  return fallback;
+}
+
+bool _boolish(dynamic v, {required bool fallback}) {
+  if (v == null) return fallback;
+  if (v is bool) return v;
+  if (v is num) return v != 0;
+  if (v is String) {
+    final raw = v.trim().toLowerCase();
+    if (raw == 'true' || raw == '1') return true;
+    if (raw == 'false' || raw == '0') return false;
+  }
   return fallback;
 }
 
@@ -452,8 +526,8 @@ DateTime _financialUtc(Map<String, dynamic> m) {
   final updatedRaw = m['updated_at'];
   final updated = updatedRaw == null ? null : _asUtc(updatedRaw);
 
-  final isDeferred = (m['is_deferred'] ?? false) == true;
-  final paid = (m['paid'] ?? (!isDeferred)) == true;
+  final isDeferred = _boolish(m['is_deferred'], fallback: false);
+  final paid = _boolish(m['paid'], fallback: !isDeferred);
 
   if (paid) {
     if (settled != null && settled.millisecondsSinceEpoch > 0) {
@@ -479,8 +553,8 @@ bool _saleInRange(
 }) {
   final inProd = _inRangeUtc(_productionUtc(m), startUtc, endUtc);
   final inFin = _inRangeUtc(_financialUtc(m), startUtc, endUtc);
-  final isDeferred = (m['is_deferred'] ?? false) == true;
-  final paid = (m['paid'] ?? (!isDeferred)) == true;
+  final isDeferred = _boolish(m['is_deferred'], fallback: false);
+  final paid = _boolish(m['paid'], fallback: !isDeferred);
   if (isDeferred && !paid) return inProd;
   return inProd || inFin;
 }
@@ -501,7 +575,7 @@ Future<List<Map<String, dynamic>>> _fetchSalesRawForDay(
     for (final d in snap.docs) {
       final m = d.data();
       if (collection == 'deferred_sales' &&
-          (m['is_deferred'] ?? false) != true) {
+          !_boolish(m['is_deferred'], fallback: false)) {
         m['is_deferred'] = true;
       }
       m['id'] = d.id;
